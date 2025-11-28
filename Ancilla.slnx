@@ -1,0 +1,10 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Ancilla.AppHost/Ancilla.AppHost.csproj" />
+  <Project Path="Ancilla.FunctionApp/Ancilla.FunctionApp.csproj" />
+  <Project Path="Ancilla.ServiceDefaults/Ancilla.ServiceDefaults.csproj" />
+</Solution>
