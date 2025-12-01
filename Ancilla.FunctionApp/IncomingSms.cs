@@ -35,11 +35,11 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ChatService _chatService)
             var reply = await _chatService.Chat(body, from, to);
             await _chatService.SendReply(reply, from);
 
-            return request.CreateResponse(HttpStatusCode.Created);
+            return request.CreateResponse(HttpStatusCode.OK);
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Error saving note to Cosmos DB");
+            _logger.LogError(exception, "Error processing incoming SMS");
             var response = request.CreateResponse(HttpStatusCode.InternalServerError);
             await response.WriteStringAsync($"Error: {exception.Message}");
             return response;

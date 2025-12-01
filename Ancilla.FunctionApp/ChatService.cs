@@ -54,6 +54,6 @@ public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient,
 
     public async Task SendReply(string message, string phoneNumber)
     {
-        _smsService.Send(phoneNumber, message);
+        await _smsService.Send(phoneNumber, message);
     }
 }

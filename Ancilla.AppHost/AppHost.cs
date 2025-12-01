@@ -54,6 +54,6 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancilla_FunctionApp>
     .WithExternalHttpEndpoints();
 
 var database = cosmosDb.AddCosmosDatabase("ancilladb");
-var container = database.AddContainer("notes", "/partitionKey");
+database.AddContainer("notes", "/partitionKey");
 
 builder.Build().Run();

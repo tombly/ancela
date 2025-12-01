@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
@@ -20,14 +21,14 @@ public class SmsService
         TwilioClient.Init(twilioAccountSid, twilioAuthToken);
     }
 
-    public void Send(string phoneNumbers, string message)
+    public async Task Send(string phoneNumbers, string message)
     {
         if (message.Length > 160)
             message = string.Concat(message.AsSpan(0, 157), "...");
 
-        foreach (var phoneNumber in phoneNumbers.Split(','))
+        foreach (var phoneNumber in phoneNumbers.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
-            MessageResource.Create(
+            await MessageResource.CreateAsync(
                 from: new PhoneNumber(_twilioPhoneNumber),
                 to: new PhoneNumber(phoneNumber),
                 body: message);
