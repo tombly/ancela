@@ -2,9 +2,9 @@ namespace Ancilla.FunctionApp;
 
 public class NoteModel
 {
-    public string Id { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public string UserPhoneNumber { get; set; } = string.Empty;
-    public DateTimeOffset Created { get; set; }
-    public DateTimeOffset? Deleted { get; set; }
+    public string? Id { get; set; }
+    public required string Content { get; set; }
+    public required string UserPhoneNumber { get; set; }
+    public required DateTimeOffset Created { get; set; }
+    public required DateTimeOffset? Deleted { get; set; }
 }
