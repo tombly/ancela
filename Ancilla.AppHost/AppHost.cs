@@ -16,6 +16,7 @@ var openAiApiKeyParameter = builder.AddParameter("openai-api-key", true);
 var twilioPhoneNumberParameter = builder.AddParameter("twilio-phone-number", true);
 var twilioAccountSidParameter = builder.AddParameter("twilio-account-sid", true);
 var twilioAuthTokenParameter = builder.AddParameter("twilio-auth-token", true);
+var allowedPhoneNumbers = builder.AddParameter("allowed-phone-numbers", true);
 
 var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
 var chat = openai.AddModel("chat", "gpt-4o-mini");
@@ -51,9 +52,7 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancilla_FunctionApp>
     .WithEnvironment("TWILIO_PHONE_NUMBER", twilioPhoneNumberParameter)
     .WithEnvironment("TWILIO_ACCOUNT_SID", twilioAccountSidParameter)
     .WithEnvironment("TWILIO_AUTH_TOKEN", twilioAuthTokenParameter)
+    .WithEnvironment("ALLOWED_PHONE_NUMBERS", allowedPhoneNumbers)
     .WithExternalHttpEndpoints();
-
-var database = cosmosDb.AddCosmosDatabase("ancilladb");
-database.AddContainer("notes", "/partitionKey");
 
 builder.Build().Run();

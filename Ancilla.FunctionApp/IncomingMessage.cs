@@ -1,23 +1,18 @@
 using System.Net;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
-using Twilio.Security;
 
 namespace Ancilla.FunctionApp;
 
-public class SmsFunction(ILogger<SmsFunction> _logger, ChatService _chatService)
+public class MessageFunction(ILogger<MessageFunction> _logger, ChatService _chatService)
 {
-    [Function("IncomingSms")]
-    public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)
+    [Function("IncomingMessage")]
+    public async Task<HttpResponseData> IncomingMessage([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData request)
     {
         try
         {
-            _logger.LogInformation("IncomingSms triggered");
-
-            //if (!await ValidateRequest(request))
-            //    return request.CreateResponse(HttpStatusCode.Forbidden);
+            _logger.LogInformation("IncomingMessage triggered");
 
             var bodyString = await request.ReadAsStringAsync();
             var formValues = System.Web.HttpUtility.ParseQueryString(bodyString ?? string.Empty);
@@ -41,34 +36,17 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ChatService _chatService)
             }
 
             var reply = await _chatService.Chat(body, from, to);
-            await _chatService.SendReply(reply, from);
 
-            return request.CreateResponse(HttpStatusCode.OK);
+            var response = request.CreateResponse(HttpStatusCode.OK);
+            await response.WriteStringAsync(reply);
+            return response;
         }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Error processing incoming SMS");
+            _logger.LogError(exception, "Error processing incoming message");
             var response = request.CreateResponse(HttpStatusCode.InternalServerError);
             await response.WriteStringAsync($"Error: {exception.Message}");
             return response;
         }
-    }
-
-    private static async Task<bool> ValidateRequest(HttpRequest request)
-    {
-        var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN") ?? throw new Exception("TWILIO_AUTH_TOKEN not set");
-
-        Dictionary<string, string>? parameters = null;
-        if (request.HasFormContentType)
-        {
-            var form = await request.ReadFormAsync();
-            parameters = form.ToDictionary(p => p.Key, p => p.Value.ToString());
-        }
-
-        var requestUrl = $"{request.Scheme}://{request.Host}{request.Path}{request.QueryString}";
-        var requestValidator = new RequestValidator(authToken);
-        var signature = request.Headers["X-Twilio-Signature"];
-        var isValid = requestValidator.Validate(requestUrl, parameters, signature);
-        return isValid;
     }
 }

@@ -37,6 +37,9 @@ public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient,
         instructions.AppendLine("You help users save and retrieve notes via SMS.");
         instructions.AppendLine($"You just got a message from the number '{from}'.");
         instructions.AppendLine($"Your phone number is '{to}'.");
+        instructions.AppendLine($"The current date and time is {DateTimeOffset.Now:f}.");
+        instructions.AppendLine("Treat deleted notes as if they do not exist. Do not mention the existence of deleted notes in responses.");
+        instructions.AppendLine("Be concise in your responses because they are sent via SMS.");
         history.AddSystemMessage(instructions.ToString());
 
         history.AddUserMessage(message);
