@@ -29,15 +29,23 @@ public class CosmosDbInitializer(CosmosClient _cosmosClient, ILogger<CosmosDbIni
                 _logger.LogInformation("Cosmos DB initialization complete.");
                 return;
             }
-            catch (Exception ex) when (i < maxRetries - 1)
+            catch (Exception ex)
             {
-                _logger.LogWarning("Cosmos DB not ready yet (attempt {Attempt}/{MaxRetries}): {Message}",
-                    i + 1, maxRetries, ex.Message);
-                await Task.Delay(delayMs, cancellationToken);
+                if (i < maxRetries - 1)
+                {
+                    _logger.LogWarning("Cosmos DB not ready yet (attempt {Attempt}/{MaxRetries}): {Message}",
+                        i + 1, maxRetries, ex.Message);
+                    await Task.Delay(delayMs, cancellationToken);
+                }
+                else
+                {
+                    _logger.LogError(ex, "Failed to initialize Cosmos DB after {MaxRetries} retries", maxRetries);
+                    throw new InvalidOperationException("Failed to initialize Cosmos DB after maximum retries.", ex);
+                }
             }
         }
 
-        throw new InvalidOperationException("Failed to initialize Cosmos DB after maximum retries.");
+        // This line is now unreachable, as the final exception is thrown in the catch block above.
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
