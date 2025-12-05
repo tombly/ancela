@@ -9,7 +9,7 @@ using OpenAI;
 
 namespace Ancilla.FunctionApp;
 
-public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient, SmsService _smsService)
+public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient, SmsService _smsService, HistoryService _historyService)
 {
     public async Task<string> Chat(string message, string from, string to)
     {
@@ -42,6 +42,20 @@ public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient,
         instructions.AppendLine("Be concise in your responses because they are sent via SMS.");
         history.AddSystemMessage(instructions.ToString());
 
+        // Load chat history from Cosmos DB
+        var historyEntries = await _historyService.GetHistoryAsync(from);
+        foreach (var entry in historyEntries)
+        {
+            if (entry.messageType == MessageType.User)
+            {
+                history.AddUserMessage(entry.content);
+            }
+            else if (entry.messageType == MessageType.Assistant)
+            {
+                history.AddAssistantMessage(entry.content);
+            }
+        }
+
         history.AddUserMessage(message);
 
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -52,7 +66,12 @@ public class ChatService(OpenAIClient _openAiClient, CosmosClient _cosmosClient,
             kernel: kernel
         );
 
-        return aiResponse.ToString();
+        var response = aiResponse.ToString();
+
+        await _historyService.CreateHistoryEntryAsync(from, message, MessageType.User);
+        await _historyService.CreateHistoryEntryAsync(from, response, MessageType.Assistant);
+
+        return response;
     }
 
     public async Task SendReply(string message, string phoneNumber)

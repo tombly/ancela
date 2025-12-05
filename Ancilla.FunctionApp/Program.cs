@@ -11,5 +11,6 @@ builder.AddOpenAIClient(connectionName: "chat");
 
 builder.Services.AddSingleton<Ancilla.FunctionApp.ChatService>();
 builder.Services.AddSingleton<Ancilla.FunctionApp.SmsService>();
+builder.Services.AddSingleton<Ancilla.FunctionApp.HistoryService>();
 
 builder.Build().Run();
