@@ -6,33 +6,6 @@ namespace Ancilla.FunctionApp;
 
 public class CosmosPlugin(CosmosClient _cosmosClient)
 {
-    private bool _initialized = false;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
-
-    private async Task<Microsoft.Azure.Cosmos.Container> GetContainerAsync()
-    {
-        if (!_initialized)
-        {
-            await _initLock.WaitAsync();
-            try
-            {
-                if (!_initialized)
-                {
-                    var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync("ancilladb");
-                    await database.Database.CreateContainerIfNotExistsAsync("notes", "/partitionKey");
-                    _initialized = true;
-                }
-            }
-            finally
-            {
-                _initLock.Release();
-            }
-        }
-
-        var db = _cosmosClient.GetDatabase("ancilladb");
-        return db.GetContainer("notes");
-    }
-
     [KernelFunction("save_note")]
     [Description("Saves a note to Cosmos DB")]
     public async Task SaveNoteAsync(string aiPhoneNumber, string userPhoneNumber, string content)
@@ -52,7 +25,7 @@ public class CosmosPlugin(CosmosClient _cosmosClient)
             partitionKey = aiPhoneNumber
         };
 
-        var container = await GetContainerAsync();
+        var container = _cosmosClient.GetDatabase("ancilladb").GetContainer("notes");
         await container.CreateItemAsync(note, new PartitionKey(note.partitionKey));
     }
 
@@ -62,7 +35,7 @@ public class CosmosPlugin(CosmosClient _cosmosClient)
     {
         ArgumentNullException.ThrowIfNull(aiPhoneNumber);
 
-        var container = await GetContainerAsync();
+        var container = _cosmosClient.GetDatabase("ancilladb").GetContainer("notes");
 
         var query = new QueryDefinition("SELECT * FROM c WHERE c.aiPhoneNumber = @phoneNumber")
                         .WithParameter("@phoneNumber", aiPhoneNumber);
@@ -82,7 +55,7 @@ public class CosmosPlugin(CosmosClient _cosmosClient)
     {
         ArgumentNullException.ThrowIfNull(aiPhoneNumber);
 
-        var container = await GetContainerAsync();
+        var container = _cosmosClient.GetDatabase("ancilladb").GetContainer("notes");
 
         var response = await container.ReadItemAsync<dynamic>(id.ToString(), new PartitionKey(aiPhoneNumber));
         var note = response.Resource;
