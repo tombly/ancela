@@ -1,4 +1,5 @@
 using System.Net;
+using Ancilla.FunctionApp.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -7,7 +8,7 @@ using Twilio.Security;
 
 namespace Ancilla.FunctionApp;
 
-public class SmsFunction(ILogger<SmsFunction> _logger, ChatService _chatService)
+public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInterceptor, ChatService _chatService)
 {
     [Function("IncomingSms")]
     public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)
@@ -40,7 +41,7 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ChatService _chatService)
                 return forbiddenResponse;
             }
 
-            var reply = await _chatService.Chat(body, from, to);
+            var reply = await _chatInterceptor.HandleMessage(body, from, to);
             await _chatService.SendReply(reply, from);
 
             return request.CreateResponse(HttpStatusCode.OK);

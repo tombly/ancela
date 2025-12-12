@@ -1,3 +1,5 @@
+using Ancilla.FunctionApp;
+using Ancilla.FunctionApp.Services;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,9 +11,11 @@ builder.ConfigureFunctionsWebApplication();
 builder.AddAzureCosmosClient("cosmos");
 builder.AddOpenAIClient(connectionName: "chat");
 
-builder.Services.AddSingleton<Ancilla.FunctionApp.ChatService>();
-builder.Services.AddSingleton<Ancilla.FunctionApp.SmsService>();
-builder.Services.AddSingleton<Ancilla.FunctionApp.HistoryService>();
-builder.Services.AddHostedService<Ancilla.FunctionApp.CosmosDbInitializer>();
+builder.Services.AddSingleton<ChatService>();
+builder.Services.AddSingleton<NoteService>();
+builder.Services.AddSingleton<HistoryService>();
+builder.Services.AddSingleton<SmsService>();
+builder.Services.AddSingleton<UserService>();
+builder.Services.AddSingleton<ChatInterceptor>();
 
 builder.Build().Run();

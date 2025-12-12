@@ -1,11 +1,12 @@
 using System.Net;
+using Ancilla.FunctionApp.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 
 namespace Ancilla.FunctionApp;
 
-public class MessageFunction(ILogger<MessageFunction> _logger, ChatService _chatService)
+public class MessageFunction(ILogger<MessageFunction> _logger, ChatInterceptor _chatInterceptor)
 {
     [Function("IncomingMessage")]
     public async Task<HttpResponseData> IncomingMessage([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData request)
@@ -35,7 +36,7 @@ public class MessageFunction(ILogger<MessageFunction> _logger, ChatService _chat
                 return forbiddenResponse;
             }
 
-            var reply = await _chatService.Chat(body, from, to);
+            var reply = await _chatInterceptor.HandleMessage(body, from, to);
 
             var response = request.CreateResponse(HttpStatusCode.OK);
             await response.WriteStringAsync(reply);
