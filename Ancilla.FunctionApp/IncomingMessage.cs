@@ -1,5 +1,4 @@
 using System.Net;
-using Ancilla.FunctionApp.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -18,17 +17,17 @@ public class MessageFunction(ILogger<MessageFunction> _logger, ChatInterceptor _
             var bodyString = await request.ReadAsStringAsync();
             var formValues = System.Web.HttpUtility.ParseQueryString(bodyString ?? string.Empty);
             var body = formValues["Body"];
-            var from = formValues["From"];
-            var to = formValues["To"];
+            var userPhoneNumber = formValues["From"];
+            var agentPhoneNumber = formValues["To"];
 
-            if (string.IsNullOrWhiteSpace(body) || string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+            if (string.IsNullOrWhiteSpace(body) || string.IsNullOrWhiteSpace(userPhoneNumber) || string.IsNullOrWhiteSpace(agentPhoneNumber))
             {
                 var badResponse = request.CreateResponse(HttpStatusCode.BadRequest);
                 await badResponse.WriteStringAsync("Missing required parameters.");
                 return badResponse;
             }
 
-            var reply = await _chatInterceptor.HandleMessage(body, from, to);
+            var reply = await _chatInterceptor.HandleMessage(body, userPhoneNumber, agentPhoneNumber);
 
             var response = request.CreateResponse(HttpStatusCode.OK);
             if (reply != null)
