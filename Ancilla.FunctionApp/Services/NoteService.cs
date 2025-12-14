@@ -11,6 +11,15 @@ public class NoteService(CosmosClient _cosmosClient)
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "notes";
 
+    private async Task<Container> GetContainerAsync()
+    {
+        var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
+        var containerResponse = await database.Database.CreateContainerIfNotExistsAsync(
+            ContainerName,
+            "/aiPhoneNumber");
+        return containerResponse.Container;
+    }
+
     public async Task SaveNoteAsync(string aiPhoneNumber, string userPhoneNumber, string content)
     {
         ArgumentNullException.ThrowIfNull(aiPhoneNumber);
@@ -27,7 +36,7 @@ public class NoteService(CosmosClient _cosmosClient)
             deleted = (DateTimeOffset?)null
         };
 
-        var container = _cosmosClient.GetDatabase(DatabaseName).GetContainer(ContainerName);
+        var container = await GetContainerAsync();
         await container.CreateItemAsync(note, new PartitionKey(note.aiPhoneNumber));
     }
 
@@ -35,7 +44,7 @@ public class NoteService(CosmosClient _cosmosClient)
     {
         ArgumentNullException.ThrowIfNull(aiPhoneNumber);
 
-        var container = _cosmosClient.GetDatabase(DatabaseName).GetContainer(ContainerName);
+        var container = await GetContainerAsync();
 
         var query = new QueryDefinition("SELECT * FROM c WHERE c.aiPhoneNumber = @phoneNumber")
                         .WithParameter("@phoneNumber", aiPhoneNumber);
@@ -53,7 +62,7 @@ public class NoteService(CosmosClient _cosmosClient)
     {
         ArgumentNullException.ThrowIfNull(aiPhoneNumber);
 
-        var container = _cosmosClient.GetDatabase(DatabaseName).GetContainer(ContainerName);
+        var container = await GetContainerAsync();
 
         var response = await container.ReadItemAsync<dynamic>(id.ToString(), new PartitionKey(aiPhoneNumber));
         var note = response.Resource;

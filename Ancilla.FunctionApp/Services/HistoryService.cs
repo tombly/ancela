@@ -11,9 +11,18 @@ public class HistoryService(CosmosClient _cosmosClient)
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "history";
 
+    private async Task<Container> GetContainerAsync()
+    {
+        var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
+        var containerResponse = await database.Database.CreateContainerIfNotExistsAsync(
+            ContainerName,
+            "/aiPhoneNumber");
+        return containerResponse.Container;
+    }
+
     public async Task CreateHistoryEntryAsync(string aiPhoneNumber, string userPhoneNumber, string content, MessageType messageType)
     {
-        var container = _cosmosClient.GetDatabase(DatabaseName).GetContainer(ContainerName);
+        var container = await GetContainerAsync();
 
         var historyEntry = new
         {
@@ -31,7 +40,7 @@ public class HistoryService(CosmosClient _cosmosClient)
 
     public async Task<HistoryEntry[]> GetHistoryAsync(string aiPhoneNumber, string userPhoneNumber)
     {
-        var container = _cosmosClient.GetDatabase(DatabaseName).GetContainer(ContainerName);
+        var container = await GetContainerAsync();
 
         var query = new QueryDefinition(
             "SELECT * FROM c WHERE c.aiPhoneNumber = @aiPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp ASC")
