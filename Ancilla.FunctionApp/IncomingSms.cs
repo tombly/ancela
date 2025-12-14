@@ -43,7 +43,7 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInte
 
             var reply = await _chatInterceptor.HandleMessage(body, from, to);
             if (reply != null)
-                    await _smsService.Send(from, reply);
+                await _smsService.Send(from, reply);
 
             return request.CreateResponse(HttpStatusCode.OK);
         }
