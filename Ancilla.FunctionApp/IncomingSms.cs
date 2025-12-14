@@ -7,7 +7,13 @@ using Twilio.Security;
 
 namespace Ancilla.FunctionApp;
 
-public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInterceptor, SmsService _smsService)
+/// <summary>
+/// Handles incoming SMS messages via Twilio webhook.
+/// </summary>
+/// <param name="_logger"></param>
+/// <param name="_chatInterceptor"></param>
+/// <param name="_smsService"></param>
+public class SmsFunction(ILogger<SmsFunction> _logger, CommandInterceptor _chatInterceptor, SmsService _smsService)
 {
     [Function("IncomingSms")]
     public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)

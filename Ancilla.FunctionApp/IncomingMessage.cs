@@ -5,7 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Ancilla.FunctionApp;
 
-public class MessageFunction(ILogger<MessageFunction> _logger, ChatInterceptor _chatInterceptor)
+/// <summary>
+/// Handles incoming messages via HTTP trigger. Used for development and testing.
+/// </summary>
+/// <param name="_logger"></param>
+/// <param name="_chatInterceptor"></param>
+public class MessageFunction(ILogger<MessageFunction> _logger, CommandInterceptor _chatInterceptor)
 {
     [Function("IncomingMessage")]
     public async Task<HttpResponseData> IncomingMessage([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData request)
