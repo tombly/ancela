@@ -13,7 +13,7 @@ public class ChatInterceptor(ILogger<ChatInterceptor> _logger, SessionService _s
     /// </summary>
     /// <param name="message">The message content</param>
     /// <param name="userPhoneNumber">The sender's phone number</param>
-    /// <param name="agentPhoneNumber">The recipient's phone number (AI's number)</param>
+    /// <param name="agentPhoneNumber">The recipient's phone number (agent's number)</param>
     /// <returns>The response message, or null if no session exists</returns>
     public async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber)
     {
