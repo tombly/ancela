@@ -36,7 +36,7 @@ public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, H
             - You help users remember things by saving and retrieving notes.
             - Your phone number is '{agentPhoneNumber}'.
             - You are currently chatting with a user whose phone number is '{userPhoneNumber}'.
-            - You have JIT access to a database of notes associated with this user.
+            - You have access to a database of notes associated with this user.
             - You have access to the current conversation history.
             - The user's current local date and time is {localTime:f} ({session.TimeZone}).
             - Be concise in your responses because they are sent via SMS.
