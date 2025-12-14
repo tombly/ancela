@@ -57,6 +57,10 @@ public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, H
 
         history.AddUserMessage(message);
 
+        // Populate kernel arguments with contextual data
+        kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
+        kernel.Data["userPhoneNumber"] = userPhoneNumber;
+
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
 
         var aiResponse = await chatCompletionService.GetChatMessageContentAsync(
