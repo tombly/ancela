@@ -1,9 +1,8 @@
-using System.Threading.Tasks;
 using Twilio;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
 
-namespace Ancilla.FunctionApp;
+namespace Ancilla.FunctionApp.Services;
 
 /// <summary>
 /// A DI-friendly wrapper around <see cref="TwilioClient"/>.
