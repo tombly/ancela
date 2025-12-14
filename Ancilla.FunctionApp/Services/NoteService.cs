@@ -16,13 +16,13 @@ public class NoteService(CosmosClient _cosmosClient)
         var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
         var containerResponse = await database.Database.CreateContainerIfNotExistsAsync(
             ContainerName,
-            "/aiPhoneNumber");
+            "/agentPhoneNumber");
         return containerResponse.Container;
     }
 
-    public async Task SaveNoteAsync(string aiPhoneNumber, string userPhoneNumber, string content)
+    public async Task SaveNoteAsync(string agentPhoneNumber, string userPhoneNumber, string content)
     {
-        ArgumentNullException.ThrowIfNull(aiPhoneNumber);
+        ArgumentNullException.ThrowIfNull(agentPhoneNumber);
         ArgumentNullException.ThrowIfNull(userPhoneNumber);
         ArgumentNullException.ThrowIfNull(content);
 
@@ -31,23 +31,23 @@ public class NoteService(CosmosClient _cosmosClient)
             id = Guid.NewGuid().ToString(),
             content,
             userPhoneNumber,
-            aiPhoneNumber,
+            agentPhoneNumber,
             created = DateTimeOffset.Now,
             deleted = (DateTimeOffset?)null
         };
 
         var container = await GetContainerAsync();
-        await container.CreateItemAsync(note, new PartitionKey(note.aiPhoneNumber));
+        await container.CreateItemAsync(note, new PartitionKey(note.agentPhoneNumber));
     }
 
-    public async Task<NoteEntry[]> GetNotesAsync(string aiPhoneNumber)
+    public async Task<NoteEntry[]> GetNotesAsync(string agentPhoneNumber)
     {
-        ArgumentNullException.ThrowIfNull(aiPhoneNumber);
+        ArgumentNullException.ThrowIfNull(agentPhoneNumber);
 
         var container = await GetContainerAsync();
 
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.aiPhoneNumber = @phoneNumber")
-                        .WithParameter("@phoneNumber", aiPhoneNumber);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.agentPhoneNumber = @phoneNumber")
+                        .WithParameter("@phoneNumber", agentPhoneNumber);
         var iterator = container.GetItemQueryIterator<NoteEntry>(query);
         var notes = new List<NoteEntry>();
         while (iterator.HasMoreResults)
@@ -58,16 +58,16 @@ public class NoteService(CosmosClient _cosmosClient)
         return [.. notes];
     }
 
-    public async Task DeleteNoteAsync(Guid id, string aiPhoneNumber)
+    public async Task DeleteNoteAsync(Guid id, string agentPhoneNumber)
     {
-        ArgumentNullException.ThrowIfNull(aiPhoneNumber);
+        ArgumentNullException.ThrowIfNull(agentPhoneNumber);
 
         var container = await GetContainerAsync();
 
-        var response = await container.ReadItemAsync<dynamic>(id.ToString(), new PartitionKey(aiPhoneNumber));
+        var response = await container.ReadItemAsync<dynamic>(id.ToString(), new PartitionKey(agentPhoneNumber));
         var note = response.Resource;
         note.deleted = DateTimeOffset.Now;
-        await container.ReplaceItemAsync(note, id.ToString(), new PartitionKey(aiPhoneNumber));
+        await container.ReplaceItemAsync(note, id.ToString(), new PartitionKey(agentPhoneNumber));
     }
 }
 

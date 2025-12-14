@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
@@ -8,9 +7,9 @@ using OpenAI;
 
 namespace Ancilla.FunctionApp.Services;
 
-public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, SmsService _smsService, HistoryService _historyService)
+public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, HistoryService _historyService)
 {
-    public async Task<string> Chat(string message, string from, string to)
+    public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session)
     {
         var builder = Kernel.CreateBuilder();
 
@@ -24,23 +23,30 @@ public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, S
         kernel.Plugins.AddFromObject(new CosmosPlugin(_noteService));
 
         // Enable planning.
-        OpenAIPromptExecutionSettings openAIPromptExecutionSettings = new()
-            { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
+        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
         var history = new ChatHistory();
 
-        var instructions = new StringBuilder();
-        instructions.AppendLine("You are an AI memory assistant.");
-        instructions.AppendLine("You help users remember things by saving and retrieving notes.");
-        instructions.AppendLine($"You just got a message from the user with phone number '{from}'.");
-        instructions.AppendLine($"Your phone number is '{to}'.");
-        instructions.AppendLine($"The current date and time is {DateTimeOffset.Now:f}.");
-        instructions.AppendLine("Be concise in your responses because they are sent via SMS.");
-        instructions.AppendLine("When a user asks you to 'list my notes', respond with a numbered list of note titles. Always exclude deleted notes.");
-        history.AddSystemMessage(instructions.ToString());
+        var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZoneInfo);
+
+        var instructions = $"""
+            - You are an AI agent named Ancilla.
+            - You help users remember things by saving and retrieving notes.
+            - Your phone number is '{agentPhoneNumber}'.
+            - You are currently chatting with a user whose phone number is '{userPhoneNumber}'.
+            - You have JIT access to a database of notes associated with this user.
+            - You have access to the current conversation history.
+            - The user's current local date and time is {localTime:f} ({session.TimeZone}).
+            - Be concise in your responses because they are sent via SMS.
+            - When a user asks you to 'list my notes', respond with a numbered
+              list of note titles, oldest first. Always exclude deleted notes.
+            """;
+        history.AddSystemMessage(instructions);
 
         // Load chat history from database.
-        var historyEntries = await _historyService.GetHistoryAsync(to, from);
+        var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
         foreach (var entry in historyEntries)
         {
             if (entry.MessageType == MessageType.User)
@@ -61,14 +67,9 @@ public class ChatService(OpenAIClient _openAiClient, NoteService _noteService, S
 
         var response = aiResponse.ToString();
 
-        await _historyService.CreateHistoryEntryAsync(to, from, message, MessageType.User);
-        await _historyService.CreateHistoryEntryAsync(to, from, response, MessageType.Assistant);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Assistant);
 
         return response;
-    }
-
-    public async Task SendReply(string message, string phoneNumber)
-    {
-        await _smsService.Send(phoneNumber, message);
     }
 }

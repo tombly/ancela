@@ -16,35 +16,35 @@ public class HistoryService(CosmosClient _cosmosClient)
         var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
         var containerResponse = await database.Database.CreateContainerIfNotExistsAsync(
             ContainerName,
-            "/aiPhoneNumber");
+            "/agentPhoneNumber");
         return containerResponse.Container;
     }
 
-    public async Task CreateHistoryEntryAsync(string aiPhoneNumber, string userPhoneNumber, string content, MessageType messageType)
+    public async Task CreateHistoryEntryAsync(string agentPhoneNumber, string userPhoneNumber, string content, MessageType messageType)
     {
         var container = await GetContainerAsync();
 
         var historyEntry = new
         {
             id = Guid.NewGuid(),
-            aiPhoneNumber,
+            agentPhoneNumber,
             userPhoneNumber,
             content,
             messageType,
             timestamp = DateTimeOffset.UtcNow
         };
 
-        await container.CreateItemAsync(historyEntry, new PartitionKey(aiPhoneNumber));
-        await ExpireAsync(container, aiPhoneNumber, userPhoneNumber);
+        await container.CreateItemAsync(historyEntry, new PartitionKey(agentPhoneNumber));
+        await ExpireAsync(container, agentPhoneNumber, userPhoneNumber);
     }
 
-    public async Task<HistoryEntry[]> GetHistoryAsync(string aiPhoneNumber, string userPhoneNumber)
+    public async Task<HistoryEntry[]> GetHistoryAsync(string agentPhoneNumber, string userPhoneNumber)
     {
         var container = await GetContainerAsync();
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.aiPhoneNumber = @aiPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp ASC")
-            .WithParameter("@aiPhoneNumber", aiPhoneNumber)
+            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp ASC")
+            .WithParameter("@agentPhoneNumber", agentPhoneNumber)
             .WithParameter("@userPhoneNumber", userPhoneNumber);
 
         var iterator = container.GetItemQueryIterator<HistoryEntry>(query);
@@ -59,11 +59,11 @@ public class HistoryService(CosmosClient _cosmosClient)
         return [.. entries];
     }
 
-    private static async Task ExpireAsync(Container container, string aiPhoneNumber, string userPhoneNumber)
+    private static async Task ExpireAsync(Container container, string agentPhoneNumber, string userPhoneNumber)
     {
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.aiPhoneNumber = @aiPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp DESC")
-            .WithParameter("@aiPhoneNumber", aiPhoneNumber)
+            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp DESC")
+            .WithParameter("@agentPhoneNumber", agentPhoneNumber)
             .WithParameter("@userPhoneNumber", userPhoneNumber);
 
         var iterator = container.GetItemQueryIterator<HistoryEntry>(query);
@@ -80,7 +80,7 @@ public class HistoryService(CosmosClient _cosmosClient)
         {
             var entriesToDelete = entries.Skip(10);
             foreach (var entry in entriesToDelete)
-                await container.DeleteItemAsync<HistoryEntry>(entry.Id.ToString(), new PartitionKey(aiPhoneNumber));
+                await container.DeleteItemAsync<HistoryEntry>(entry.Id.ToString(), new PartitionKey(agentPhoneNumber));
         }
     }
 }

@@ -8,7 +8,7 @@ using Twilio.Security;
 
 namespace Ancilla.FunctionApp;
 
-public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInterceptor, ChatService _chatService)
+public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInterceptor, ChatService _chatService, SmsService _smsService)
 {
     [Function("IncomingSms")]
     public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)
@@ -42,7 +42,8 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ChatInterceptor _chatInte
             }
 
             var reply = await _chatInterceptor.HandleMessage(body, from, to);
-            await _chatService.SendReply(reply, from);
+            if (reply != null)
+                    await _smsService.Send(from, reply);
 
             return request.CreateResponse(HttpStatusCode.OK);
         }

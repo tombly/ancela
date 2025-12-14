@@ -39,7 +39,8 @@ public class MessageFunction(ILogger<MessageFunction> _logger, ChatInterceptor _
             var reply = await _chatInterceptor.HandleMessage(body, from, to);
 
             var response = request.CreateResponse(HttpStatusCode.OK);
-            await response.WriteStringAsync(reply);
+            if (reply != null)
+                await response.WriteStringAsync(reply);
             return response;
         }
         catch (Exception exception)

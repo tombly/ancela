@@ -16,31 +16,33 @@ public class SessionService(CosmosClient _cosmosClient)
         var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
         var containerResponse = await database.Database.CreateContainerIfNotExistsAsync(
             ContainerName,
-            "/aiPhoneNumber");
+            "/agentPhoneNumber");
         return containerResponse.Container;
     }
 
-    public async Task CreateSessionAsync(string aiPhoneNumber, string userPhoneNumber)
+    public async Task CreateSessionAsync(string agentPhoneNumber, string userPhoneNumber, string timeZone = "Pacific Standard Time")
     {
         var container = await GetContainerAsync();
 
         var sessionEntry = new
         {
             id = Guid.NewGuid(),
-            aiPhoneNumber,
-            userPhoneNumber
+            agentPhoneNumber,
+            userPhoneNumber,
+            created = DateTimeOffset.UtcNow,
+            timeZone
         };
 
-        await container.CreateItemAsync(sessionEntry, new PartitionKey(aiPhoneNumber));
+        await container.CreateItemAsync(sessionEntry, new PartitionKey(agentPhoneNumber));
     }
 
-    public async Task<SessionEntry?> GetSessionAsync(string aiPhoneNumber, string userPhoneNumber)
+    public async Task<SessionEntry?> GetSessionAsync(string agentPhoneNumber, string userPhoneNumber)
     {
         var container = await GetContainerAsync();
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.aiPhoneNumber = @aiPhoneNumber AND c.userPhoneNumber = @userPhoneNumber")
-            .WithParameter("@aiPhoneNumber", aiPhoneNumber)
+            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber")
+            .WithParameter("@agentPhoneNumber", agentPhoneNumber)
             .WithParameter("@userPhoneNumber", userPhoneNumber);
 
         var iterator = container.GetItemQueryIterator<SessionEntry>(query);
@@ -49,21 +51,19 @@ public class SessionService(CosmosClient _cosmosClient)
         {
             var response = await iterator.ReadNextAsync();
             if (response.Any())
-            {
                 return response.First();
-            }
         }
 
         return null;
     }
 
-    public async Task<SessionEntry[]> GetAllSessionsAsync(string aiPhoneNumber)
+    public async Task<SessionEntry[]> GetAllSessionsAsync(string agentPhoneNumber)
     {
         var container = await GetContainerAsync();
 
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.aiPhoneNumber = @aiPhoneNumber")
-            .WithParameter("@aiPhoneNumber", aiPhoneNumber);
+            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber")
+            .WithParameter("@agentPhoneNumber", agentPhoneNumber);
 
         var iterator = container.GetItemQueryIterator<SessionEntry>(query);
         var entries = new List<SessionEntry>();
@@ -77,19 +77,21 @@ public class SessionService(CosmosClient _cosmosClient)
         return [.. entries];
     }
 
-    public async Task DeleteSessionAsync(string aiPhoneNumber, string userPhoneNumber)
+    public async Task DeleteSessionAsync(string agentPhoneNumber, string userPhoneNumber)
     {
         var container = await GetContainerAsync();
-        var session = await GetSessionAsync(aiPhoneNumber, userPhoneNumber);
+        var session = await GetSessionAsync(agentPhoneNumber, userPhoneNumber);
 
         if (session != null)
-            await container.DeleteItemAsync<SessionEntry>(session.Id.ToString(), new PartitionKey(aiPhoneNumber));
+            await container.DeleteItemAsync<SessionEntry>(session.Id.ToString(), new PartitionKey(agentPhoneNumber));
     }
 }
 
 public class SessionEntry
 {
     public Guid Id { get; set; }
-    public string AiPhoneNumber { get; set; } = string.Empty;
+    public string AgentPhoneNumber { get; set; } = string.Empty;
     public string UserPhoneNumber { get; set; } = string.Empty;
+    public DateTimeOffset Created { get; set; }
+    public string TimeZone { get; set; } = "Pacific Standard Time";
 }
