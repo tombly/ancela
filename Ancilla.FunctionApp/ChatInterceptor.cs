@@ -6,7 +6,7 @@ namespace Ancilla.FunctionApp;
 /// <summary>
 /// Intercepts incoming messages to handle special commands before passing to ChatService.
 /// </summary>
-public class ChatInterceptor(ILogger<ChatInterceptor> _logger, UserService _userService, ChatService _chatService)
+public class ChatInterceptor(ILogger<ChatInterceptor> _logger, SessionService _sessionService, ChatService _chatService)
 {
     /// <summary>
     /// Processes an incoming message, intercepting special commands or delegating to ChatService.
@@ -22,21 +22,21 @@ public class ChatInterceptor(ILogger<ChatInterceptor> _logger, UserService _user
         {
             _logger.LogInformation("Intercepted 'start' command from {From}", from);
             
-            // Check if user already exists
-            var existingUser = await _userService.GetUserAsync(to, from);
-            if (existingUser != null)
+            // Check if session already exists
+            var existingSession = await _sessionService.GetSessionAsync(to, from);
+            if (existingSession != null)
                 return "You're already registered! Send me a message and I'll help you manage your notes.";
             
-            // Add the user
-            await _userService.CreateUserAsync(to, from);
+            // Add the session
+            await _sessionService.CreateSessionAsync(to, from);
             return "Welcome! I'm your AI memory assistant. I can help you save and retrieve notes via SMS. Try sending me a note!";
         }
 
-        // Verify user is registered before processing other messages
-        var user = await _userService.GetUserAsync(to, from);
-        if (user == null)
+        // Verify session is registered before processing other messages
+        var session = await _sessionService.GetSessionAsync(to, from);
+        if (session == null)
         {
-            _logger.LogWarning("Unregistered user {From} attempted to send message", from);
+            _logger.LogWarning("Unregistered session {From} attempted to send message", from);
             return "You need to register first. Please send 'start' to begin.";
         }
 

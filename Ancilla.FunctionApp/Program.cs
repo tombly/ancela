@@ -15,7 +15,7 @@ builder.Services.AddSingleton<ChatService>();
 builder.Services.AddSingleton<NoteService>();
 builder.Services.AddSingleton<HistoryService>();
 builder.Services.AddSingleton<SmsService>();
-builder.Services.AddSingleton<UserService>();
+builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<ChatInterceptor>();
 
 builder.Build().Run();
