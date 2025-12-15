@@ -22,13 +22,14 @@ public class SmsFunction(ILogger<SmsFunction> _logger, CommandInterceptor _chatI
         {
             _logger.LogInformation("IncomingSms triggered");
 
-            if (!await ValidateRequest(request))
+            var bodyString = await request.ReadAsStringAsync();
+
+            if (!ValidateRequest(request, bodyString))
             {
                 _logger.LogWarning("Invalid Twilio request signature");
                 return request.CreateResponse(HttpStatusCode.Forbidden);
             }
 
-            var bodyString = await request.ReadAsStringAsync();
             var formValues = System.Web.HttpUtility.ParseQueryString(bodyString ?? string.Empty);
             var body = formValues["Body"];
             var userPhoneNumber = formValues["From"];
@@ -56,24 +57,69 @@ public class SmsFunction(ILogger<SmsFunction> _logger, CommandInterceptor _chatI
         }
     }
 
-    private static async Task<bool> ValidateRequest(HttpRequestData request)
+    private static bool ValidateRequest(HttpRequestData request, string? bodyString)
     {
         var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN") ?? throw new Exception("TWILIO_AUTH_TOKEN not set");
 
         Dictionary<string, string>? parameters = null;
-        var bodyString = await request.ReadAsStringAsync();
         if (!string.IsNullOrWhiteSpace(bodyString))
         {
             var formValues = System.Web.HttpUtility.ParseQueryString(bodyString);
             parameters = formValues.AllKeys.ToDictionary(k => k!, k => formValues[k]!);
         }
 
-        var requestUrl = request.Url.ToString();
+        // Build the actual request URL using forwarded headers when behind a proxy
+        var requestUrl = GetActualRequestUrl(request);
         var requestValidator = new RequestValidator(authToken);
         var signature = request.Headers.TryGetValues("X-Twilio-Signature", out var sigValues)
             ? sigValues.FirstOrDefault()
             : null;
-        var isValid = requestValidator.Validate(requestUrl, parameters, signature);
-        return isValid;
+
+        return requestValidator.Validate(requestUrl, parameters, signature);
+    }
+
+    /// <summary>
+    /// Constructs the actual request URL considering possible proxy headers.
+    /// This is necessary when the function app is running inside a
+    /// container.
+    /// </summary>
+    private static string GetActualRequestUrl(HttpRequestData request)
+    {
+        // Check various proxy headers that Azure Functions might use.
+        string? host = null;
+        string? proto = null;
+
+        // Try X-Forwarded-Host first.
+        if (request.Headers.TryGetValues("X-Forwarded-Host", out var forwardedHosts))
+            host = forwardedHosts?.FirstOrDefault();
+
+        // Try X-Original-Host if X-Forwarded-Host not present.
+        if (string.IsNullOrWhiteSpace(host) && request.Headers.TryGetValues("X-Original-Host", out var originalHosts))
+            host = originalHosts?.FirstOrDefault();
+
+        // Try Host header as fallback.
+        if (string.IsNullOrWhiteSpace(host) && request.Headers.TryGetValues("Host", out var hosts))
+            host = hosts?.FirstOrDefault();
+
+        // Try X-Forwarded-Proto first.
+        if (request.Headers.TryGetValues("X-Forwarded-Proto", out var forwardedProtos))
+            proto = forwardedProtos?.FirstOrDefault();
+
+        // Try X-ARR-SSL if X-Forwarded-Proto not present (Azure specific).
+        if (string.IsNullOrWhiteSpace(proto) && request.Headers.TryGetValues("X-ARR-SSL", out var arrSsl))
+            proto = arrSsl?.FirstOrDefault() != null ? "https" : "http";
+
+        // Default to https if host is set but proto isn't.
+        if (!string.IsNullOrWhiteSpace(host) && string.IsNullOrWhiteSpace(proto))
+            proto = "https";
+
+        if (!string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(proto))
+        {
+            var path = request.Url.PathAndQuery;
+            return $"{proto}://{host}{path}";
+        }
+
+        // Fall back to the request URL if no forwarded headers are present.
+        return request.Url.ToString();
     }
 }
