@@ -8,7 +8,7 @@ using Twilio.Security;
 namespace Ancilla.FunctionApp;
 
 /// <summary>
-/// Handles incoming SMS messages via Twilio webhook.
+/// Handles incoming SMS messages via Twilio web hook.
 /// </summary>
 /// <param name="_logger"></param>
 /// <param name="_chatInterceptor"></param>
