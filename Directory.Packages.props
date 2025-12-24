@@ -4,13 +4,13 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Aspire packages -->
-    <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.0.2" />
-    <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.0.2" />
-    <PackageVersion Include="Aspire.Hosting.Azure.Functions" Version="13.0.2-preview.1.25603.5" />
-    <PackageVersion Include="Aspire.Microsoft.Azure.Cosmos" Version="13.0.2" />
-    <PackageVersion Include="Aspire.Hosting.OpenAI" Version="13.0.2" />
+    <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.Azure.Functions" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Microsoft.Azure.Cosmos" Version="13.1.0" />
+    <PackageVersion Include="Aspire.Hosting.OpenAI" Version="13.1.0" />
     <!-- Microsoft Azure Functions packages -->
-    <PackageVersion Include="Aspire.OpenAI" Version="13.0.2-preview.1.25603.5" />
+    <PackageVersion Include="Aspire.OpenAI" Version="13.1.0-preview.1.25616.3" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.CosmosDB" Version="4.14.0" />
