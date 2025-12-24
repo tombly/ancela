@@ -12,11 +12,11 @@ builder.AddAzureCosmosClient("cosmos");
 builder.AddOpenAIClient(connectionName: "chat");
 
 builder.Services.AddSingleton<ChatService>();
-builder.Services.AddSingleton<TodoService>();
-builder.Services.AddSingleton<KnowledgeService>();
-builder.Services.AddSingleton<HistoryService>();
+builder.Services.AddSingleton<ITodoService, TodoService>();
+builder.Services.AddSingleton<IKnowledgeService, KnowledgeService>();
+builder.Services.AddSingleton<IHistoryService, HistoryService>();
+builder.Services.AddSingleton<ISessionService, SessionService>();
 builder.Services.AddSingleton<SmsService>();
-builder.Services.AddSingleton<SessionService>();
 builder.Services.AddSingleton<CommandInterceptor>();
 
 builder.Build().Run();

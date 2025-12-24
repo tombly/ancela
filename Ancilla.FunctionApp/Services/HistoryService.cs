@@ -2,11 +2,17 @@ using Microsoft.Azure.Cosmos;
 
 namespace Ancilla.FunctionApp.Services;
 
+public interface IHistoryService
+{
+    Task CreateHistoryEntryAsync(string agentPhoneNumber, string userPhoneNumber, string content, MessageType messageType);
+    Task<HistoryEntry[]> GetHistoryAsync(string agentPhoneNumber, string userPhoneNumber);
+}
+
 /// <summary>
 /// Service for managing chat history in Cosmos DB. Entries are partitioned by the AI's
 /// phone number so that all history for a given AI is stored together.
 /// </summary>
-public class HistoryService(CosmosClient _cosmosClient)
+public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
 {
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "history";

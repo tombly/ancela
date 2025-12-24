@@ -4,7 +4,10 @@ using Microsoft.SemanticKernel;
 
 namespace Ancilla.FunctionApp;
 
-public class CosmosPlugin(TodoService _todoService, KnowledgeService _knowledgeService)
+/// <summary>
+/// Provides functions that the model may call for data storage and retrieval.
+/// </summary>
+public class CosmosPlugin(ITodoService _todoService, IKnowledgeService _knowledgeService)
 {
     [KernelFunction("save_todo")]
     [Description("Saves a todo to the database")]

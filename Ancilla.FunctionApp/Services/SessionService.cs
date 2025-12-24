@@ -2,11 +2,19 @@ using Microsoft.Azure.Cosmos;
 
 namespace Ancilla.FunctionApp.Services;
 
+public interface ISessionService
+{
+    Task CreateSessionAsync(string agentPhoneNumber, string userPhoneNumber, string timeZone = "Pacific Standard Time");
+    Task<SessionEntry?> GetSessionAsync(string agentPhoneNumber, string userPhoneNumber);
+    Task<SessionEntry[]> GetAllSessionsAsync(string agentPhoneNumber);
+    Task DeleteSessionAsync(string agentPhoneNumber, string userPhoneNumber);
+}
+
 /// <summary>
 /// Service for managing sessions in Cosmos DB. Entries are partitioned by the AI's
 /// phone number so that all sessions for a given AI are stored together.
 /// </summary>
-public class SessionService(CosmosClient _cosmosClient)
+public class SessionService(CosmosClient _cosmosClient) : ISessionService
 {
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "sessions";

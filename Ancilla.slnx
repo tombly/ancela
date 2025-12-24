@@ -5,6 +5,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="Ancilla.AppHost/Ancilla.AppHost.csproj" />
+  <Project Path="Ancilla.FunctionApp.Tests/Ancilla.FunctionApp.Tests.csproj" />
   <Project Path="Ancilla.FunctionApp/Ancilla.FunctionApp.csproj" />
   <Project Path="Ancilla.ServiceDefaults/Ancilla.ServiceDefaults.csproj" />
 </Solution>

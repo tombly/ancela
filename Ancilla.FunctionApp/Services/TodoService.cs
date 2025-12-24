@@ -2,11 +2,18 @@ using Microsoft.Azure.Cosmos;
 
 namespace Ancilla.FunctionApp.Services;
 
+public interface ITodoService
+{
+    Task SaveTodoAsync(string agentPhoneNumber, string userPhoneNumber, string content);
+    Task<TodoEntry[]> GetTodosAsync(string agentPhoneNumber);
+    Task DeleteTodoAsync(Guid id, string agentPhoneNumber);
+}
+
 /// <summary>
 /// Service for managing todos in Cosmos DB. Entries are partitioned by the AI's
 /// phone number so that all todos for a given AI are stored together.
 /// </summary>
-public class TodoService(CosmosClient _cosmosClient)
+public class TodoService(CosmosClient _cosmosClient) : ITodoService
 {
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "todos";

@@ -2,11 +2,18 @@ using Microsoft.Azure.Cosmos;
 
 namespace Ancilla.FunctionApp.Services;
 
+public interface IKnowledgeService
+{
+    Task SaveKnowledgeAsync(string agentPhoneNumber, string userPhoneNumber, string content);
+    Task<KnowledgeEntry[]> GetKnowledgeAsync(string agentPhoneNumber);
+    Task DeleteKnowledgeAsync(Guid id, string agentPhoneNumber);
+}
+
 /// <summary>
 /// Service for managing knowledge entries in Cosmos DB. Entries are partitioned by the AI's
 /// phone number so that all knowledge for a given AI are stored together.
 /// </summary>
-public class KnowledgeService(CosmosClient _cosmosClient)
+public class KnowledgeService(CosmosClient _cosmosClient) : IKnowledgeService
 {
     private const string DatabaseName = "ancilladb";
     private const string ContainerName = "knowledge";

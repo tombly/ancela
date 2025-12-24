@@ -7,7 +7,7 @@ using OpenAI;
 
 namespace Ancilla.FunctionApp.Services;
 
-public class ChatService(OpenAIClient _openAiClient, TodoService _todoService, KnowledgeService _knowledgeService, HistoryService _historyService)
+public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, IKnowledgeService _knowledgeService, IHistoryService _historyService)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session)
     {
