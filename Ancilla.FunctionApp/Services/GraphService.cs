@@ -1,7 +1,6 @@
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
-using Microsoft.Kiota.Abstractions;
 
 namespace Ancilla.FunctionApp.Services;
 
@@ -47,9 +46,8 @@ public class GraphService : IGraphService
 
     public async Task<EventEntry[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end)
     {
-        //var now = DateTime.UtcNow;
-        var startDate = start.ToString("yyyy-MM-ddTHH:mm:ssZ");
-        var endDate = end.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var startDate = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var endDate = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         // Get all calendars for the user.
         var calendars = await _appClient.Users[_entraUserId].Calendars.GetAsync();
@@ -79,16 +77,16 @@ public class GraphService : IGraphService
             }
         }
 
-        // Sort all events by start time and map to EventModel
+        // Sort all events by start time and map to model.
         return allEvents
-            .OrderBy(e => e.Start?.DateTime)
+            .Where(e => e.Start?.DateTime != null && e.End?.DateTime != null)
+            .OrderBy(e => e.Start!.DateTime)
             .Select(e => new EventEntry
             {
                 Description = e.Subject ?? string.Empty,
-                Start = DateTimeOffset.Parse(e.Start?.DateTime ?? DateTime.UtcNow.ToString()),
-                End = DateTimeOffset.Parse(e.End?.DateTime ?? DateTime.UtcNow.ToString())
-            })
-            .ToArray();
+                Start = DateTimeOffset.Parse(e.Start!.DateTime!),
+                End = DateTimeOffset.Parse(e.End!.DateTime!)
+            }).ToArray();
     }
 }
 
