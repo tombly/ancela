@@ -7,7 +7,7 @@ using OpenAI;
 
 namespace Ancilla.FunctionApp.Services;
 
-public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, IKnowledgeService _knowledgeService, IHistoryService _historyService)
+public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, IKnowledgeService _knowledgeService, IHistoryService _historyService, IGraphService _graphService)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session)
     {
@@ -20,7 +20,9 @@ public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, 
 
         var kernel = builder.Build();
 
+        // Register plugins.
         kernel.Plugins.AddFromObject(new CosmosPlugin(_todoService, _knowledgeService));
+        kernel.Plugins.AddFromObject(new GraphPlugin(_graphService));
 
         // Enable planning.
         var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
@@ -44,6 +46,7 @@ public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, 
               functions as needed.
             - For the todos, they do not have due dates and you are not able to remind the user proactively.
             - You have access to the individual conversation history with each user.
+            - You have read-only access to the user's calendar events.
             - The user's current local date and time is {localTime:f} ({session.TimeZone}).
             - Be concise in your responses because they are sent via SMS.
             - When a user asks you to 'list my todos', respond with a numbered

@@ -20,6 +20,7 @@
     <PackageReference Include="Aspire.Microsoft.Azure.Cosmos" />
     <PackageReference Include="Microsoft.SemanticKernel" />
     <PackageReference Include="Twilio" />
+    <PackageReference Include="Microsoft.Graph" />
   </ItemGroup>
   
   <ItemGroup>

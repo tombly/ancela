@@ -22,6 +22,7 @@ public abstract class ChatServiceTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<ITodoService> MockTodoService;
     protected readonly Mock<IKnowledgeService> MockKnowledgeService;
+    protected readonly Mock<IGraphService> MockGraphService;
 
     // System under test
     protected readonly ChatService ChatService;
@@ -50,6 +51,7 @@ public abstract class ChatServiceTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockTodoService = new Mock<ITodoService>();
         MockKnowledgeService = new Mock<IKnowledgeService>();
+        MockGraphService = new Mock<IGraphService>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -71,7 +73,8 @@ public abstract class ChatServiceTestBase
             OpenAIClient,
             MockTodoService.Object,
             MockKnowledgeService.Object,
-            MockHistoryService.Object);
+            MockHistoryService.Object,
+            MockGraphService.Object);
 
         // Create test session
         TestSession = new SessionEntry

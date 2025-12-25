@@ -16,6 +16,10 @@ var openAiApiKeyParameter = builder.AddParameter("openai-api-key", true);
 var twilioPhoneNumberParameter = builder.AddParameter("twilio-phone-number", true);
 var twilioAccountSidParameter = builder.AddParameter("twilio-account-sid", true);
 var twilioAuthTokenParameter = builder.AddParameter("twilio-auth-token", true);
+var graphUserIdParameter = builder.AddParameter("graph-user-id", true);
+var graphTenantIdParameter = builder.AddParameter("graph-tenant-id", true);
+var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
+var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
 
 var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
 var chat = openai.AddModel("chat", "gpt-5-mini");
@@ -51,6 +55,10 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancilla_FunctionApp>
     .WithEnvironment("TWILIO_PHONE_NUMBER", twilioPhoneNumberParameter)
     .WithEnvironment("TWILIO_ACCOUNT_SID", twilioAccountSidParameter)
     .WithEnvironment("TWILIO_AUTH_TOKEN", twilioAuthTokenParameter)
+    .WithEnvironment("GRAPH_USER_ID", graphUserIdParameter)
+    .WithEnvironment("GRAPH_TENANT_ID", graphTenantIdParameter)
+    .WithEnvironment("GRAPH_CLIENT_ID", graphClientIdParameter)
+    .WithEnvironment("GRAPH_CLIENT_SECRET", graphClientSecretParameter)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();
