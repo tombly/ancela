@@ -2,14 +2,17 @@
 
 **AI Assistant**
 
-Ancilla is an AI-powered memory assistant that helps users save and retrieve todos through SMS messaging. Built with .NET Aspire, Azure Functions, and Azure Cosmos DB, it provides an intelligent, conversational interface for managing personal todos and information.
+Ancilla is an AI-powered memory assistant that helps users manage todos, access their calendar, read emails, and interact with contacts through SMS messaging. Built with .NET Aspire, Azure Functions, Azure Cosmos DB, and Microsoft Graph, it provides an intelligent, conversational interface for managing personal information and productivity.
 
 ## Features
 
 - 💬 **SMS Interface** - Interact with your AI assistant via text messages using Twilio
 - 🧠 **AI-Powered Conversations** - Powered by OpenAI GPT models with Semantic Kernel
 - 📝 **Todo Management** - Save, retrieve, and delete todos using natural language
-- 🔐 **Session Management** - Secure, per-user sessions with simple commands
+- � **Calendar Access** - Query your upcoming events and appointments
+- 📧 **Email Integration** - Read recent emails and send new emails
+- 👥 **Contact Management** - Access and search your contacts
+- �🔐 **Session Management** - Secure, per-user sessions with simple commands
 - 📜 **Conversation History** - Maintains context across multiple interactions
 - ☁️ **Cloud Native** - Built with .NET Aspire for easy deployment to Azure
 - 🗄️ **Scalable Storage** - Azure Cosmos DB for reliable, distributed data storage
@@ -27,6 +30,9 @@ Ancilla is built using modern cloud-native patterns:
 - **CommandInterceptor** - Handles special commands (`hello ancilla`, `goodbye ancilla`)
 - **ChatService** - AI conversation management with OpenAI integration
 - **TodoService** - CRUD operations for user todos in Cosmos DB
+- **KnowledgeService** - Manages persistent knowledge entries
+- **GraphService** - Microsoft Graph API integration for calendar, email, and contacts
+- **GraphPlugin** - Semantic Kernel plugin exposing Graph capabilities to AI
 - **SessionService** - User session lifecycle management
 - **HistoryService** - Conversation history persistence and retrieval
 - **SmsService** - Twilio integration for SMS messaging
@@ -144,6 +150,62 @@ Delete the todo about the dentist
 
 ```
 Remove the grocery list
+```
+
+### Checking Your Calendar
+
+Ask about your schedule:
+```
+What's on my calendar today?
+```
+
+```
+Do I have any meetings tomorrow?
+```
+
+```
+Show me my calendar for next week
+```
+
+### Reading Emails
+
+Check your recent messages:
+```
+Do I have any new emails?
+```
+
+```
+Show me my recent emails
+```
+
+```
+What's in my inbox?
+```
+
+### Sending Emails
+
+Send emails through natural conversation:
+```
+Send an email to john@example.com about the project status
+```
+
+```
+Email Sarah and let her know the meeting is rescheduled
+```
+
+### Looking Up Contacts
+
+Find contact information:
+```
+What's John's email address?
+```
+
+```
+Find Sarah's phone number
+```
+
+```
+Show me my contacts
 ```
 
 ### Ending a Session
