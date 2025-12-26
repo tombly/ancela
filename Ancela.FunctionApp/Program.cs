@@ -1,4 +1,5 @@
 using Ancela.Agent;
+using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;

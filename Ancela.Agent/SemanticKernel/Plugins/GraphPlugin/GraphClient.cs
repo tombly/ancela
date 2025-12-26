@@ -2,7 +2,7 @@ using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 
-namespace Ancela.Agent.Services;
+namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 public interface IGraphClient
 {
