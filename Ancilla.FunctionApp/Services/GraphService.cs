@@ -8,6 +8,9 @@ public interface IGraphService
 {
     Task<EventEntry[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EmailEntry[]> GetUserEmailsAsync(int maxResults = 10);
+    Task<ContactEntry[]> GetUserContactsAsync(int maxResults = 50);
+    Task<ContactEntry?> GetUserContactByNameAsync(string name);
+    Task<string> SendEmailAsync(string toAddress, string subject, string body);
 }
 
 /// <summary>
@@ -115,6 +118,98 @@ public class GraphService : IGraphService
                 IsRead = m.IsRead ?? false
             }).ToArray();
     }
+
+    public async Task<ContactEntry[]> GetUserContactsAsync(int maxResults = 50)
+    {
+        var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
+        {
+            // Request specific properties.
+            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "companyName", "jobTitle"];
+            // Get contacts up to the specified limit.
+            config.QueryParameters.Top = maxResults;
+            // Sort by display name.
+            config.QueryParameters.Orderby = ["displayName"];
+        });
+
+        if (contacts?.Value == null)
+            return [];
+
+        return contacts.Value
+            .Select(c => new ContactEntry
+            {
+                DisplayName = c.DisplayName ?? string.Empty,
+                EmailAddresses = c.EmailAddresses?.Select(e => e.Address ?? string.Empty).Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [],
+                MobilePhone = c.MobilePhone ?? string.Empty,
+                BusinessPhones = c.BusinessPhones?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [],
+                CompanyName = c.CompanyName ?? string.Empty,
+                JobTitle = c.JobTitle ?? string.Empty
+            }).ToArray();
+    }
+
+    public async Task<ContactEntry?> GetUserContactByNameAsync(string name)
+    {
+        var searchTerm = name.Trim();
+        
+        var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
+        {
+            // Request specific properties.
+            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "companyName", "jobTitle", "givenName", "surname"];
+            // Filter by display name, given name, or surname containing the search term.
+            config.QueryParameters.Filter = $"startswith(displayName,'{searchTerm}') or startswith(givenName,'{searchTerm}') or startswith(surname,'{searchTerm}')";
+            // Get top 10 matches.
+            config.QueryParameters.Top = 10;
+        });
+
+        if (contacts?.Value == null || contacts.Value.Count == 0)
+            return null;
+
+        // Return the first match, or the best match if display name contains the exact search term.
+        var exactMatch = contacts.Value.FirstOrDefault(c => 
+            c.DisplayName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true);
+        
+        var contact = exactMatch ?? contacts.Value.First();
+
+        return new ContactEntry
+        {
+            DisplayName = contact.DisplayName ?? string.Empty,
+            EmailAddresses = contact.EmailAddresses?.Select(e => e.Address ?? string.Empty).Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [],
+            MobilePhone = contact.MobilePhone ?? string.Empty,
+            BusinessPhones = contact.BusinessPhones?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [],
+            CompanyName = contact.CompanyName ?? string.Empty,
+            JobTitle = contact.JobTitle ?? string.Empty
+        };
+    }
+
+    public async Task<string> SendEmailAsync(string toAddress, string subject, string body)
+    {
+        var message = new Message
+        {
+            Subject = subject,
+            Body = new ItemBody
+            {
+                ContentType = BodyType.Text,
+                Content = body
+            },
+            ToRecipients =
+            [
+                new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = toAddress
+                    }
+                }
+            ]
+        };
+
+        await _appClient.Users[_entraUserId].SendMail.PostAsync(new Microsoft.Graph.Users.Item.SendMail.SendMailPostRequestBody
+        {
+            Message = message,
+            SaveToSentItems = true
+        });
+
+        return $"Email sent successfully to {toAddress}";
+    }
 }
 
 public class EventEntry
@@ -131,4 +226,14 @@ public class EmailEntry
     public required DateTimeOffset ReceivedDateTime { get; init; }
     public required string BodyPreview { get; init; }
     public required bool IsRead { get; init; }
+}
+
+public class ContactEntry
+{
+    public required string DisplayName { get; init; }
+    public required string[] EmailAddresses { get; init; }
+    public required string MobilePhone { get; init; }
+    public required string[] BusinessPhones { get; init; }
+    public required string CompanyName { get; init; }
+    public required string JobTitle { get; init; }
 }

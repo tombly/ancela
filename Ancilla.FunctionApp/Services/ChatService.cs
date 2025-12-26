@@ -47,6 +47,9 @@ public class ChatService(OpenAIClient _openAiClient, ITodoService _todoService, 
             - For the todos, they do not have due dates and you are not able to remind the user proactively.
             - You have access to the individual conversation history with each user.
             - You have read-only access to the user's calendar events.
+            - You have read-only access to the user's recent emails.
+            - You have read-only access to the user's contacts.
+            - You can send emails.
             - The user's current local date and time is {localTime:f} ({session.TimeZone}).
             - Be concise in your responses because they are sent via SMS.
             - When a user asks you to 'list my todos', respond with a numbered
