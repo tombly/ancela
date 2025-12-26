@@ -4,7 +4,7 @@ using Microsoft.Graph.Models;
 
 namespace Ancela.Agent.Services;
 
-public interface IGraphService
+public interface IGraphClient
 {
     Task<EventEntry[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EmailEntry[]> GetUserEmailsAsync(int maxResults = 10);
@@ -16,7 +16,7 @@ public interface IGraphService
 /// <summary>
 /// Service for interacting with Microsoft Graph API.
 /// </summary>
-public class GraphService : IGraphService
+public class GraphClient : IGraphClient
 {
     /// <summary>
     /// The client secret credential for app-only authentication.
@@ -33,7 +33,7 @@ public class GraphService : IGraphService
     /// </summary>
     private readonly string _entraUserId;
 
-    public GraphService()
+    public GraphClient()
     {
         _entraUserId = Environment.GetEnvironmentVariable("GRAPH_USER_ID") ?? throw new Exception("GRAPH_USER_ID not set");
 

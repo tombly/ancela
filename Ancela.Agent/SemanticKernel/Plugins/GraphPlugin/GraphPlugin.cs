@@ -2,9 +2,9 @@ using System.ComponentModel;
 using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
 
-namespace Ancela.Agent;
+namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
-public class GraphPlugin(IGraphService graphService)
+public class GraphPlugin(IGraphClient graphClient)
 {
     [KernelFunction("get_calendar_events")]
     [Description("Retrieves calendar events for the user within the specified date range.")]
@@ -14,7 +14,7 @@ public class GraphPlugin(IGraphService graphService)
          [Description("The end date and time of the range to query")]
          DateTimeOffset end)
     {
-        return await graphService.GetUserEventsAsync(start, end);
+        return await graphClient.GetUserEventsAsync(start, end);
     }
 
     [KernelFunction("get_recent_emails")]
@@ -23,7 +23,7 @@ public class GraphPlugin(IGraphService graphService)
          [Description("The maximum number of emails to retrieve (default: 10)")] 
          int maxResults = 10)
     {
-        return await graphService.GetUserEmailsAsync(maxResults);
+        return await graphClient.GetUserEmailsAsync(maxResults);
     }
 
     [KernelFunction("get_contacts")]
@@ -32,7 +32,7 @@ public class GraphPlugin(IGraphService graphService)
          [Description("The maximum number of contacts to retrieve (default: 50)")] 
          int maxResults = 50)
     {
-        return await graphService.GetUserContactsAsync(maxResults);
+        return await graphClient.GetUserContactsAsync(maxResults);
     }
 
     [KernelFunction("get_contact_by_name")]
@@ -41,7 +41,7 @@ public class GraphPlugin(IGraphService graphService)
          [Description("The name to search for")] 
          string name)
     {
-        return await graphService.GetUserContactByNameAsync(name);
+        return await graphClient.GetUserContactByNameAsync(name);
     }
 
     [KernelFunction("send_email")]
@@ -54,6 +54,6 @@ public class GraphPlugin(IGraphService graphService)
          [Description("The body content of the email")] 
          string body)
     {
-        return await graphService.SendEmailAsync(toAddress, subject, body);
+        return await graphClient.SendEmailAsync(toAddress, subject, body);
     }
 }

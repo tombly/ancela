@@ -24,7 +24,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("what's on my calendar today?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.Is<DateTimeOffset>(d => d.Date == todayStart.Date),
                 It.Is<DateTimeOffset>(d => d.Date == todayEnd.Date || d.Date == todayStart.Date)),
@@ -45,7 +45,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("what meetings do I have tomorrow?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.Is<DateTimeOffset>(d => d.Date == tomorrowStart.Date),
                 It.Is<DateTimeOffset>(d => d.Date == tomorrowEnd.Date || d.Date == tomorrowStart.Date)),
@@ -68,7 +68,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("show me my calendar for this week");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -88,7 +88,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("what's on my schedule next Monday?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -108,7 +108,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("am I busy this afternoon?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -125,7 +125,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("what meetings do I have today?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -152,7 +152,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("what's my schedule today?");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -175,7 +175,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
         var response = await SendMessageAsync("show me my calendar for the next 3 days");
 
         // Assert
-        MockGraphService.Verify(
+        MockGraphClient.Verify(
             g => g.GetUserEventsAsync(
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<DateTimeOffset>()),
@@ -187,7 +187,7 @@ public class ChatServiceGraphTests : ChatServiceTestBase
     /// </summary>
     protected void SetupCalendarEvents(params EventEntry[] events)
     {
-        MockGraphService
+        MockGraphClient
             .Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()))
             .ReturnsAsync(events);
     }
