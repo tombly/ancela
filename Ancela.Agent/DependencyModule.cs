@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 namespace Ancela.Agent;
 
 /// <summary>
-/// Registers necessary services for the Chat feature.
+/// Registers necessary services for the Agent feature.
 /// </summary>
 public static class DependencyModule
 {
@@ -16,9 +16,10 @@ public static class DependencyModule
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
-        //builder.Services.AddSingleton<GraphPlugin>();
+        builder.Services.AddSingleton<GraphPlugin>();
         builder.Services.AddSingleton<IKnowledgeClient, KnowledgeClient>();
         builder.Services.AddSingleton<ITodoClient, TodoClient>();
+        builder.Services.AddSingleton<MemoryPlugin>();
 
         builder.Services.AddSingleton<ChatService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();

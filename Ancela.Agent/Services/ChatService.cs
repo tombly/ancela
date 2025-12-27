@@ -9,33 +9,33 @@ using OpenAI;
 
 namespace Ancela.Agent.Services;
 
-public class ChatService(OpenAIClient _openAiClient, ITodoClient _todoService, IKnowledgeClient _knowledgeService, IHistoryService _historyService, IGraphClient _graphClient)
+public class ChatService(OpenAIClient _openAiClient, IHistoryService _historyService, MemoryPlugin _memoryPlugin, GraphPlugin _graphPlugin)
 {
-    public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session)
-    {
-        var builder = Kernel.CreateBuilder();
+  public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session)
+  {
+    var builder = Kernel.CreateBuilder();
 
-        // Use the injected OpenAI client from Aspire.
-        builder.Services.AddSingleton(_openAiClient);
-        builder.AddOpenAIChatCompletion("gpt-5-mini", _openAiClient);
-        builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
+    // Use the injected OpenAI client from Aspire.
+    builder.Services.AddSingleton(_openAiClient);
+    builder.AddOpenAIChatCompletion("gpt-5-mini", _openAiClient);
+    builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
 
-        var kernel = builder.Build();
+    var kernel = builder.Build();
 
-        // Register plugins. - TODO: How to get this into the DI?
-        kernel.Plugins.AddFromObject(new MemoryPlugin(_todoService, _knowledgeService));
-        kernel.Plugins.AddFromObject(new GraphPlugin(_graphClient));
+    // Register plugins.
+    kernel.Plugins.AddFromObject(_memoryPlugin);
+    kernel.Plugins.AddFromObject(_graphPlugin);
 
-        // Enable planning.
-        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
-        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+    // Enable planning.
+    var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
+    { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
-        var history = new ChatHistory();
+    var history = new ChatHistory();
 
-        var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
-        var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
+    var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
+    var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
 
-        var instructions = $"""
+    var instructions = $"""
             - You are an AI agent named Ancela.
             - You help users remember (1) things to do and (2) general knowledge.
             - You are a singlular AI instance serving multiple users. 
@@ -59,37 +59,37 @@ public class ChatService(OpenAIClient _openAiClient, ITodoClient _todoService, I
             - You have a separate chat history for each user, but your memory is
               shared across all users.
             """;
-        history.AddSystemMessage(instructions);
+    history.AddSystemMessage(instructions);
 
-        // Load chat history from database.
-        var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
-        foreach (var entry in historyEntries)
-        {
-            if (entry.MessageType == MessageType.User)
-                history.AddUserMessage(entry.Content);
-            else if (entry.MessageType == MessageType.Assistant)
-                history.AddAssistantMessage(entry.Content);
-        }
-
-        history.AddUserMessage(message);
-
-        // Populate kernel arguments with contextual data
-        kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
-        kernel.Data["userPhoneNumber"] = userPhoneNumber;
-
-        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-
-        var aiResponse = await chatCompletionService.GetChatMessageContentAsync(
-            history,
-            executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
-        );
-
-        var response = aiResponse.ToString();
-
-        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
-        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Assistant);
-
-        return response;
+    // Load chat history from database.
+    var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
+    foreach (var entry in historyEntries)
+    {
+      if (entry.MessageType == MessageType.User)
+        history.AddUserMessage(entry.Content);
+      else if (entry.MessageType == MessageType.Assistant)
+        history.AddAssistantMessage(entry.Content);
     }
+
+    history.AddUserMessage(message);
+
+    // Populate kernel arguments with contextual data
+    kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
+    kernel.Data["userPhoneNumber"] = userPhoneNumber;
+
+    var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+
+    var aiResponse = await chatCompletionService.GetChatMessageContentAsync(
+        history,
+        executionSettings: openAIPromptExecutionSettings,
+        kernel: kernel
+    );
+
+    var response = aiResponse.ToString();
+
+    await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
+    await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Assistant);
+
+    return response;
+  }
 }

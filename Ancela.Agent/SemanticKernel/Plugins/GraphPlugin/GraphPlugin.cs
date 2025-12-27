@@ -20,7 +20,7 @@ public class GraphPlugin(IGraphClient graphClient)
     [Description("Retrieves the most recent emails for the user.")]
     public async Task<EmailEntry[]> GetRecentEmailsAsync(
          [Description("The maximum number of emails to retrieve (default: 10)")]
-         int maxResults = 10)
+         int maxResults = 50)
     {
         return await graphClient.GetUserEmailsAsync(maxResults);
     }
@@ -29,7 +29,7 @@ public class GraphPlugin(IGraphClient graphClient)
     [Description("Retrieves the user's contacts from their address book.")]
     public async Task<ContactEntry[]> GetContactsAsync(
          [Description("The maximum number of contacts to retrieve (default: 50)")]
-         int maxResults = 50)
+         int maxResults = 100)
     {
         return await graphClient.GetUserContactsAsync(maxResults);
     }

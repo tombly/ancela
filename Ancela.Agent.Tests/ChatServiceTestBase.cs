@@ -70,13 +70,16 @@ public abstract class ChatServiceTestBase
             .Setup(k => k.GetKnowledgeAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<KnowledgeEntry>());
 
+        // Create plugin instances with mocked services
+        var memoryPlugin = new MemoryPlugin(MockTodoService.Object, MockKnowledgeService.Object);
+        var graphPlugin = new GraphPlugin(MockGraphClient.Object);
+
         // Create ChatService with real OpenAI and mocked data services
         ChatService = new ChatService(
             OpenAIClient,
-            MockTodoService.Object,
-            MockKnowledgeService.Object,
             MockHistoryService.Object,
-            MockGraphClient.Object);
+            memoryPlugin,
+            graphPlugin);
 
         // Create test session
         TestSession = new SessionEntry
