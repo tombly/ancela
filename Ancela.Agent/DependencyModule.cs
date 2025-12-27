@@ -19,8 +19,7 @@ public static class DependencyModule
         // Register Semantic Kernel plugins.
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
         builder.Services.AddSingleton<GraphPlugin>();
-        builder.Services.AddSingleton<IKnowledgeClient, KnowledgeClient>();
-        builder.Services.AddSingleton<ITodoClient, TodoClient>();
+        builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<YnabPlugin>();
         builder.Services.AddSingleton<YnabClient>();

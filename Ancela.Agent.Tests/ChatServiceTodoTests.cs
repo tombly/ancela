@@ -15,8 +15,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("remind me to buy milk");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.SaveTodoAsync(
+        MockMemoryClient.Verify(
+            m => m.SaveToDoAsync(
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("milk"))),
@@ -30,8 +30,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("add a todo to call the dentist");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.SaveTodoAsync(
+        MockMemoryClient.Verify(
+            m => m.SaveToDoAsync(
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("dentist"))),
@@ -50,8 +50,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("what are my todos?");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.GetTodosAsync(AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.GetToDosAsync(AgentPhoneNumber),
             Times.AtLeastOnce);
     }
 
@@ -65,8 +65,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("show me my tasks");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.GetTodosAsync(AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.GetToDosAsync(AgentPhoneNumber),
             Times.AtLeastOnce);
     }
 
@@ -81,8 +81,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("delete the milk todo");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.DeleteTodoAsync(todoId, AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.DeleteToDoAsync(todoId, AgentPhoneNumber),
             Times.Once);
     }
 
@@ -97,8 +97,8 @@ public class ChatServiceTodoTests : ChatServiceTestBase
         var response = await SendMessageAsync("I finished the report, you can remove it");
 
         // Assert
-        MockTodoService.Verify(
-            t => t.DeleteTodoAsync(todoId, AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.DeleteToDoAsync(todoId, AgentPhoneNumber),
             Times.Once);
     }
 }

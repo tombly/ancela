@@ -1,5 +1,7 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -22,8 +24,7 @@ public abstract class ChatServiceTestBase
 
     // Mocked data services
     protected readonly Mock<IHistoryService> MockHistoryService;
-    protected readonly Mock<ITodoClient> MockTodoService;
-    protected readonly Mock<IKnowledgeClient> MockKnowledgeService;
+    protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
 
     // System under test
@@ -51,8 +52,7 @@ public abstract class ChatServiceTestBase
 
         // Setup mocked services with default behaviors
         MockHistoryService = new Mock<IHistoryService>();
-        MockTodoService = new Mock<ITodoClient>();
-        MockKnowledgeService = new Mock<IKnowledgeClient>();
+        MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
 
         // Default: return empty history (fresh conversation)
@@ -61,25 +61,32 @@ public abstract class ChatServiceTestBase
             .ReturnsAsync(Array.Empty<HistoryEntry>());
 
         // Default: return empty todos
-        MockTodoService
-            .Setup(t => t.GetTodosAsync(It.IsAny<string>()))
-            .ReturnsAsync(Array.Empty<TodoEntry>());
+        MockMemoryClient
+            .Setup(m => m.GetToDosAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<ToDoModel>());
 
         // Default: return empty knowledge
-        MockKnowledgeService
-            .Setup(k => k.GetKnowledgeAsync(It.IsAny<string>()))
-            .ReturnsAsync(Array.Empty<KnowledgeEntry>());
+        MockMemoryClient
+            .Setup(m => m.GetKnowledgeAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<KnowledgeModel>());
 
-        // Create plugin instances with mocked services
-        var memoryPlugin = new MemoryPlugin(MockTodoService.Object, MockKnowledgeService.Object);
+        // Create plugins with mocked clients
+        var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
+
+        // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
+        // The actual YNAB tests would need to mock the YnabClient or use integration testing
+        Environment.SetEnvironmentVariable("YNAB_ACCESS_TOKEN", "test-token-for-testing");
+        var ynabClient = new YnabClient();
+        var ynabPlugin = new YnabPlugin(ynabClient);
 
         // Create ChatService with real OpenAI and mocked data services
         ChatService = new ChatService(
             OpenAIClient,
             MockHistoryService.Object,
             memoryPlugin,
-            graphPlugin);
+            graphPlugin,
+            ynabPlugin);
 
         // Create test session
         TestSession = new SessionEntry
@@ -101,13 +108,13 @@ public abstract class ChatServiceTestBase
     }
 
     /// <summary>
-    /// Configures the mock to return specific todos when GetTodosAsync is called.
+    /// Configures the mock to return specific todos when GetToDosAsync is called.
     /// Useful for testing delete operations that need existing todo IDs.
     /// </summary>
-    protected void SetupExistingTodos(params TodoEntry[] todos)
+    protected void SetupExistingTodos(params ToDoModel[] todos)
     {
-        MockTodoService
-            .Setup(t => t.GetTodosAsync(AgentPhoneNumber))
+        MockMemoryClient
+            .Setup(m => m.GetToDosAsync(AgentPhoneNumber))
             .ReturnsAsync(todos);
     }
 
@@ -115,19 +122,19 @@ public abstract class ChatServiceTestBase
     /// Configures the mock to return specific knowledge entries when GetKnowledgeAsync is called.
     /// Useful for testing delete operations that need existing knowledge IDs.
     /// </summary>
-    protected void SetupExistingKnowledge(params KnowledgeEntry[] entries)
+    protected void SetupExistingKnowledge(params KnowledgeModel[] entries)
     {
-        MockKnowledgeService
-            .Setup(k => k.GetKnowledgeAsync(AgentPhoneNumber))
+        MockMemoryClient
+            .Setup(m => m.GetKnowledgeAsync(AgentPhoneNumber))
             .ReturnsAsync(entries);
     }
 
     /// <summary>
-    /// Creates a TodoEntry for testing.
+    /// Creates a ToDoModel for testing.
     /// </summary>
-    protected static TodoEntry CreateTodo(string content, Guid? id = null)
+    protected static ToDoModel CreateTodo(string content, Guid? id = null)
     {
-        return new TodoEntry
+        return new ToDoModel
         {
             Id = id ?? Guid.NewGuid(),
             Content = content,
@@ -138,11 +145,11 @@ public abstract class ChatServiceTestBase
     }
 
     /// <summary>
-    /// Creates a KnowledgeEntry for testing.
+    /// Creates a KnowledgeModel for testing.
     /// </summary>
-    protected static KnowledgeEntry CreateKnowledge(string content, Guid? id = null)
+    protected static KnowledgeModel CreateKnowledge(string content, Guid? id = null)
     {
-        return new KnowledgeEntry
+        return new KnowledgeModel
         {
             Id = id ?? Guid.NewGuid(),
             Content = content,

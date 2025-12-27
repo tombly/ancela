@@ -15,8 +15,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("remember that my doctor is Dr. Smith");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.SaveKnowledgeAsync(
+        MockMemoryClient.Verify(
+            m => m.SaveKnowledgeAsync(
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("smith") || content.ToLower().Contains("doctor"))),
@@ -30,8 +30,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("my favorite color is blue");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.SaveKnowledgeAsync(
+        MockMemoryClient.Verify(
+            m => m.SaveKnowledgeAsync(
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("blue") || content.ToLower().Contains("color"))),
@@ -50,8 +50,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("who is my doctor?");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.GetKnowledgeAsync(AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.GetKnowledgeAsync(AgentPhoneNumber),
             Times.AtLeastOnce);
     }
 
@@ -65,8 +65,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("what do you know about me?");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.GetKnowledgeAsync(AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.GetKnowledgeAsync(AgentPhoneNumber),
             Times.AtLeastOnce);
     }
 
@@ -81,8 +81,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("delete the knowledge about my doctor");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.DeleteKnowledgeAsync(knowledgeId, AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.DeleteKnowledgeAsync(knowledgeId, AgentPhoneNumber),
             Times.Once);
     }
 
@@ -97,8 +97,8 @@ public class ChatServiceKnowledgeTests : ChatServiceTestBase
         var response = await SendMessageAsync("that's not my favorite color anymore, please remove it");
 
         // Assert
-        MockKnowledgeService.Verify(
-            k => k.DeleteKnowledgeAsync(knowledgeId, AgentPhoneNumber),
+        MockMemoryClient.Verify(
+            m => m.DeleteKnowledgeAsync(knowledgeId, AgentPhoneNumber),
             Times.Once);
     }
 }
