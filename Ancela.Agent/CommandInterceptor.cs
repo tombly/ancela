@@ -29,7 +29,7 @@ public class CommandInterceptor(ILogger<CommandInterceptor> _logger, ISessionSer
 
             // Add the session.
             await _sessionService.CreateSessionAsync(agentPhoneNumber, userPhoneNumber);
-            return "Welcome! I'm your AI memory assistant. I can help you save and retrieve todos via SMS. Try sending me a todo!";
+            return "Welcome! I'm your AI assistant.";
         }
 
         // Check if the message is the "goodbye" command (case-insensitive).
