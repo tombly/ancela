@@ -29,7 +29,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<ISessionService, SessionService>();
         builder.Services.AddSingleton<SmsService>();
-        builder.Services.AddSingleton<CommandInterceptor>();
+        builder.Services.AddSingleton<ChatInterceptor>();
 
         return builder;
     }

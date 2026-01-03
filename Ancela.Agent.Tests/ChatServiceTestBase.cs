@@ -104,7 +104,7 @@ public abstract class ChatServiceTestBase
     /// </summary>
     protected Task<string> SendMessageAsync(string message)
     {
-        return ChatService.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestSession);
+        return ChatService.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestSession, []);
     }
 
     /// <summary>
