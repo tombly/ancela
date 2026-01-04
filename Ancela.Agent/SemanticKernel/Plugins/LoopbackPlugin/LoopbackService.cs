@@ -5,7 +5,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
 
 public interface ILoopbackService
 {
-    Task SendMessageToSelf(string userPhoneNumber, string agentPhoneNumber, string content, int? delayHours = null);
+    Task SendMessageToSelf(string userPhoneNumber, string agentPhoneNumber, string content, decimal? delayHours = null);
 }
 
 /// <summary>
@@ -13,7 +13,7 @@ public interface ILoopbackService
 /// </summary>
 public class LoopbackService(QueueServiceClient _queueServiceClient) : ILoopbackService
 {
-    public async Task SendMessageToSelf(string userPhoneNumber, string agentPhoneNumber, string content, int? delayHours = null)
+    public async Task SendMessageToSelf(string userPhoneNumber, string agentPhoneNumber, string content, decimal? delayHours = null)
     {
         var queueMessage = new ChatQueueMessage
         {
@@ -31,7 +31,7 @@ public class LoopbackService(QueueServiceClient _queueServiceClient) : ILoopback
 
         if (delayHours.HasValue && delayHours.Value > 0)
         {
-            var visibilityTimeout = TimeSpan.FromHours(delayHours.Value);
+            var visibilityTimeout = TimeSpan.FromHours((double)delayHours.Value);
             await queueClient.SendMessageAsync(base64Message, visibilityTimeout: visibilityTimeout);
         }
         else

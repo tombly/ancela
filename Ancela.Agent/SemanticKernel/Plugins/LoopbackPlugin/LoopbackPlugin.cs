@@ -19,8 +19,8 @@ public class LoopbackPlugin(ILoopbackService _loopbackService)
         string agentPhoneNumber,
         [Description("The content of the message to send")]
         string content,
-        [Description("Optional delay in hours before the message is sent. If not specified or 0, the message is sent immediately.")]
-        int? delayHours = null)
+        [Description("Optional delay in hours (decimal) before the message is sent. If not specified or 0, the message is sent immediately.")]
+        decimal? delayHours = null)
     {
         await _loopbackService.SendMessageToSelf(userPhoneNumber, agentPhoneNumber, content, delayHours);
     }
