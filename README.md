@@ -1,46 +1,18 @@
 # Ancela
 
-Ancela is an AI assistant that helps users manage their todos, calendar, emails, and contacts through SMS messaging. Built with .NET Aspire, Azure Functions, Azure Cosmos DB, and Microsoft Graph, it provides an intelligent, conversational interface for managing personal information and productivity.
+Ancela is an experimental AI assistant. The goal of this project is to create an assistant that is actually useful by integrating with real-world services, supplementing them with special AI abilities, and possessing limited autonomy. 
 
-## Features
+## How It Works
 
-- 💬 **SMS Interface** - Interact with your AI assistant via text messages using Twilio
-- 🧠 **AI-Powered Conversations** - Powered by OpenAI GPT models with Semantic Kernel
-- 📝 **Todo Management** - Save, retrieve, and delete todos using natural language
-- � **Calendar Access** - Query your upcoming events and appointments
-- 📧 **Email Integration** - Read recent emails and send new emails
-- 👥 **Contact Management** - Access and search your contacts
-- �🔐 **Session Management** - Secure, per-user sessions with simple commands
-- 📜 **Conversation History** - Maintains context across multiple interactions
-- ☁️ **Cloud Native** - Built with .NET Aspire for easy deployment to Azure
-- 🗄️ **Scalable Storage** - Azure Cosmos DB for reliable, distributed data storage
+Ancela is built using modern cloud-native patterns: .NET Aspire for infrastructure-as-code, Azure Functions for serverless compute, Azure Cosmos DB for scalable storage, and Semantic Kernel for AI orchestration. The assistant interacts with users via SMS using Twilio, and leverages OpenAI GPT models to understand and respond to natural language requests.
 
-## Architecture
-
-Ancela is built using modern cloud-native patterns:
-
-- **Ancela.AppHost** - .NET Aspire orchestration and infrastructure
-- **Ancela.FunctionApp** - Azure Functions for serverless HTTP endpoints
-- **Ancela.ServiceDefaults** - Shared service configuration and defaults
-
-### Key Components
-
-- **CommandInterceptor** - Handles special commands (`hello ancela`, `goodbye ancela`)
-- **ChatService** - AI conversation management with OpenAI integration
-- **TodoService** - CRUD operations for user todos in Cosmos DB
-- **KnowledgeService** - Manages persistent knowledge entries
-- **GraphService** - Microsoft Graph API integration for calendar, email, and contacts
-- **GraphPlugin** - Semantic Kernel plugin exposing Graph capabilities to AI
-- **SessionService** - User session lifecycle management
-- **HistoryService** - Conversation history persistence and retrieval
-- **SmsService** - Twilio integration for SMS messaging
-
-## Prerequisites
-
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) or later
-- [Azure subscription](https://azure.microsoft.com/free/) (for deployment)
-- [Twilio account](https://www.twilio.com/) (for SMS functionality)
-- [OpenAI API key](https://platform.openai.com/) or Azure OpenAI service
+Ancela's capabilities include:
+- Managing todos
+- Accessing calendar events
+- Reading and sending emails
+- Searching contacts
+- Storing persistent knowledge
+- Accessing personal finances
 
 ## Getting Started
 
@@ -146,45 +118,18 @@ Send an SMS to your Twilio number:
 hello ancela
 ```
 
-### Knowledge
+### Interacting
 
 ```
 Remember that my favorite color is blue
-```
-
-### Todos
-
-```
 Save a todo: buy milk, eggs, and bread
 List my todos
-Remove the grocery list
-```
-
-### Calendar
-
-```
 What's on my calendar today?
 Do I have any meetings tomorrow?
 Create a calendar event for lunch with Sarah next Friday at 1 PM
-```
-
-### Emails
-
-```
 Do I have any new emails?
 Email Sarah and let her know the meeting is rescheduled
-```
-
-### Contacts
-
-```
 What's John's email address?
-```
-
-### Ending a Session
-
-```
-goodbye ancela
 ```
 
 ## License
