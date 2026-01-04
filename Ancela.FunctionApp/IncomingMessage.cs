@@ -44,12 +44,12 @@ public class MessageFunction(ILogger<MessageFunction> _logger, QueueServiceClien
                 }
             }
 
-           var queueMessage = new ChatQueueMessage {
+            var queueMessage = new ChatQueueMessage {
                 Content = body ?? string.Empty,
                 UserPhoneNumber = userPhoneNumber,
                 AgentPhoneNumber = agentPhoneNumber,
                 MediaUrls = [.. mediaUrls]
-           };
+            };
 
             var queueClient = _queueServiceClient.GetQueueClient(ChatQueueMessage.QueueName);
             await queueClient.CreateIfNotExistsAsync();
