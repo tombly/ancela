@@ -1,5 +1,6 @@
 using System.Net;
-using Ancela.Agent;
+using System.Text.Json;
+using Azure.Storage.Queues;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -9,9 +10,7 @@ namespace Ancela.FunctionApp;
 /// <summary>
 /// Handles incoming messages via HTTP trigger. Used for development and testing.
 /// </summary>
-/// <param name="_logger"></param>
-/// <param name="_chatInterceptor"></param>
-public class MessageFunction(ILogger<MessageFunction> _logger, CommandInterceptor _chatInterceptor)
+public class MessageFunction(ILogger<MessageFunction> _logger, QueueServiceClient _queueServiceClient)
 {
     [Function("IncomingMessage")]
     public async Task<HttpResponseData> IncomingMessage([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData request)
@@ -45,12 +44,18 @@ public class MessageFunction(ILogger<MessageFunction> _logger, CommandIntercepto
                 }
             }
 
-            var reply = await _chatInterceptor.HandleMessage(body ?? string.Empty, userPhoneNumber, agentPhoneNumber, mediaUrls.ToArray());
+            var queueMessage = new ChatQueueMessage {
+                Content = body ?? string.Empty,
+                UserPhoneNumber = userPhoneNumber,
+                AgentPhoneNumber = agentPhoneNumber,
+                MediaUrls = [.. mediaUrls]
+            };
 
-            var response = request.CreateResponse(HttpStatusCode.OK);
-            if (reply != null)
-                await response.WriteStringAsync(reply);
-            return response;
+            var queueClient = _queueServiceClient.GetQueueClient(ChatQueueMessage.QueueName);
+            await queueClient.CreateIfNotExistsAsync();
+            await queueClient.SendMessageAsync(Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
+
+            return request.CreateResponse(HttpStatusCode.OK);
         }
         catch (Exception exception)
         {

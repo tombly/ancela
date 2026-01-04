@@ -4,9 +4,9 @@ using Microsoft.Extensions.Logging;
 namespace Ancela.Agent;
 
 /// <summary>
-/// Intercepts incoming messages to handle special commands before passing to ChatService.
+/// Intercepts incoming chat messages to handle special commands before passing to ChatService.
 /// </summary>
-public class CommandInterceptor(ILogger<CommandInterceptor> _logger, ISessionService _sessionService, ChatService _chatService)
+public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _sessionService, ChatService _chatService)
 {
     /// <summary>
     /// Processes an incoming message, intercepting special commands or delegating to ChatService.

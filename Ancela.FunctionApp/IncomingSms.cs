@@ -1,6 +1,6 @@
 using System.Net;
-using Ancela.Agent;
-using Ancela.Agent.Services;
+using System.Text.Json;
+using Azure.Storage.Queues;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -11,10 +11,7 @@ namespace Ancela.FunctionApp;
 /// <summary>
 /// Handles incoming SMS messages via Twilio web hook.
 /// </summary>
-/// <param name="_logger"></param>
-/// <param name="_chatInterceptor"></param>
-/// <param name="_smsService"></param>
-public class SmsFunction(ILogger<SmsFunction> _logger, CommandInterceptor _chatInterceptor, SmsService _smsService)
+public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queueServiceClient)
 {
     [Function("IncomingSms")]
     public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)
@@ -55,9 +52,16 @@ public class SmsFunction(ILogger<SmsFunction> _logger, CommandInterceptor _chatI
                 }
             }
 
-            var reply = await _chatInterceptor.HandleMessage(body ?? string.Empty, userPhoneNumber, agentPhoneNumber, mediaUrls.ToArray());
-            if (reply != null)
-                await _smsService.Send(userPhoneNumber, reply);
+            var queueMessage = new ChatQueueMessage {
+                Content = body ?? string.Empty,
+                UserPhoneNumber = userPhoneNumber,
+                AgentPhoneNumber = agentPhoneNumber,
+                MediaUrls = [.. mediaUrls]
+            };
+
+            var queueClient = _queueServiceClient.GetQueueClient(ChatQueueMessage.QueueName);
+            await queueClient.CreateIfNotExistsAsync();
+            await queueClient.SendMessageAsync(Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
 
             return request.CreateResponse(HttpStatusCode.OK);
         }
