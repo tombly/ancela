@@ -232,7 +232,7 @@ public class GraphClient : IGraphClient
     public async Task<ContactModel?> GetUserContactByNameAsync(string name)
     {
         var searchTerm = name.Trim();
-        
+
         var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
         {
             // Request specific properties.
@@ -247,9 +247,9 @@ public class GraphClient : IGraphClient
             return null;
 
         // Return the first match, or the best match if display name contains the exact search term.
-        var exactMatch = contacts.Value.FirstOrDefault(c => 
+        var exactMatch = contacts.Value.FirstOrDefault(c =>
             c.DisplayName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true);
-        
+
         var contact = exactMatch ?? contacts.Value.First();
 
         return new ContactModel

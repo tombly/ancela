@@ -4,12 +4,12 @@ using Microsoft.Extensions.Logging;
 namespace Ancela.Agent;
 
 /// <summary>
-/// Intercepts incoming chat messages to handle special commands before passing to ChatService.
+/// Intercepts incoming chat messages to handle special commands.
 /// </summary>
-public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _sessionService, ChatService _chatService)
+public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _sessionService, Agent _agent)
 {
     /// <summary>
-    /// Processes an incoming message, intercepting special commands or delegating to ChatService.
+    /// Processes an incoming message, intercepting special commands or delegating to the agent.
     /// </summary>
     /// <param name="message">The message content</param>
     /// <param name="userPhoneNumber">The sender's phone number</param>
@@ -56,7 +56,7 @@ public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _
             return null;
         }
 
-        // No interception needed, pass to ChatService.
-        return await _chatService.Chat(message, userPhoneNumber, agentPhoneNumber, session, mediaUrls);
+        // No interception needed, pass to agent.
+        return await _agent.Chat(message, userPhoneNumber, agentPhoneNumber, session, mediaUrls);
     }
 }

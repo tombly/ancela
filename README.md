@@ -14,6 +14,8 @@ Ancela's capabilities include:
 - Storing persistent knowledge
 - Accessing personal finances
 
+![Design](Images/design.svg)
+
 ## Getting Started
 
 ### Local Development
@@ -130,6 +132,7 @@ Create a calendar event for lunch with Sarah next Friday at 1 PM
 Do I have any new emails?
 Email Sarah and let her know the meeting is rescheduled
 What's John's email address?
+How much is in my checking account?
 ```
 
 ## License

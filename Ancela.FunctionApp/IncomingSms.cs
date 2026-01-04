@@ -52,7 +52,8 @@ public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queue
                 }
             }
 
-            var queueMessage = new ChatQueueMessage {
+            var queueMessage = new ChatQueueMessage
+            {
                 Content = body ?? string.Empty,
                 UserPhoneNumber = userPhoneNumber,
                 AgentPhoneNumber = agentPhoneNumber,

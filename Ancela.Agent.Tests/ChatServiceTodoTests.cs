@@ -6,7 +6,7 @@ namespace Ancela.Agent.Tests;
 /// Integration tests verifying that todo-related prompts trigger the correct
 /// ITodoService function calls via the AI's function calling capability.
 /// </summary>
-public class ChatServiceTodoTests : ChatServiceTestBase
+public class AgentTodoTests : AgentTestBase
 {
     [Fact]
     public async Task SaveTodo_WhenUserAsksToRememberTask_CallsSaveTodoAsync()

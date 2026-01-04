@@ -28,7 +28,7 @@ When adding new AI capabilities:
 - [ ] `Program.cs` registers interface → implementation
 
 ### 2. Create test class
-- [ ] Inherit from `ChatServiceTestBase`
+- [ ] Inherit from `AgentTestBase`
 - [ ] Use `[Fact]` for simple tests or `[Theory]` for parameterized tests
 - [ ] Name tests descriptively: `MethodName_WhenCondition_ExpectedBehavior`
 
@@ -55,7 +55,7 @@ public async Task MyFunction_WhenPromptGiven_CallsExpectedService()
 - Use **explicit, unambiguous prompts** ("delete the todo about milk" not "forget milk")
 - Verify **function call type** with `It.IsAny<>()` for parameters
 - If flaky, adjust prompt wording for clarity
-- Set temperature low for deterministic responses (configured in `ChatService`)
+- Set temperature low for deterministic responses (configured in `Agent`)
 
 ### 5. Run tests
 ```bash
@@ -67,7 +67,7 @@ Tests run sequentially (`DisableTestParallelization = true`) to avoid race condi
 ## Example Test Structure
 
 ```csharp
-public class ChatServiceMyFeatureTests : ChatServiceTestBase
+public class AgentMyFeatureTests : AgentTestBase
 {
     [Fact]
     public async Task SaveData_WhenUserAsksToRemember_SavesData()
@@ -128,7 +128,7 @@ dotnet user-secrets set "Parameters:openai-api-key" "your-key-here"
 ```
 
 ### Helper Methods Available
-From `ChatServiceTestBase`:
+From `AgentTestBase`:
 - `SendMessageAsync(string message)` - Send prompt and get response
 - `SetupExistingTodos(params TodoEntry[])` - Mock existing todos
 - `SetupExistingKnowledge(params KnowledgeEntry[])` - Mock existing knowledge

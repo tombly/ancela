@@ -8,7 +8,7 @@ namespace Ancela.Agent.Tests;
 /// Integration tests verifying that calendar-related prompts trigger the correct
 /// IGraphService function calls via the AI's function calling capability.
 /// </summary>
-public class ChatServiceGraphTests : ChatServiceTestBase
+public class AgentGraphTests : AgentTestBase
 {
     [Fact]
     public async Task GetCalendarEvents_WhenUserAsksAboutToday_CallsGetUserEventsAsync()

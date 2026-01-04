@@ -8,8 +8,8 @@ public class AccountModel
     public AccountType Type { get; set; }
     public bool OnBudget { get; set; }
     public string? Note { get; set; }
-    public decimal Balance { get; set; } 
-    public decimal ClearedBalance { get; set; } 
+    public decimal Balance { get; set; }
+    public decimal ClearedBalance { get; set; }
     public decimal UnclearedBalance { get; set; }
     public DateTimeOffset? LastReconciledAt { get; set; }
 }

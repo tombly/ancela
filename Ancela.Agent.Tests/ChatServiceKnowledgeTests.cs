@@ -6,7 +6,7 @@ namespace Ancela.Agent.Tests;
 /// Integration tests verifying that knowledge-related prompts trigger the correct
 /// IKnowledgeService function calls via the AI's function calling capability.
 /// </summary>
-public class ChatServiceKnowledgeTests : ChatServiceTestBase
+public class AgentKnowledgeTests : AgentTestBase
 {
     [Fact]
     public async Task SaveKnowledge_WhenUserAsksToRememberFact_CallsSaveKnowledgeAsync()

@@ -25,7 +25,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<YnabClient>();
 
         // Register core services.
-        builder.Services.AddSingleton<ChatService>();
+        builder.Services.AddSingleton<Agent>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<ISessionService, SessionService>();
         builder.Services.AddSingleton<SmsService>();

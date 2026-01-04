@@ -10,10 +10,10 @@ using OpenAI;
 namespace Ancela.Agent.Tests;
 
 /// <summary>
-/// Base class for ChatService integration tests that use real OpenAI calls
+/// Base class for agent integration tests that use real OpenAI calls
 /// with mocked data services to verify function call behavior.
 /// </summary>
-public abstract class ChatServiceTestBase
+public abstract class AgentTestBase
 {
     // Test phone numbers
     protected const string AgentPhoneNumber = "+15551234567";
@@ -28,16 +28,16 @@ public abstract class ChatServiceTestBase
     protected readonly Mock<IGraphClient> MockGraphClient;
 
     // System under test
-    protected readonly ChatService ChatService;
+    protected readonly Agent Agent;
 
     // Test session
     protected readonly SessionEntry TestSession;
 
-    protected ChatServiceTestBase()
+    protected AgentTestBase()
     {
         // Load configuration from user secrets
         var configuration = new ConfigurationBuilder()
-            .AddUserSecrets<ChatServiceTestBase>()
+            .AddUserSecrets<AgentTestBase>()
             .AddEnvironmentVariables()
             .Build();
 
@@ -80,8 +80,8 @@ public abstract class ChatServiceTestBase
         var ynabClient = new YnabClient();
         var ynabPlugin = new YnabPlugin(ynabClient);
 
-        // Create ChatService with real OpenAI and mocked data services
-        ChatService = new ChatService(
+        // Create agent with real OpenAI and mocked data services
+        Agent = new Agent(
             OpenAIClient,
             MockHistoryService.Object,
             memoryPlugin,
@@ -100,11 +100,11 @@ public abstract class ChatServiceTestBase
     }
 
     /// <summary>
-    /// Sends a message to the ChatService and returns the response.
+    /// Sends a message to the agent and returns the response.
     /// </summary>
     protected Task<string> SendMessageAsync(string message)
     {
-        return ChatService.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestSession, []);
+        return Agent.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestSession, []);
     }
 
     /// <summary>
