@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
@@ -26,6 +27,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
+    protected readonly Mock<ILoopbackService> MockLoopbackService;
 
     // System under test
     protected readonly Agent Agent;
@@ -54,6 +56,7 @@ public abstract class AgentTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
+        MockLoopbackService = new Mock<ILoopbackService>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -73,6 +76,7 @@ public abstract class AgentTestBase
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
+        var chatPlugin = new LoopbackPlugin(MockLoopbackService.Object);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
         // The actual YNAB tests would need to mock the YnabClient or use integration testing
@@ -86,7 +90,8 @@ public abstract class AgentTestBase
             MockHistoryService.Object,
             memoryPlugin,
             graphPlugin,
-            ynabPlugin);
+            ynabPlugin,
+            chatPlugin);
 
         // Create test session
         TestSession = new SessionEntry

@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
@@ -23,11 +24,13 @@ public static class DependencyModule
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<YnabPlugin>();
         builder.Services.AddSingleton<YnabClient>();
+        builder.Services.AddSingleton<LoopbackPlugin>();
 
         // Register core services.
         builder.Services.AddSingleton<Agent>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<ISessionService, SessionService>();
+        builder.Services.AddSingleton<ILoopbackService, LoopbackService>();
         builder.Services.AddSingleton<SmsService>();
         builder.Services.AddSingleton<ChatInterceptor>();
 

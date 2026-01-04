@@ -30,7 +30,7 @@ public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _
 
             // Add the session.
             await _sessionService.CreateSessionAsync(agentPhoneNumber, userPhoneNumber);
-            return "Welcome! I'm your AI assistant.";
+            return "Hello!";
         }
 
         // Check if the message is the "goodbye" command (case-insensitive).
@@ -45,7 +45,7 @@ public class ChatInterceptor(ILogger<ChatInterceptor> _logger, ISessionService _
 
             // Delete the session (but keep any todos).
             await _sessionService.DeleteSessionAsync(agentPhoneNumber, userPhoneNumber);
-            return "Goodbye! Your session has been ended. Your todos have been preserved. Send 'hello ancela' to start a new session.";
+            return "Goodbye!";
         }
 
         // Verify session is registered before processing other messages.

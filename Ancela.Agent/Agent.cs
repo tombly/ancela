@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
@@ -11,7 +12,7 @@ using OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, MemoryPlugin _memoryPlugin, GraphPlugin _graphPlugin, YnabPlugin _ynabPlugin)
+public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, MemoryPlugin _memoryPlugin, GraphPlugin _graphPlugin, YnabPlugin _ynabPlugin, LoopbackPlugin _loopbackPlugin)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
@@ -33,6 +34,7 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
         kernel.Plugins.AddFromObject(_memoryPlugin);
         kernel.Plugins.AddFromObject(_graphPlugin);
         kernel.Plugins.AddFromObject(_ynabPlugin);
+        kernel.Plugins.AddFromObject(_loopbackPlugin);
 
         // Enable planning.
         var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
@@ -76,9 +78,14 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
                    - You can read the user's personal finances via their YNAB account.
                    - You can provide budget summaries and recent transaction information.
                    - You cannot make changes to the user's finances.
-            - Don't say "anything else?" at the end of your responses.
+                7. Autonomous Behavior:
+                   - You can send messages to yourself to enable autonomous behavior.
+                   - You can specify a delay in hours before the message is sent.
+                   - Use this capability sparingly to break down complex tasks into
+                     smaller steps.
+            - Don't ask for "anything else?" at the end of your responses.
             - Use the appropriate plugin functions to perform actions related to
-              todos, knowledge, calendar, email, contacts, and personal finance.
+              todos, knowledge, calendar, email, contacts, personal finance, and autonomous behavior.
             - Always think step-by-step about how to best assist the user.
             - Always respond in a friendly and helpful manner.            
             """;
