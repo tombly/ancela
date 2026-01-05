@@ -1,7 +1,8 @@
-using Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Configuration;
@@ -27,7 +28,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
-    protected readonly Mock<ILoopbackService> MockLoopbackService;
+    protected readonly Mock<IPlanningClient> MockLoopbackClient;
 
     // System under test
     protected readonly Agent Agent;
@@ -56,7 +57,7 @@ public abstract class AgentTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
-        MockLoopbackService = new Mock<ILoopbackService>();
+        MockLoopbackClient = new Mock<IPlanningClient>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -76,7 +77,14 @@ public abstract class AgentTestBase
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
-        var chatPlugin = new LoopbackPlugin(MockLoopbackService.Object);
+        var loopbackPlugin = new PlanningPlugin(MockLoopbackClient.Object);
+
+        // SmsPlugin requires Twilio configuration. Provide dummy values for tests.
+        Environment.SetEnvironmentVariable("TWILIO_PHONE_NUMBER", "+10000000000");
+        Environment.SetEnvironmentVariable("TWILIO_ACCOUNT_SID", "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
+        Environment.SetEnvironmentVariable("TWILIO_AUTH_TOKEN", "test-token");
+        var smsService = new SmsService();
+        var smsPlugin = new SmsPlugin(smsService);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
         // The actual YNAB tests would need to mock the YnabClient or use integration testing
@@ -91,7 +99,8 @@ public abstract class AgentTestBase
             memoryPlugin,
             graphPlugin,
             ynabPlugin,
-            chatPlugin);
+            loopbackPlugin,
+            smsPlugin);
 
         // Create test session
         TestSession = new SessionEntry

@@ -103,5 +103,5 @@ public class HistoryEntry
 public enum MessageType
 {
     User,
-    Assistant
+    Agent
 }
