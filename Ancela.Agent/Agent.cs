@@ -1,19 +1,12 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, MemoryPlugin _memoryPlugin, GraphPlugin _graphPlugin, YnabPlugin _ynabPlugin, PlanningPlugin _planningPlugin, SmsPlugin _smsPlugin)
+public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService, PlanningPlugin _planningPlugin)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
@@ -51,29 +44,6 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
 
     public async Task<string> InvokeModel(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
-        var builder = Kernel.CreateBuilder();
-
-        // Use the injected OpenAI client from Aspire.
-        builder.Services.AddSingleton(_openAiClient);
-        builder.AddOpenAIChatCompletion("gpt-5-mini", _openAiClient);
-        builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
-
-        var kernel = builder.Build();
-
-        // Register plugins. TODO: Can we do this via DI directly? If we could, the tests could
-        // test the plugins directly.
-        kernel.Plugins.AddFromObject(_memoryPlugin);
-        kernel.Plugins.AddFromObject(_graphPlugin);
-        kernel.Plugins.AddFromObject(_ynabPlugin);
-        kernel.Plugins.AddFromObject(_planningPlugin);
-        kernel.Plugins.AddFromObject(_smsPlugin);
-
-        // Enable planning.
-        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
-        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
-
-        var history = new ChatHistory();
-
         var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
         var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
 
@@ -122,30 +92,34 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;
-        history.AddSystemMessage(instructions);
+
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(instructions);
 
         // Load chat history from database. Not sure if this is appropriate when planning.
         var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
         foreach (var entry in historyEntries)
         {
             if (entry.MessageType == MessageType.User)
-                history.AddUserMessage(entry.Content);
+                chatHistory.AddUserMessage(entry.Content);
             else if (entry.MessageType == MessageType.Agent)
-                history.AddAssistantMessage(entry.Content);
+                chatHistory.AddAssistantMessage(entry.Content);
         }
 
-        history.AddUserMessage(message);
+        chatHistory.AddUserMessage(message);
 
         // Populate kernel arguments with contextual data
-        kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
-        kernel.Data["userPhoneNumber"] = userPhoneNumber;
+        _kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
+        _kernel.Data["userPhoneNumber"] = userPhoneNumber;
 
-        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+        // Enable planning.
+        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
+        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
         var modelResponse = await chatCompletionService.GetChatMessageContentAsync(
-            history,
+            chatHistory,
             executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
+            kernel: _kernel
         );
 
         var response = modelResponse.ToString();

@@ -6,6 +6,8 @@ using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Moq;
 using OpenAI;
 
@@ -28,7 +30,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
-    protected readonly Mock<IPlanningClient> MockLoopbackClient;
+    protected readonly Mock<IPlanningClient> MockPlanningClient;
 
     // System under test
     protected readonly Agent Agent;
@@ -57,7 +59,7 @@ public abstract class AgentTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
-        MockLoopbackClient = new Mock<IPlanningClient>();
+        MockPlanningClient = new Mock<IPlanningClient>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -77,7 +79,7 @@ public abstract class AgentTestBase
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
-        var loopbackPlugin = new PlanningPlugin(MockLoopbackClient.Object);
+        var planningPlugin = new PlanningPlugin(MockPlanningClient.Object);
 
         // SmsPlugin requires Twilio configuration. Provide dummy values for tests.
         Environment.SetEnvironmentVariable("TWILIO_PHONE_NUMBER", "+10000000000");
@@ -92,15 +94,22 @@ public abstract class AgentTestBase
         var ynabClient = new YnabClient();
         var ynabPlugin = new YnabPlugin(ynabClient);
 
+        // Create kernel with real OpenAI and plugins with mocked clients
+        var chatCompletionService = new OpenAIChatCompletionService("gpt-5-mini", OpenAIClient);
+        var pluginCollection = new KernelPluginCollection();
+        pluginCollection.AddFromObject(graphPlugin);
+        pluginCollection.AddFromObject(memoryPlugin);
+        pluginCollection.AddFromObject(ynabPlugin);
+        pluginCollection.AddFromObject(planningPlugin);
+        pluginCollection.AddFromObject(smsPlugin);
+        var kernel = new Kernel(plugins: pluginCollection);
+
         // Create agent with real OpenAI and mocked data services
         Agent = new Agent(
-            OpenAIClient,
+            kernel,
+            chatCompletionService,
             MockHistoryService.Object,
-            memoryPlugin,
-            graphPlugin,
-            ynabPlugin,
-            loopbackPlugin,
-            smsPlugin);
+            planningPlugin);
 
         // Create test session
         TestSession = new SessionEntry

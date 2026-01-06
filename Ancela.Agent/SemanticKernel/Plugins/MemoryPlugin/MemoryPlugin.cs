@@ -16,6 +16,7 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         [Description("The to-do content to save")]
         string content)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
         await _memoryService.SaveToDoAsync(agentPhoneNumber, userPhoneNumber, content);
@@ -25,6 +26,7 @@ public class MemoryPlugin(IMemoryClient _memoryService)
     [Description("Retrieves to-dos from the database for the current agent")]
     public async Task<ToDoModel[]> GetToDosAsync(Kernel kernel)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         return await _memoryService.GetToDosAsync(agentPhoneNumber);
     }
@@ -35,6 +37,7 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         [Description("The GUID identifier of the to-do to delete")]
         Guid id)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         await _memoryService.DeleteToDoAsync(id, agentPhoneNumber);
     }
@@ -45,6 +48,7 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         [Description("The knowledge content to save")]
         string content)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
         await _memoryService.SaveKnowledgeAsync(agentPhoneNumber, userPhoneNumber, content);
@@ -54,6 +58,7 @@ public class MemoryPlugin(IMemoryClient _memoryService)
     [Description("Retrieves knowledge entries from the database for the current agent")]
     public async Task<KnowledgeModel[]> GetKnowledgeAsync(Kernel kernel)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         return await _memoryService.GetKnowledgeAsync(agentPhoneNumber);
     }
@@ -64,7 +69,24 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         [Description("The GUID identifier of the knowledge entry to delete")]
         Guid id)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         await _memoryService.DeleteKnowledgeAsync(id, agentPhoneNumber);
+    }
+
+    private static void EnsureKernelData(Kernel kernel)
+    {
+        var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString();
+        var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString();
+
+        if (string.IsNullOrWhiteSpace(agentPhoneNumber))
+        {
+            throw new InvalidOperationException("agentPhoneNumber is required in kernel data");
+        }
+
+        if (string.IsNullOrWhiteSpace(userPhoneNumber))
+        {
+            throw new InvalidOperationException("userPhoneNumber is required in kernel data");
+        }
     }
 }

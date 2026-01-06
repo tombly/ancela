@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 namespace Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
 
 /// <summary>
+/// Semantic Kernel plugin for planning tasks and managing plans.
 /// </summary>
 public class PlanningPlugin(IPlanningClient _planningClient)
 {
@@ -14,6 +15,7 @@ public class PlanningPlugin(IPlanningClient _planningClient)
         [Description("A short name for the plan")] string name,
         [Description("An ordered list of steps to complete the plan. Each step includes a description of what the agent should do, and how long to wait until executing the step after the previous step is completed.")] List<StepModel> steps)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
 
@@ -25,12 +27,11 @@ public class PlanningPlugin(IPlanningClient _planningClient)
     public Task<PlanModel?> GetPlanAsync(Kernel kernel,
         [Description("The plan id (GUID).")] string planId)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
 
         if (!Guid.TryParse(planId, out var parsedPlanId))
-        {
             throw new ArgumentException("planId must be a valid GUID", nameof(planId));
-        }
 
         return _planningClient.GetPlanAsync(parsedPlanId, agentPhoneNumber);
     }
@@ -41,13 +42,12 @@ public class PlanningPlugin(IPlanningClient _planningClient)
         [Description("The plan id (GUID). ")] string planId,
         [Description("How long until the next step should be executed, in hours.")] decimal delayHours)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
 
         if (!Guid.TryParse(planId, out var parsedPlanId))
-        {
             throw new ArgumentException("planId must be a valid GUID", nameof(planId));
-        }
 
         await _planningClient.ScheduleMessageForNextStep(userPhoneNumber, agentPhoneNumber, parsedPlanId, delayHours);
     }
@@ -57,12 +57,11 @@ public class PlanningPlugin(IPlanningClient _planningClient)
     public Task<bool> PlanHasIncompleteStepsAsync(Kernel kernel,
         [Description("The plan id (GUID). ")] string planId)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
 
         if (!Guid.TryParse(planId, out var parsedPlanId))
-        {
             throw new ArgumentException("planId must be a valid GUID", nameof(planId));
-        }
 
         return _planningClient.PlanHasIncompleteSteps(parsedPlanId, agentPhoneNumber);
     }
@@ -73,12 +72,11 @@ public class PlanningPlugin(IPlanningClient _planningClient)
         [Description("The plan id (GUID). ")] string planId,
         [Description("The step number (1-based) to mark complete.")] int stepNumber)
     {
+        EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
 
         if (!Guid.TryParse(planId, out var parsedPlanId))
-        {
             throw new ArgumentException("planId must be a valid GUID", nameof(planId));
-        }
 
         return _planningClient.CompleteStepAsync(parsedPlanId, agentPhoneNumber, stepNumber);
     }
@@ -97,5 +95,21 @@ public class PlanningPlugin(IPlanningClient _planningClient)
     public Task<string[]> GetPlanHistory(Guid planId, string agentPhoneNumber)
     {
         return _planningClient.GetPlanHistory(planId, agentPhoneNumber);
+    }
+
+    private static void EnsureKernelData(Kernel kernel)
+    {
+        var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString();
+        var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString();
+
+        if (string.IsNullOrWhiteSpace(agentPhoneNumber))
+        {
+            throw new InvalidOperationException("agentPhoneNumber is required in kernel data");
+        }
+
+        if (string.IsNullOrWhiteSpace(userPhoneNumber))
+        {
+            throw new InvalidOperationException("userPhoneNumber is required in kernel data");
+        }
     }
 }
