@@ -1,18 +1,12 @@
-using Ancela.Agent.SemanticKernel.Plugins.ChatPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
 using Ancela.Agent.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, MemoryPlugin _memoryPlugin, GraphPlugin _graphPlugin, YnabPlugin _ynabPlugin, LoopbackPlugin _loopbackPlugin)
+public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService, PlanningPlugin _planningPlugin)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
@@ -20,28 +14,36 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
         //       Use image analysis to describe images and extract text (store both with metadata).
         //       Allow only images for now.
         //       Need to handle the scenario where there is no message and only media.  
+        var response = await InvokeModel(message, userPhoneNumber, agentPhoneNumber, session, mediaUrls);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Agent);
+        return response;
+    }
 
-        var builder = Kernel.CreateBuilder();
+    public async Task PerformNextStepInPlan(Guid planId, string userPhoneNumber, string agentPhoneNumber)
+    {
+        // TODO: Pass the history into InvokeModel() so that it can properly be
+        //       included in the planning context.
+        var planHistory = await _planningPlugin.GetPlanHistory(planId, agentPhoneNumber);
+        var historySection = planHistory.Length == 0
+            ? "No previous plan history."
+            : "Plan history:\n" + string.Join("\n", planHistory.Select((entry, index) => $"{index + 1}. {entry}"));
 
-        // Use the injected OpenAI client from Aspire.
-        builder.Services.AddSingleton(_openAiClient);
-        builder.AddOpenAIChatCompletion("gpt-5-mini", _openAiClient);
-        builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
+        var response = await InvokeModel($"""
+              - Perform the next step in the plan with ID {planId}.
+              - Mark the step as completed.
+              - Check if the plan has any incomplete steps, and if so, schedule its execution based on the defined delay.
+              - Use the existing plan history to maintain continuity.
+              - Provide a brief summary of the actions taken.
+              - Current plan history context:
+                {historySection}
+              """, userPhoneNumber, agentPhoneNumber, new SessionEntry { TimeZone = "UTC" }, Array.Empty<string>());
 
-        var kernel = builder.Build();
+        await _planningPlugin.SaveToPlanHistory(planId, agentPhoneNumber, response);
+    }
 
-        // Register plugins.
-        kernel.Plugins.AddFromObject(_memoryPlugin);
-        kernel.Plugins.AddFromObject(_graphPlugin);
-        kernel.Plugins.AddFromObject(_ynabPlugin);
-        kernel.Plugins.AddFromObject(_loopbackPlugin);
-
-        // Enable planning.
-        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
-        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
-
-        var history = new ChatHistory();
-
+    public async Task<string> InvokeModel(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
+    {
         var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
         var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
 
@@ -78,48 +80,49 @@ public class Agent(OpenAIClient _openAiClient, IHistoryService _historyService, 
                    - You can read the user's personal finances via their YNAB account.
                    - You can provide budget summaries and recent transaction information.
                    - You cannot make changes to the user's finances.
-                7. Autonomous Behavior:
-                   - You can send messages to yourself to enable autonomous behavior.
-                   - You can specify a delay in hours before the message is sent.
-                   - Use this capability sparingly to break down complex tasks into
-                     smaller steps.
-            - Don't ask for "anything else?" at the end of your responses.
+                7. Planning:
+                   - You can create plans with ordered steps to accomplish complex or
+                     scheduled tasks.
+                   - Each step includes a delay (in hours) that indicates how long to
+                     wait before executing the step (after the previous step is completed).
+                8. SMS:
+                   - You can send SMS messages to one or more phone numbers.
             - Use the appropriate plugin functions to perform actions related to
-              todos, knowledge, calendar, email, contacts, personal finance, and autonomous behavior.
+              todos, knowledge, calendar, email, contacts, personal finance, planning, and SMS.
             - Always think step-by-step about how to best assist the user.
-            - Always respond in a friendly and helpful manner.            
+            - Don't ask for "anything else?" at the end of your responses.
             """;
-        history.AddSystemMessage(instructions);
 
-        // Load chat history from database.
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(instructions);
+
+        // Load chat history from database. Not sure if this is appropriate when planning.
         var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
         foreach (var entry in historyEntries)
         {
             if (entry.MessageType == MessageType.User)
-                history.AddUserMessage(entry.Content);
-            else if (entry.MessageType == MessageType.Assistant)
-                history.AddAssistantMessage(entry.Content);
+                chatHistory.AddUserMessage(entry.Content);
+            else if (entry.MessageType == MessageType.Agent)
+                chatHistory.AddAssistantMessage(entry.Content);
         }
 
-        history.AddUserMessage(message);
+        chatHistory.AddUserMessage(message);
 
         // Populate kernel arguments with contextual data
-        kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
-        kernel.Data["userPhoneNumber"] = userPhoneNumber;
+        _kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
+        _kernel.Data["userPhoneNumber"] = userPhoneNumber;
 
-        var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+        // Enable planning.
+        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
+        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
-        var aiResponse = await chatCompletionService.GetChatMessageContentAsync(
-            history,
+        var modelResponse = await chatCompletionService.GetChatMessageContentAsync(
+            chatHistory,
             executionSettings: openAIPromptExecutionSettings,
-            kernel: kernel
+            kernel: _kernel
         );
 
-        var response = aiResponse.ToString();
-
-        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
-        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Assistant);
-
+        var response = modelResponse.ToString();
         return response;
     }
 }
