@@ -3,17 +3,17 @@ namespace Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin.Models;
 public class PlanModel
 {
     public Guid Id { get; set; }
-    public required string Name { get; set; }
-    public required string UserPhoneNumber { get; set; }
-    public required string AgentPhoneNumber { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string UserPhoneNumber { get; set; } = string.Empty;
+    public string AgentPhoneNumber { get; set; } = string.Empty;
     public StepModel[] Steps { get; set; } = [];
     public string[] History { get; set; } = [];
 }
 
 public class StepModel
 {
-    public required int StepNumber { get; set; }
-    public required string Description { get; set; }
-    public required bool IsCompleted { get; set; }
-    public required decimal DelayHours { get; set; }
+    public int StepNumber { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public bool IsCompleted { get; set; }
+    public decimal DelayHours { get; set; }
 }
