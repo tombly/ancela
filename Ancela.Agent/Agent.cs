@@ -91,6 +91,9 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
               todos, knowledge, calendar, email, contacts, personal finance, planning, and SMS.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
+            - When asked for a 'daily summary', provide a brief overview of the user's day
+              including calendar events, to-dos, and number of unread emails. Call out any
+              emails that appear important. Keep it concise so it fits in a single SMS message.
             """;
 
         var chatHistory = new ChatHistory();
