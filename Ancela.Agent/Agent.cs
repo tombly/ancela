@@ -1,4 +1,3 @@
-using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
 using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
@@ -6,40 +5,18 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService, PlanningPlugin _planningPlugin)
+public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
         // TODO: Handle media URLs: Save to blob storage with metadata stored by the memory plugin.
         //       Use image analysis to describe images and extract text (store both with metadata).
         //       Allow only images for now.
-        //       Need to handle the scenario where there is no message and only media.  
+        //       Need to handle the scenario where there is no message and only media.
         var response = await InvokeModel(message, userPhoneNumber, agentPhoneNumber, session, mediaUrls);
         await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
         await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Agent);
         return response;
-    }
-
-    public async Task PerformNextStepInPlan(Guid planId, string userPhoneNumber, string agentPhoneNumber)
-    {
-        // TODO: Pass the history into InvokeModel() so that it can properly be
-        //       included in the planning context.
-        var planHistory = await _planningPlugin.GetPlanHistory(planId, agentPhoneNumber);
-        var historySection = planHistory.Length == 0
-            ? "No previous plan history."
-            : "Plan history:\n" + string.Join("\n", planHistory.Select((entry, index) => $"{index + 1}. {entry}"));
-
-        var response = await InvokeModel($"""
-              - Perform the next step in the plan with ID {planId}.
-              - Mark the step as completed.
-              - Check if the plan has any incomplete steps, and if so, schedule its execution based on the defined delay.
-              - Use the existing plan history to maintain continuity.
-              - Provide a brief summary of the actions taken.
-              - Current plan history context:
-                {historySection}
-              """, userPhoneNumber, agentPhoneNumber, new SessionEntry { TimeZone = "UTC" }, Array.Empty<string>());
-
-        await _planningPlugin.SaveToPlanHistory(planId, agentPhoneNumber, response);
     }
 
     public async Task<string> InvokeModel(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
@@ -80,15 +57,10 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
                    - You can read the user's personal finances via their YNAB account.
                    - You can provide budget summaries and recent transaction information.
                    - You cannot make changes to the user's finances.
-                7. Planning:
-                   - You can create plans with ordered steps to accomplish complex or
-                     scheduled tasks.
-                   - Each step includes a delay (in hours) that indicates how long to
-                     wait before executing the step (after the previous step is completed).
-                8. SMS:
+                7. SMS:
                    - You can send SMS messages to one or more phone numbers.
             - Use the appropriate plugin functions to perform actions related to
-              todos, knowledge, calendar, email, contacts, personal finance, planning, and SMS.
+              todos, knowledge, calendar, email, contacts, personal finance, and SMS.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;

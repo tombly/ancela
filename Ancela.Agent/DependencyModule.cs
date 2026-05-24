@@ -1,6 +1,5 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -28,7 +27,6 @@ public static class DependencyModule
         builder.Services.AddSingleton<SmsService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<ISessionService, SessionService>();
-        builder.Services.AddSingleton<IPlanningClient, PlanningClient>();
 
         // Register Semantic Kernel plugins. The plugins are registered as singletons so
         // that they can be re-used by multiple kernels. 
@@ -39,7 +37,6 @@ public static class DependencyModule
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
         builder.Services.AddSingleton<YnabPlugin>();
         builder.Services.AddSingleton<YnabClient>();
-        builder.Services.AddSingleton<PlanningPlugin>();
 
         // Register a chat completion service for use by the kernels.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
@@ -55,7 +52,6 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<GraphPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<MemoryPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<PlanningPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
             return new Kernel(sp, pluginCollection);
         });

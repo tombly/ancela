@@ -1,7 +1,6 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
-using Ancela.Agent.SemanticKernel.Plugins.PlanningPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -30,7 +29,6 @@ public abstract class AgentTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
-    protected readonly Mock<IPlanningClient> MockPlanningClient;
 
     // System under test
     protected readonly Agent Agent;
@@ -59,7 +57,6 @@ public abstract class AgentTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
-        MockPlanningClient = new Mock<IPlanningClient>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -79,7 +76,6 @@ public abstract class AgentTestBase
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
-        var planningPlugin = new PlanningPlugin(MockPlanningClient.Object);
 
         // SmsPlugin requires Twilio configuration. Provide dummy values for tests.
         Environment.SetEnvironmentVariable("TWILIO_PHONE_NUMBER", "+10000000000");
@@ -100,7 +96,6 @@ public abstract class AgentTestBase
         pluginCollection.AddFromObject(graphPlugin);
         pluginCollection.AddFromObject(memoryPlugin);
         pluginCollection.AddFromObject(ynabPlugin);
-        pluginCollection.AddFromObject(planningPlugin);
         pluginCollection.AddFromObject(smsPlugin);
         var kernel = new Kernel(plugins: pluginCollection);
 
@@ -108,8 +103,7 @@ public abstract class AgentTestBase
         Agent = new Agent(
             kernel,
             chatCompletionService,
-            MockHistoryService.Object,
-            planningPlugin);
+            MockHistoryService.Object);
 
         // Create test session
         TestSession = new SessionEntry
