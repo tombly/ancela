@@ -34,8 +34,17 @@ public class ReminderQueueProcessor(
         }
 
         await _smsService.Send(reminder.UserPhoneNumber, reminder.Message);
-        await _store.MarkSentAsync(reminder.Id, reminder.AgentPhoneNumber, DateTimeOffset.UtcNow);
+        var markedSent = await _store.MarkSentAsync(reminder.Id, reminder.AgentPhoneNumber, DateTimeOffset.UtcNow);
 
-        _logger.LogInformation("Reminder {ReminderId} sent.", reminder.Id);
+        if (markedSent)
+        {
+            _logger.LogInformation("Reminder {ReminderId} sent.", reminder.Id);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Reminder {ReminderId} SMS was sent, but the reminder could not be marked as sent. State may be inconsistent.",
+                reminder.Id);
+        }
     }
 }
