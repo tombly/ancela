@@ -45,7 +45,17 @@ public class ReminderPlugin(IReminderStore _store, IReminderScheduler _scheduler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to schedule reminder {ReminderId}; doc left as Scheduled with seq=0 for visibility.", reminder.Id);
+            try
+            {
+                await _store.MarkCanceledAsync(reminder.Id, agentPhoneNumber);
+                reminder.Status = ReminderStatus.Canceled;
+            }
+            catch (Exception markCanceledEx)
+            {
+                _logger.LogError(markCanceledEx, "Failed to mark reminder {ReminderId} as canceled after scheduling failure.", reminder.Id);
+            }
+
+            _logger.LogError(ex, "Failed to schedule reminder {ReminderId}; reminder was marked as Canceled.", reminder.Id);
             throw;
         }
 
