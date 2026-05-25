@@ -85,6 +85,10 @@ public class Agent(Kernel _kernel, IChatCompletionService _chatCompletionService
                      to cancel one. To change a reminder, cancel it and create a new one.
                 8. SMS:
                    - You can send SMS messages to one or more phone numbers.
+                9. Web Access:
+                   - You can search the web with `web_search` to look up current information.
+                   - You can read the full content of a specific URL with `web_fetch`.
+                   - Prefer authoritative sources. For factual claims, search before asserting.
             - Use the appropriate plugin functions to perform actions related to
               todos, knowledge, calendar, email, contacts, personal finance, reminders, and SMS.
             - Always think step-by-step about how to best assist the user.

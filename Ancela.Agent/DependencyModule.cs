@@ -1,8 +1,10 @@
+using System.Net.Http.Headers;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +53,14 @@ public static class DependencyModule
         builder.Services.AddSingleton<IReminderStore, ReminderStore>();
         builder.Services.AddSingleton<IReminderScheduler, ReminderScheduler>();
         builder.Services.AddSingleton<RegistrationPlugin>();
+        builder.Services.AddSingleton<WebPlugin>();
+        builder.Services.AddSingleton<ITavilyClient, TavilyClient>();
+        builder.Services.AddHttpClient("tavily", client =>
+        {
+            client.BaseAddress = new Uri("https://api.tavily.com");
+            var apiKey = Environment.GetEnvironmentVariable("TAVILY_API_KEY") ?? string.Empty;
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        });
 
         // Register a chat completion service for use by the kernels.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
@@ -68,6 +78,7 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<RegistrationPlugin>());
+            pluginCollection.AddFromObject(sp.GetRequiredService<WebPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
             var kernel = new Kernel(sp, pluginCollection);
             foreach (var filter in sp.GetServices<IFunctionInvocationFilter>())
