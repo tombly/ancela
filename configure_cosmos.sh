@@ -43,7 +43,7 @@ az cosmosdb sql container create \
   --account-name $cosmos_account \
   --resource-group $resource_group \
   --database-name "anceladb" \
-  --name "sessions" \
+  --name "users" \
   --partition-key-path "/agentPhoneNumber"
 
 az cosmosdb sql container create \

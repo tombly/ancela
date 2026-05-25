@@ -1,5 +1,6 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
@@ -32,7 +33,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<ChatInterceptor>();
         builder.Services.AddSingleton<SmsService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
-        builder.Services.AddSingleton<ISessionService, SessionService>();
+        builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
         builder.Services.AddSingleton<CorrelationContext>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
@@ -49,6 +50,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<ReminderPlugin>();
         builder.Services.AddSingleton<IReminderStore, ReminderStore>();
         builder.Services.AddSingleton<IReminderScheduler, ReminderScheduler>();
+        builder.Services.AddSingleton<RegistrationPlugin>();
 
         // Register a chat completion service for use by the kernels.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
@@ -65,6 +67,7 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<MemoryPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
+            pluginCollection.AddFromObject(sp.GetRequiredService<RegistrationPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
             var kernel = new Kernel(sp, pluginCollection);
             foreach (var filter in sp.GetServices<IFunctionInvocationFilter>())

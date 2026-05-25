@@ -7,9 +7,9 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService, CorrelationContext _correlation)
+public class Agent(Kernel _kernel, IChatCompletionService _chatCompletionService, IHistoryService _historyService, CorrelationContext _correlation)
 {
-    public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
+    public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, UserProfile user, string[] mediaUrls)
     {
         _correlation.New();
 
@@ -17,26 +17,35 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
         //       Use image analysis to describe images and extract text (store both with metadata).
         //       Allow only images for now.
         //       Need to handle the scenario where there is no message and only media.
-        var response = await InvokeModel(message, userPhoneNumber, agentPhoneNumber, session, mediaUrls);
+        var response = await InvokeModel(message, userPhoneNumber, agentPhoneNumber, user, mediaUrls);
         await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
         await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Agent);
         return response;
     }
 
-    public async Task<string> InvokeModel(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
+    public async Task<string> Onboard(string message, string userPhoneNumber, string agentPhoneNumber, string[] mediaUrls)
     {
-        var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(session.TimeZone);
+        _correlation.New();
+        var response = await InvokeOnboarding(message, userPhoneNumber, agentPhoneNumber);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, message, MessageType.User);
+        await _historyService.CreateHistoryEntryAsync(agentPhoneNumber, userPhoneNumber, response, MessageType.Agent);
+        return response;
+    }
+
+    private async Task<string> InvokeModel(string message, string userPhoneNumber, string agentPhoneNumber, UserProfile user, string[] mediaUrls)
+    {
+        var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone!);
         var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
 
         var instructions = $"""
             - You are an AI agent named Ancela.
-            - You are a singlular AI instance serving multiple users. 
+            - You are a singular AI instance serving multiple users.
             - You have a separate chat history for each user, but your memory is
               shared across all users.
             - You communicate with users via SMS so be concise in your responses.
             - Your phone number is '{agentPhoneNumber}'.
-            - You are currently chatting with a user whose phone number is '{userPhoneNumber}'.
-            - The user's current local date and time is {localTime:f} ({session.TimeZone}).
+            - You are currently chatting with {user.Name}, whose phone number is '{userPhoneNumber}'.
+            - The user's current local date and time is {localTime:f} ({user.TimeZone}).
             - You have the following capabilities:
                 1. To-Dos:
                    - You can create, read, update, and delete to-dos for the user.
@@ -85,7 +94,6 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(instructions);
 
-        // Load chat history from database. Not sure if this is appropriate when planning.
         var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
         foreach (var entry in historyEntries)
         {
@@ -97,21 +105,58 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
 
         chatHistory.AddUserMessage(message);
 
-        // Populate kernel arguments with contextual data
         _kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
         _kernel.Data["userPhoneNumber"] = userPhoneNumber;
 
-        // Enable planning.
         var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
         { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
 
-        var modelResponse = await chatCompletionService.GetChatMessageContentAsync(
+        var modelResponse = await _chatCompletionService.GetChatMessageContentAsync(
             chatHistory,
             executionSettings: openAIPromptExecutionSettings,
             kernel: _kernel
         );
 
-        var response = modelResponse.ToString();
-        return response;
+        return modelResponse.ToString();
+    }
+
+    private async Task<string> InvokeOnboarding(string message, string userPhoneNumber, string agentPhoneNumber)
+    {
+        var instructions = """
+            You are Ancela, a personal AI assistant that communicates via SMS.
+            You are onboarding a new user. Your only goal right now is to collect their name and timezone, then call register_user.
+            Start by greeting them and asking for their name.
+            Once you have their name, ask what city or region they're in so you can determine their timezone.
+            Resolve the city or region to an IANA timezone ID (e.g., 'America/Los_Angeles'), confirm it back to the user in plain language, then call register_user.
+            Keep all responses short — this is SMS.
+            """;
+
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(instructions);
+
+        var historyEntries = await _historyService.GetHistoryAsync(agentPhoneNumber, userPhoneNumber);
+        foreach (var entry in historyEntries)
+        {
+            if (entry.MessageType == MessageType.User)
+                chatHistory.AddUserMessage(entry.Content);
+            else if (entry.MessageType == MessageType.Agent)
+                chatHistory.AddAssistantMessage(entry.Content);
+        }
+
+        chatHistory.AddUserMessage(message);
+
+        _kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
+        _kernel.Data["userPhoneNumber"] = userPhoneNumber;
+
+        var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings()
+        { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+
+        var modelResponse = await _chatCompletionService.GetChatMessageContentAsync(
+            chatHistory,
+            executionSettings: openAIPromptExecutionSettings,
+            kernel: _kernel
+        );
+
+        return modelResponse.ToString();
     }
 }

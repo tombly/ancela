@@ -33,8 +33,8 @@ public abstract class AgentTestBase
     // System under test
     protected readonly Agent Agent;
 
-    // Test session
-    protected readonly SessionEntry TestSession;
+    // Test user profile
+    protected readonly UserProfile TestUser;
 
     protected AgentTestBase()
     {
@@ -103,16 +103,19 @@ public abstract class AgentTestBase
         Agent = new Agent(
             kernel,
             chatCompletionService,
-            MockHistoryService.Object);
+            MockHistoryService.Object,
+            new CorrelationContext());
 
-        // Create test session
-        TestSession = new SessionEntry
+        // Create test user profile
+        TestUser = new UserProfile
         {
             Id = Guid.NewGuid(),
             AgentPhoneNumber = AgentPhoneNumber,
             UserPhoneNumber = UserPhoneNumber,
-            Created = DateTimeOffset.UtcNow,
-            TimeZone = "Pacific Standard Time"
+            Name = "Test User",
+            TimeZone = "America/Los_Angeles",
+            CreatedAt = DateTimeOffset.UtcNow,
+            RegisteredAt = DateTimeOffset.UtcNow
         };
     }
 
@@ -121,7 +124,7 @@ public abstract class AgentTestBase
     /// </summary>
     protected Task<string> SendMessageAsync(string message)
     {
-        return Agent.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestSession, []);
+        return Agent.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestUser, []);
     }
 
     /// <summary>
