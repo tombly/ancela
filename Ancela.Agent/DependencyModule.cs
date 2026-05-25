@@ -1,5 +1,6 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -37,6 +38,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
         builder.Services.AddSingleton<YnabPlugin>();
         builder.Services.AddSingleton<YnabClient>();
+        builder.Services.AddSingleton<ReminderPlugin>();
+        builder.Services.AddSingleton<IReminderStore, ReminderStore>();
+        builder.Services.AddSingleton<IReminderScheduler, ReminderScheduler>();
 
         // Register a chat completion service for use by the kernels.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
@@ -52,6 +56,7 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<GraphPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<MemoryPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
+            pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
             return new Kernel(sp, pluginCollection);
         });
