@@ -1,0 +1,121 @@
+using System.Diagnostics;
+using System.Text.Json;
+using Ancela.Agent;
+using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
+using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin.Models;
+using Ancela.Agent.Services;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
+
+namespace Ancela.FunctionApp;
+
+/// <summary>
+/// Fires when a standing rule is due for evaluation. Loads the rule, has the agent evaluate
+/// it (which may send an SMS), writes a decision-audit row regardless of outcome, then
+/// reschedules the next evaluation.
+/// </summary>
+public class StandingRuleQueueProcessor(
+    ILogger<StandingRuleQueueProcessor> _logger,
+    IStandingRuleStore _store,
+    IStandingRuleScheduler _scheduler,
+    IUserService _userService,
+    IAuditLog _auditLog,
+    CorrelationContext _correlation,
+    Ancela.Agent.Agent _agent)
+{
+    [Function(nameof(StandingRuleQueueProcessor))]
+    public async Task Run([ServiceBusTrigger(StandingRuleQueueMessage.QueueName, Connection = "servicebus")] string body)
+    {
+        var message = JsonSerializer.Deserialize<StandingRuleQueueMessage>(body)
+            ?? throw new InvalidOperationException($"Failed to deserialize standing rule queue message: {body}");
+
+        _correlation.New();
+        _logger.LogInformation("Standing rule fire: {RuleId}", message.RuleId);
+
+        var rule = await _store.GetAsync(message.RuleId, message.AgentPhoneNumber);
+        if (rule is null)
+        {
+            _logger.LogWarning("Standing rule {RuleId} not found; dropping.", message.RuleId);
+            return;
+        }
+
+        if (rule.Status != RuleStatus.Active)
+        {
+            _logger.LogInformation("Standing rule {RuleId} status is {Status}; dropping (no reschedule).", rule.Id, rule.Status);
+            return;
+        }
+
+        var user = await _userService.GetAsync(rule.AgentPhoneNumber, rule.UserPhoneNumber);
+        if (user is null || string.IsNullOrWhiteSpace(user.TimeZone))
+        {
+            _logger.LogWarning("No registered profile for {User}; pausing standing rule {RuleId}.", rule.UserPhoneNumber, rule.Id);
+            await _store.UpdateStatusAsync(rule.Id, rule.AgentPhoneNumber, RuleStatus.Paused);
+            return;
+        }
+
+        var stopwatch = Stopwatch.StartNew();
+        StandingRuleEvaluation evaluation;
+        try
+        {
+            evaluation = await _agent.EvaluateStandingRule(rule, user);
+            stopwatch.Stop();
+            await WriteDecisionAuditAsync(rule, evaluation.Notified, evaluation.Reasoning, success: true, error: null, stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "Standing rule {RuleId} evaluation failed.", rule.Id);
+            await WriteDecisionAuditAsync(rule, notified: false, reasoning: null, success: false, error: ex.Message, stopwatch.ElapsedMilliseconds);
+            // Fall through to reschedule so a transient failure doesn't kill the rule.
+            evaluation = new StandingRuleEvaluation { Notified = false, Reasoning = ex.Message };
+        }
+
+        var evaluatedAt = DateTimeOffset.UtcNow;
+        await _store.MarkEvaluatedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
+        if (evaluation.Notified)
+            await _store.MarkNotifiedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
+
+        await RescheduleAsync(rule);
+    }
+
+    private async Task RescheduleAsync(StandingRule rule)
+    {
+        // Re-fetch: the rule may have been paused or deleted during evaluation.
+        var current = await _store.GetAsync(rule.Id, rule.AgentPhoneNumber);
+        if (current is null || current.Status != RuleStatus.Active)
+        {
+            _logger.LogInformation("Standing rule {RuleId} no longer active; not rescheduling.", rule.Id);
+            return;
+        }
+
+        var nextEval = DateTimeOffset.UtcNow.AddHours(current.EvaluationIntervalHours);
+        var sequenceNumber = await _scheduler.ScheduleNextAsync(current, nextEval);
+        await _store.UpdateNextEvalSequenceAsync(current.Id, current.AgentPhoneNumber, sequenceNumber);
+        _logger.LogInformation("Standing rule {RuleId} rescheduled for {NextEval:O}.", current.Id, nextEval);
+    }
+
+    private async Task WriteDecisionAuditAsync(StandingRule rule, bool notified, string? reasoning, bool success, string? error, long durationMs)
+    {
+        const int maxResultChars = 4000;
+        var result = reasoning is null
+            ? null
+            : reasoning.Length > maxResultChars ? reasoning[..maxResultChars] : reasoning;
+
+        await _auditLog.LogAsync(new AuditEntry
+        {
+            UserPhoneNumber = rule.UserPhoneNumber,
+            AgentPhoneNumber = rule.AgentPhoneNumber,
+            Timestamp = DateTimeOffset.UtcNow,
+            CorrelationId = _correlation.Current,
+            Actor = "agent",
+            Category = "rule-decision",
+            Plugin = nameof(StandingRulePlugin),
+            Function = "evaluate",
+            Arguments = JsonSerializer.Serialize(new { rule.Id, rule.Description, notified }),
+            Result = result,
+            Success = success,
+            Error = error,
+            DurationMs = durationMs,
+        });
+    }
+}

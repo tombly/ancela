@@ -57,5 +57,12 @@ az cosmosdb sql container create \
   --account-name $cosmos_account \
   --resource-group $resource_group \
   --database-name "anceladb" \
+  --name "standing_rules" \
+  --partition-key-path "/agentPhoneNumber"
+
+az cosmosdb sql container create \
+  --account-name $cosmos_account \
+  --resource-group $resource_group \
+  --database-name "anceladb" \
   --name "audit" \
   --partition-key-path "/agentPhoneNumber"

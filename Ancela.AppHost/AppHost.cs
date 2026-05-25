@@ -63,6 +63,7 @@ var serviceBus = builder.AddAzureServiceBus("servicebus")
                             };
                         });
 var remindersQueue = serviceBus.AddServiceBusQueue("reminders");
+var standingRulesQueue = serviceBus.AddServiceBusQueue("standing-rules");
 var chatQueue = serviceBus.AddServiceBusQueue("chat-messages");
 
 var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>("functionapp")
