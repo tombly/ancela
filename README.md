@@ -75,9 +75,13 @@ Ancela's capabilities include:
    dotnet user-secrets set Parameters:ynab-access-token "your-ynab-access-token"
    ```
 
-4. **Update the resource group name**
-   
-   Edit `FixedNameInfrastructureResolver.cs` and`configure_cosmos.sh` to set your resource group name and cosmos resource name.
+4. **Set environment variables**
+
+   Two environment variables control Azure resource naming. Set them in your shell profile (e.g. `~/.zshrc`) so they're never committed to the repo:
+   ```bash
+   export ANCELA_RESOURCE_PREFIX=your-unique-prefix   # prefixed onto all Azure resource names
+   export ANCELA_RESOURCE_GROUP=your-resource-group   # used by configure_cosmos.sh
+   ```
 
 5. **Run locally**
    ```bash
@@ -94,11 +98,11 @@ Ancela's capabilities include:
 
 2. **Deploy using Aspire**
    ```bash
-   azd init
-   azd up
+   ANCELA_RESOURCE_PREFIX=your-unique-prefix aspire publish
+   aspire deploy --clear-cache
    ```
 
-   Aspire will prompt you for required secrets during deployment. You can easily grab them from the user secrets:
+   `aspire publish` bakes the prefix into generated Bicep resource names. `aspire deploy` will prompt you for the resource group name and any required secrets on each run. You can easily grab secret values from user secrets:
    ```bash
    cd Ancela.AppHost
    dotnet user-secrets list | grep Parameters
@@ -108,7 +112,7 @@ Ancela's capabilities include:
 
    After deploying, grant your Entra principal the Contributor role for Cosmos DB so you can access Data Explorer and create the Cosmos DB database and containers:
    ```bash
-   ./configure_cosmos.sh
+   ANCELA_RESOURCE_PREFIX=your-unique-prefix ANCELA_RESOURCE_GROUP=your-resource-group ./configure_cosmos.sh
    ```
 
 ## Usage

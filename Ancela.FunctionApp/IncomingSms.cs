@@ -88,11 +88,17 @@ public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queue
 
         // Build the actual request URL using forwarded headers when behind a proxy
         var requestUrl = GetActualRequestUrl(request);
-        var requestValidator = new RequestValidator(authToken);
-        var signature = request.Headers.TryGetValues("X-Twilio-Signature", out var sigValues)
-            ? sigValues.FirstOrDefault()
-            : null;
+        if (string.IsNullOrEmpty(requestUrl))
+            return false;
 
+        if (!request.Headers.TryGetValues("X-Twilio-Signature", out var sigValues))
+            return false;
+
+        var signature = sigValues.FirstOrDefault();
+        if (string.IsNullOrEmpty(signature))
+            return false;
+
+        var requestValidator = new RequestValidator(authToken);
         return requestValidator.Validate(requestUrl, parameters, signature);
     }
 
@@ -133,11 +139,11 @@ public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queue
 
         if (!string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(proto))
         {
-            var path = request.Url.PathAndQuery;
+            var path = request.Url?.PathAndQuery ?? string.Empty;
             return $"{proto}://{host}{path}";
         }
 
         // Fall back to the request URL if no forwarded headers are present.
-        return request.Url.ToString();
+        return request.Url?.ToString() ?? string.Empty;
     }
 }

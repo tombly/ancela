@@ -1,6 +1,6 @@
 
-resource_group="<your-resource-group-name>"
-cosmos_account="<your-cosmos-account-name>"
+resource_group="${ANCELA_RESOURCE_GROUP:?ANCELA_RESOURCE_GROUP is not set}"
+cosmos_account="${ANCELA_RESOURCE_PREFIX:?ANCELA_RESOURCE_PREFIX is not set}-cosmos"
 
 echo "Configuring $resource_group/$cosmos_account..."
 

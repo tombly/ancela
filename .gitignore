@@ -53,6 +53,7 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 Ancela.AppHost/aspire-output/
+plans/
 Ancela.AppHost/.DS_Store
 Ancela.FunctionApp/.DS_Store
 Ancela.ServiceDefaults/.DS_Store
