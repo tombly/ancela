@@ -53,7 +53,8 @@ var serviceBus = builder.AddAzureServiceBus("servicebus")
                         {
                             var ns = infrastructure.GetProvisionableResources()
                                                    .OfType<ServiceBusNamespace>()
-                                                   .First();
+                                                   .FirstOrDefault()
+                                ?? throw new InvalidOperationException($"Could not find configured Service Bus namespace with name 'servicebus'");
                             ns.Sku = new ServiceBusSku
                             {
                                 Name = ServiceBusSkuName.Standard,
