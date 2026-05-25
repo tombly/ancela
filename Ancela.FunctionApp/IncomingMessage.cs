@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using Azure.Storage.Queues;
+using Azure.Messaging.ServiceBus;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -10,7 +10,7 @@ namespace Ancela.FunctionApp;
 /// <summary>
 /// Handles incoming messages via HTTP trigger. Used for development and testing.
 /// </summary>
-public class MessageFunction(ILogger<MessageFunction> _logger, QueueServiceClient _queueServiceClient)
+public class MessageFunction(ILogger<MessageFunction> _logger, ServiceBusClient _serviceBusClient)
 {
     [Function("IncomingMessage")]
     public async Task<HttpResponseData> IncomingMessage([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData request)
@@ -52,9 +52,8 @@ public class MessageFunction(ILogger<MessageFunction> _logger, QueueServiceClien
                 MediaUrls = [.. mediaUrls]
             };
 
-            var queueClient = _queueServiceClient.GetQueueClient(ChatQueueMessage.QueueName);
-            await queueClient.CreateIfNotExistsAsync();
-            await queueClient.SendMessageAsync(Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
+            var sender = _serviceBusClient.CreateSender(ChatQueueMessage.QueueName);
+            await sender.SendMessageAsync(new ServiceBusMessage(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
 
             return request.CreateResponse(HttpStatusCode.OK);
         }

@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using Azure.Storage.Queues;
+using Azure.Messaging.ServiceBus;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -11,7 +11,7 @@ namespace Ancela.FunctionApp;
 /// <summary>
 /// Handles incoming SMS messages via Twilio web hook.
 /// </summary>
-public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queueServiceClient)
+public class SmsFunction(ILogger<SmsFunction> _logger, ServiceBusClient _serviceBusClient)
 {
     [Function("IncomingSms")]
     public async Task<HttpResponseData> IncomingSms([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData request)
@@ -60,9 +60,8 @@ public class SmsFunction(ILogger<SmsFunction> _logger, QueueServiceClient _queue
                 MediaUrls = [.. mediaUrls]
             };
 
-            var queueClient = _queueServiceClient.GetQueueClient(ChatQueueMessage.QueueName);
-            await queueClient.CreateIfNotExistsAsync();
-            await queueClient.SendMessageAsync(Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
+            var sender = _serviceBusClient.CreateSender(ChatQueueMessage.QueueName);
+            await sender.SendMessageAsync(new ServiceBusMessage(JsonSerializer.SerializeToUtf8Bytes(queueMessage)));
 
             return request.CreateResponse(HttpStatusCode.OK);
         }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ancela.Agent;
 using Ancela.Agent.Services;
 using Microsoft.Azure.Functions.Worker;
@@ -11,8 +12,11 @@ namespace Ancela.FunctionApp;
 public class ChatQueueProcessor(ILogger<ChatQueueProcessor> _logger, ChatInterceptor _chatInterceptor, SmsService _smsService)
 {
     [Function(nameof(ChatQueueProcessor))]
-    public async Task Run([QueueTrigger(ChatQueueMessage.QueueName, Connection = "queues")] ChatQueueMessage message)
+    public async Task Run([ServiceBusTrigger(ChatQueueMessage.QueueName, Connection = "servicebus")] string body)
     {
+        var message = JsonSerializer.Deserialize<ChatQueueMessage>(body)
+            ?? throw new InvalidOperationException($"Failed to deserialize chat queue message: {body}");
+
         _logger.LogInformation("Processing message from queue: {Message}", message.Content);
 
         var reply = await _chatInterceptor.HandleMessage(
@@ -30,7 +34,7 @@ public class ChatQueueProcessor(ILogger<ChatQueueProcessor> _logger, ChatInterce
 
 public record ChatQueueMessage
 {
-    public const string QueueName = "chat-queue";
+    public const string QueueName = "chat-messages";
 
     public string Content { get; init; } = string.Empty;
     public string UserPhoneNumber { get; init; } = string.Empty;

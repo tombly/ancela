@@ -62,11 +62,11 @@ var serviceBus = builder.AddAzureServiceBus("servicebus")
                             };
                         });
 var remindersQueue = serviceBus.AddServiceBusQueue("reminders");
+var chatQueue = serviceBus.AddServiceBusQueue("chat-messages");
 
 var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>("functionapp")
     .WithReference(cosmosDb)
     .WithReference(blobs)
-    .WithReference(queues)
     .WithReference(tables)
     .WithReference(serviceBus)
     .WithReference(chat)
