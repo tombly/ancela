@@ -11,6 +11,9 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI;
 
+// Needed for IFunctionInvocationFilter registration
+#pragma warning disable SKEXP0001
+
 namespace Ancela.Agent;
 
 /// <summary>
@@ -22,12 +25,17 @@ public static class DependencyModule
     {
         ArgumentNullException.ThrowIfNull(builder);
 
+        AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics", true);
+
         // Register core services.
         builder.Services.AddSingleton<Agent>();
         builder.Services.AddSingleton<ChatInterceptor>();
         builder.Services.AddSingleton<SmsService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<ISessionService, SessionService>();
+        builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
+        builder.Services.AddSingleton<CorrelationContext>();
+        builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
 
         // Register Semantic Kernel plugins. The plugins are registered as singletons so
         // that they can be re-used by multiple kernels. 
@@ -58,7 +66,10 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
-            return new Kernel(sp, pluginCollection);
+            var kernel = new Kernel(sp, pluginCollection);
+            foreach (var filter in sp.GetServices<IFunctionInvocationFilter>())
+                kernel.FunctionInvocationFilters.Add(filter);
+            return kernel;
         });
 
         return builder;

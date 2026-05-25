@@ -3,12 +3,16 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 
+#pragma warning disable SKEXP0001
+
 namespace Ancela.Agent;
 
-public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService)
+public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService, IHistoryService _historyService, CorrelationContext _correlation)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, SessionEntry session, string[] mediaUrls)
     {
+        _correlation.New();
+
         // TODO: Handle media URLs: Save to blob storage with metadata stored by the memory plugin.
         //       Use image analysis to describe images and extract text (store both with metadata).
         //       Allow only images for now.

@@ -52,3 +52,10 @@ az cosmosdb sql container create \
   --database-name "anceladb" \
   --name "reminders" \
   --partition-key-path "/agentPhoneNumber"
+
+az cosmosdb sql container create \
+  --account-name $cosmos_account \
+  --resource-group $resource_group \
+  --database-name "anceladb" \
+  --name "audit" \
+  --partition-key-path "/agentPhoneNumber"
