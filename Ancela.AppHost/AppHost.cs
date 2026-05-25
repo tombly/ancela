@@ -1,5 +1,6 @@
 using Ancela.AppHost;
 using Aspire.Hosting.Azure;
+using Azure.Provisioning.ServiceBus;
 using Azure.Provisioning.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -46,11 +47,28 @@ var blobs = storage.AddBlobs("blobs");
 var queues = storage.AddQueues("queues");
 var tables = storage.AddTables("tables");
 
+var serviceBus = builder.AddAzureServiceBus("servicebus")
+                        .RunAsEmulator()
+                        .ConfigureInfrastructure(infrastructure =>
+                        {
+                            var ns = infrastructure.GetProvisionableResources()
+                                                   .OfType<ServiceBusNamespace>()
+                                                   .FirstOrDefault()
+                                ?? throw new InvalidOperationException($"Could not find configured Service Bus namespace with name 'servicebus'");
+                            ns.Sku = new ServiceBusSku
+                            {
+                                Name = ServiceBusSkuName.Standard,
+                                Tier = ServiceBusSkuTier.Standard,
+                            };
+                        });
+var remindersQueue = serviceBus.AddServiceBusQueue("reminders");
+
 var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>("functionapp")
     .WithReference(cosmosDb)
     .WithReference(blobs)
     .WithReference(queues)
     .WithReference(tables)
+    .WithReference(serviceBus)
     .WithReference(chat)
     .WithHostStorage(storage)
     .WithEnvironment("TWILIO_PHONE_NUMBER", twilioPhoneNumberParameter)

@@ -10,6 +10,7 @@ builder.AddServiceDefaults();
 builder.ConfigureFunctionsWebApplication();
 builder.AddAzureCosmosClient("cosmos");
 builder.AddAzureQueueServiceClient("queues");
+builder.AddAzureServiceBusClient("servicebus");
 builder.AddOpenAIClient(connectionName: "chat");
 builder.AddAncelaAgent();
 

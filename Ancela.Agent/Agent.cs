@@ -57,10 +57,23 @@ public class Agent(Kernel _kernel, IChatCompletionService chatCompletionService,
                    - You can read the user's personal finances via their YNAB account.
                    - You can provide budget summaries and recent transaction information.
                    - You cannot make changes to the user's finances.
-                7. SMS:
+                7. Reminders:
+                   - You can schedule a single SMS reminder for the user at a specific
+                     absolute time using `create_reminder`.
+                   - Reminders are unlike todos: they fire at a chosen time and send a
+                     message; todos are passive lists with no scheduling.
+                   - When the user gives a relative time ("tomorrow afternoon", "in two
+                     hours"), resolve it to an absolute ISO-8601 timestamp using the
+                     user's current local date/time and timezone shown above, then ALWAYS
+                     confirm the resolved time back to the user in plain language ("Set
+                     for tomorrow at 2pm — sound good?"). Never schedule a reminder for
+                     a past time.
+                   - Use `list_reminders` to show upcoming reminders and `cancel_reminder`
+                     to cancel one. To change a reminder, cancel it and create a new one.
+                8. SMS:
                    - You can send SMS messages to one or more phone numbers.
             - Use the appropriate plugin functions to perform actions related to
-              todos, knowledge, calendar, email, contacts, personal finance, and SMS.
+              todos, knowledge, calendar, email, contacts, personal finance, reminders, and SMS.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;
