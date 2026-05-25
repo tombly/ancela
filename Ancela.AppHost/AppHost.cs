@@ -56,8 +56,8 @@ var serviceBus = builder.AddAzureServiceBus("servicebus")
                                                    .First();
                             ns.Sku = new ServiceBusSku
                             {
-                                Name = ServiceBusSkuName.Basic,
-                                Tier = ServiceBusSkuTier.Basic,
+                                Name = ServiceBusSkuName.Standard,
+                                Tier = ServiceBusSkuTier.Standard,
                             };
                         });
 var remindersQueue = serviceBus.AddServiceBusQueue("reminders");
