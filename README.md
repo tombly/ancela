@@ -16,6 +16,38 @@ Ancela's capabilities include:
 
 ![Design](Images/design.svg)
 
+## Design & trust model
+
+Ancela is a **single-owner** assistant. Each deployed instance is wired to exactly
+one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
+contacts) and one YNAB token — using app-only credentials held by the instance.
+
+The owner authorizes a **small, trusted set of people** (by phone number) to talk to
+the agent over SMS. Those users act *through* the agent and can therefore reach the
+owner's connected data — read/send the owner's mail, read/write the calendar, read
+contacts and finances. **This is intentional.** Authorized users are trusted
+principals invited by the owner; they are not mutually-isolated tenants, and the
+agent is not a multi-tenant SaaS. Reviewers should treat cross-user access to the
+owner's data as by-design, not as a vulnerability.
+
+Data model implications:
+- All Cosmos containers partition on `/agentPhoneNumber` (one value per instance).
+- **Knowledge and to-dos are shared** across the instance's authorized users — it is
+  one shared memory, by design.
+- **Chat history is per-user** (filtered by `userPhoneNumber`).
+- Reminders, standing rules, and scheduled tasks are created and listed per-user.
+
+Access boundary: the gate on "who is an authorized user" is reachability of the
+Twilio number plus sending `hello ancela`. There is no allow-list, so registration
+is currently bounded only by knowledge of the number. Because the agent can read and
+send the owner's mail and read their finances, restricting registration to an
+owner-defined allow-list of numbers is recommended hardening (see security notes).
+
+What is *not* in the trust model: untrusted **web content** fetched by the agent
+(`web_search` / `web_fetch`) is not trusted, and neither is any external page reached
+during autonomous standing-rule or scheduled-task evaluation. That content must never
+be treated as instructions.
+
 ## Getting Started
 
 ### Local Development
