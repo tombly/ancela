@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin.Models;
 using Ancela.Agent.Services;
@@ -104,9 +105,24 @@ public class Agent(Kernel _kernel, IChatCompletionService _chatCompletionService
                      and `delete_standing_rule` to manage them.
                    - Choose reminders for "remind me at/on <time>"; choose standing rules for
                      "let me know if/when <condition>".
+                11. Scheduled Tasks:
+                   - A scheduled task runs on a recurring clock schedule and sends the user a
+                     freshly generated message each time, e.g. "send me a summary of my
+                     calendar each morning" or "text me my budget every Friday at 5pm".
+                   - Distinguish the three recurring/timed tools:
+                       * Reminder — one-time message at a single fixed moment.
+                       * Standing rule — a condition watched over time; notifies only when met.
+                       * Scheduled task — an action that re-runs on a clock schedule and always
+                         reports back.
+                   - Use `create_scheduled_task` with a description of what to do, a local time
+                     of day ("HH:mm" in the user's timezone), and the days to run ("daily",
+                     "weekdays", "weekends", or specific days like "Mon,Wed,Fri"). When the user
+                     says "each morning"/"every evening", pick a sensible time and confirm it back.
+                   - Use `list_scheduled_tasks`, `pause_scheduled_task`, `resume_scheduled_task`,
+                     and `delete_scheduled_task` to manage them.
             - Use the appropriate plugin functions to perform actions related to
               todos, knowledge, calendar, email, contacts, personal finance, reminders,
-              standing rules, and SMS.
+              standing rules, scheduled tasks, and SMS.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;
@@ -204,6 +220,43 @@ public class Agent(Kernel _kernel, IChatCompletionService _chatCompletionService
 
         var notified = response.TrimStart().StartsWith("NOTIFIED:", StringComparison.OrdinalIgnoreCase);
         return new StandingRuleEvaluation { Notified = notified, Reasoning = response };
+    }
+
+    /// <summary>
+    /// Carries out a recurring scheduled task out-of-band (queue-triggered, no chat history)
+    /// and returns the SMS message text for the caller to send. Unlike a standing rule, this
+    /// always produces a message — there is no condition to evaluate.
+    /// </summary>
+    public async Task<string> PerformScheduledTask(ScheduledTask task, UserProfile user)
+    {
+        // The caller (ScheduledTaskQueueProcessor) opens the correlation scope.
+        var timeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(user.TimeZone!);
+        var localTime = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZoneInfo);
+
+        var instructions = $"""
+            You are Ancela, an AI assistant carrying out a recurring SCHEDULED TASK for a user.
+            This runs in the background on a schedule; the user is not in a live conversation.
+
+            User: {user.Name} ({task.UserPhoneNumber}). Current local time: {localTime:f} ({user.TimeZone}).
+            Your phone number: '{task.AgentPhoneNumber}'.
+
+            The scheduled task to perform now:
+            "{task.Description}"
+
+            Your job:
+            - Carry out the task using your tools (calendar, email, contacts, finances, web, memory) as needed.
+            - Produce a single concise SMS message conveying the result to the user.
+            - Output ONLY the message text to send. Do not add greetings, sign-offs, or commentary
+              about the task itself, and do not call the SMS tool yourself — the message you return is sent.
+            - If there is genuinely nothing to report, return a brief note saying so.
+            - Do not create reminders, rules, or other scheduled tasks.
+            """;
+
+        var chatHistory = new ChatHistory();
+        chatHistory.AddSystemMessage(instructions);
+        chatHistory.AddUserMessage("Perform the scheduled task now.");
+
+        return await InvokeKernelAsync(chatHistory, task.AgentPhoneNumber, task.UserPhoneNumber);
     }
 
     private async Task<string> InvokeKernelAsync(ChatHistory chatHistory, string agentPhoneNumber, string userPhoneNumber)

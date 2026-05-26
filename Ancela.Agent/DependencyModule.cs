@@ -3,6 +3,7 @@ using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
@@ -56,6 +57,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<StandingRulePlugin>();
         builder.Services.AddSingleton<IStandingRuleStore, StandingRuleStore>();
         builder.Services.AddSingleton<IStandingRuleScheduler, StandingRuleScheduler>();
+        builder.Services.AddSingleton<ScheduledTaskPlugin>();
+        builder.Services.AddSingleton<IScheduledTaskStore, ScheduledTaskStore>();
+        builder.Services.AddSingleton<IScheduledTaskScheduler, ScheduledTaskScheduler>();
         builder.Services.AddSingleton<RegistrationPlugin>();
         builder.Services.AddSingleton<WebPlugin>();
         builder.Services.AddSingleton<ITavilyClient, TavilyClient>();
@@ -82,6 +86,7 @@ public static class DependencyModule
             pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<StandingRulePlugin>());
+            pluginCollection.AddFromObject(sp.GetRequiredService<ScheduledTaskPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<RegistrationPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<WebPlugin>());
             pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
