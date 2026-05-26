@@ -27,7 +27,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         return response;
     }
 
-    public async Task<string> Onboard(string message, string userPhoneNumber, string agentPhoneNumber, string[] mediaUrls)
+    public virtual async Task<string> Onboard(string message, string userPhoneNumber, string agentPhoneNumber, string[] mediaUrls)
     {
         _correlation.New();
         var response = await InvokeOnboarding(message, userPhoneNumber, agentPhoneNumber);
