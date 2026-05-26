@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -41,6 +42,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
         builder.Services.AddSingleton<CorrelationContext>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
+        builder.Services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
 
         // Register Semantic Kernel plugins. The plugins are registered as singletons so
         // that they can be re-used by multiple kernels. 
@@ -62,6 +64,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<IScheduledTaskScheduler, ScheduledTaskScheduler>();
         builder.Services.AddSingleton<RegistrationPlugin>();
         builder.Services.AddSingleton<WebPlugin>();
+        builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
         builder.Services.AddSingleton<ITavilyClient, TavilyClient>();
         builder.Services.AddHttpClient("tavily", client =>
         {
@@ -74,26 +77,6 @@ public static class DependencyModule
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
         {
             return new OpenAIChatCompletionService("gpt-5-mini", sp.GetRequiredService<OpenAIClient>());
-        });
-
-        // Use transient so that we get a new kernel instance for each request
-        // since instances are stateful.
-        builder.Services.AddTransient((sp) =>
-        {
-            var pluginCollection = new KernelPluginCollection();
-            pluginCollection.AddFromObject(sp.GetRequiredService<GraphPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<MemoryPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<YnabPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<ReminderPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<StandingRulePlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<ScheduledTaskPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<RegistrationPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<WebPlugin>());
-            pluginCollection.AddFromObject(sp.GetRequiredService<SmsPlugin>());
-            var kernel = new Kernel(sp, pluginCollection);
-            foreach (var filter in sp.GetServices<IFunctionInvocationFilter>())
-                kernel.FunctionInvocationFilters.Add(filter);
-            return kernel;
         });
 
         return builder;

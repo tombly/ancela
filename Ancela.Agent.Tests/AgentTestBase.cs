@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
@@ -92,16 +93,24 @@ public abstract class AgentTestBase
 
         // Create kernel with real OpenAI and plugins with mocked clients
         var chatCompletionService = new OpenAIChatCompletionService("gpt-5-mini", OpenAIClient);
-        var pluginCollection = new KernelPluginCollection();
-        pluginCollection.AddFromObject(graphPlugin);
-        pluginCollection.AddFromObject(memoryPlugin);
-        pluginCollection.AddFromObject(ynabPlugin);
-        pluginCollection.AddFromObject(smsPlugin);
-        var kernel = new Kernel(plugins: pluginCollection);
+
+        // Build a factory that hands out a fresh kernel (with the test plugins) per call
+        var kernelFactory = new Mock<IKernelFactory>();
+        kernelFactory
+            .Setup(f => f.Create(It.IsAny<KernelProfile>()))
+            .Returns(() =>
+            {
+                var pluginCollection = new KernelPluginCollection();
+                pluginCollection.AddFromObject(graphPlugin);
+                pluginCollection.AddFromObject(memoryPlugin);
+                pluginCollection.AddFromObject(ynabPlugin);
+                pluginCollection.AddFromObject(smsPlugin);
+                return new Kernel(plugins: pluginCollection);
+            });
 
         // Create agent with real OpenAI and mocked data services
         Agent = new Agent(
-            kernel,
+            kernelFactory.Object,
             chatCompletionService,
             MockHistoryService.Object,
             new CorrelationContext());

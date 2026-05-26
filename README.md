@@ -8,11 +8,16 @@ Ancela is built using modern cloud-native patterns: .NET Aspire for infrastructu
 
 Ancela's capabilities include:
 - Managing todos
-- Accessing calendar events
+- Accessing calendar events (read and create)
 - Reading and sending emails
 - Searching contacts
 - Storing persistent knowledge
 - Accessing personal finances
+- Sending SMS messages
+- Searching and fetching web content
+- Scheduling one-time SMS reminders
+- Watching standing rules (recurring conditions that notify when met)
+- Running scheduled tasks (recurring actions that report back on a clock schedule)
 
 ![Design](Images/design.svg)
 
@@ -48,6 +53,34 @@ What is *not* in the trust model: untrusted **web content** fetched by the agent
 during autonomous standing-rule or scheduled-task evaluation. That content must never
 be treated as instructions.
 
+**Autonomous profiles.** Two kernel profiles run without a human in the loop:
+`StandingRule` (condition evaluated on a timer) and `ScheduledTask` (action run on a
+clock schedule). In both cases the model acts from a queue trigger with no user
+present to review an action before it happens, so these profiles remove the *ability*
+to do harm rather than relying on the model to behave:
+
+- **Least privilege.** They advertise only a read-only investigative subset of
+  functions to the model. A single allow-list (`KernelProfilePolicy`) drives this, and
+  a hard-deny invocation filter enforces the same list as a backstop: any call outside
+  the allow-list — every send/mutation, and indeed anything not explicitly permitted —
+  is blocked before it executes, regardless of what the model requests.
+- **The model never owns the send path.** A standing-rule evaluation cannot send at
+  all; it returns a decision plus suggested message text, and *code* then enforces the
+  notification cooldown and sends only to the owner's fixed number. A scheduled task's
+  output is likewise sent by code to the owner's number. The model cannot choose a
+  recipient, so it has no channel to exfiltrate data to a third party even if hijacked.
+- **Untrusted input.** Email bodies and calendar event descriptions are externally
+  controlled channels that can carry injection payloads. The `StandingRule` profile
+  excludes them entirely; the `ScheduledTask` profile allows them (needed for tasks
+  like "daily calendar summary") but labels their content as untrusted data in the
+  system prompt.
+
+Together these break the "lethal trifecta" (private data + untrusted content + an
+exfiltration channel) by removing the channel structurally. The residual risk is that
+injection could shape the *content* of a message delivered to the owner's own number —
+lower impact, since there is no third-party destination and the owner can sanity-check
+it.
+
 ## Getting Started
 
 ### Local Development
@@ -81,7 +114,7 @@ be treated as instructions.
 
   - Select Application permissions.
 
-  - Select User.Read.All, then select Add permissions.
+  - Select that permission, then select Add permissions.
 
 - Select Grant admin consent for..., then select Yes to provide admin consent for the selected permission.
 

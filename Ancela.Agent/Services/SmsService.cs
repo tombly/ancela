@@ -20,7 +20,7 @@ public class SmsService
         TwilioClient.Init(twilioAccountSid, twilioAuthToken);
     }
 
-    public async Task Send(string phoneNumbers, string message)
+    public virtual async Task Send(string phoneNumbers, string message)
     {
         if (message.Length > 160)
             message = string.Concat(message.AsSpan(0, 157), "...");

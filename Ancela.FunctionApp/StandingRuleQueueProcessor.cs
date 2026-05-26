@@ -11,14 +11,15 @@ namespace Ancela.FunctionApp;
 
 /// <summary>
 /// Fires when a standing rule is due for evaluation. Loads the rule, has the agent evaluate
-/// it (which may send an SMS), writes a decision-audit row regardless of outcome, then
-/// reschedules the next evaluation.
+/// it, then enforces the cooldown and (if allowed) sends the SMS itself — the model never
+/// touches the send path. Writes a decision-audit row and reschedules the next evaluation.
 /// </summary>
 public class StandingRuleQueueProcessor(
     ILogger<StandingRuleQueueProcessor> _logger,
     IStandingRuleStore _store,
     IStandingRuleScheduler _scheduler,
     IUserService _userService,
+    SmsService _smsService,
     IAuditLog _auditLog,
     CorrelationContext _correlation,
     Ancela.Agent.Agent _agent)
@@ -59,22 +60,39 @@ public class StandingRuleQueueProcessor(
         {
             evaluation = await _agent.EvaluateStandingRule(rule, user);
             stopwatch.Stop();
-            await WriteDecisionAuditAsync(rule, evaluation.Notified, evaluation.Reasoning, success: true, error: null, stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             _logger.LogError(ex, "Standing rule {RuleId} evaluation failed.", rule.Id);
             await WriteDecisionAuditAsync(rule, notified: false, reasoning: null, success: false, error: ex.Message, stopwatch.ElapsedMilliseconds);
-            // Fall through to reschedule so a transient failure doesn't kill the rule.
-            evaluation = new StandingRuleEvaluation { Notified = false, Reasoning = ex.Message };
+            // Reschedule so a transient failure doesn't kill the rule.
+            await RescheduleAsync(rule);
+            return;
         }
 
         var evaluatedAt = DateTimeOffset.UtcNow;
         await _store.MarkEvaluatedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
-        if (evaluation.Notified)
-            await _store.MarkNotifiedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
 
+        // Enforce cooldown in code — not left to the model.
+        var notifyAllowed = rule.LastNotifiedAt is null
+            || DateTimeOffset.UtcNow - rule.LastNotifiedAt.Value >= TimeSpan.FromDays(rule.NotificationCooldownDays);
+
+        bool notified = false;
+        if (evaluation.ShouldNotify && notifyAllowed && !string.IsNullOrWhiteSpace(evaluation.Message))
+        {
+            // Send to the fixed owner number — never to a model-chosen recipient.
+            await _smsService.Send(rule.UserPhoneNumber, evaluation.Message);
+            await _store.MarkNotifiedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
+            notified = true;
+            _logger.LogInformation("Standing rule {RuleId} notified user.", rule.Id);
+        }
+        else if (evaluation.ShouldNotify && !notifyAllowed)
+        {
+            _logger.LogInformation("Standing rule {RuleId} condition met but cooldown active; suppressed.", rule.Id);
+        }
+
+        await WriteDecisionAuditAsync(rule, notified, evaluation.Reasoning, success: true, error: null, stopwatch.ElapsedMilliseconds);
         await RescheduleAsync(rule);
     }
 

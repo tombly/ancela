@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Ancela.Agent\Ancela.Agent.csproj" />
+    <ProjectReference Include="..\Ancela.FunctionApp\Ancela.FunctionApp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
