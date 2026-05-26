@@ -15,6 +15,7 @@ builder.AddAzureContainerAppEnvironment("env");
 
 var openAiApiKeyParameter = builder.AddParameter("openai-api-key", true);
 var twilioPhoneNumberParameter = builder.AddParameter("twilio-phone-number", true);
+var ownerPhoneNumberParameter = builder.AddParameter("owner-phone-number", true);
 var twilioAccountSidParameter = builder.AddParameter("twilio-account-sid", true);
 var twilioAuthTokenParameter = builder.AddParameter("twilio-auth-token", true);
 var graphUserIdParameter = builder.AddParameter("graph-user-id", true);
@@ -75,6 +76,7 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithReference(chat)
     .WithHostStorage(storage)
     .WithEnvironment("TWILIO_PHONE_NUMBER", twilioPhoneNumberParameter)
+    .WithEnvironment("OWNER_PHONE_NUMBER", ownerPhoneNumberParameter)
     .WithEnvironment("TWILIO_ACCOUNT_SID", twilioAccountSidParameter)
     .WithEnvironment("TWILIO_AUTH_TOKEN", twilioAuthTokenParameter)
     .WithEnvironment("GRAPH_USER_ID", graphUserIdParameter)

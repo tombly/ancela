@@ -58,4 +58,20 @@ public static class KernelProfilePolicy
         var allowed = AllowedFunctions(profile);
         return allowed is null || allowed.Contains(functionName);
     }
+
+    // Functions that act on the owner's shared resources or send on the agent's behalf:
+    // sending SMS/email and writing the owner's calendar. Non-owner users get read-only
+    // access, so these are denied to them even in the otherwise-unrestricted Chat profile.
+    // This is an axis orthogonal to the profile allow-lists above — both are enforced.
+    private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "send_sms", "send_email", "create_calendar_event",
+    };
+
+    /// <summary>
+    /// True if <paramref name="functionName"/> may only be invoked by the owner. Enforced
+    /// independently of profile: <see cref="Agent"/> drops these from the advertised set for
+    /// non-owners, and <see cref="AutonomousToolGuardFilter"/> hard-denies them as a backstop.
+    /// </summary>
+    public static bool IsOwnerOnly(string functionName) => OwnerOnlyFunctions.Contains(functionName);
 }

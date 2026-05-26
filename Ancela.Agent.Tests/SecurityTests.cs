@@ -34,6 +34,7 @@ public class SecurityTests
         Environment.SetEnvironmentVariable("TWILIO_ACCOUNT_SID", "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
         Environment.SetEnvironmentVariable("TWILIO_AUTH_TOKEN", "test-token");
         Environment.SetEnvironmentVariable("YNAB_ACCESS_TOKEN", "test-token");
+        Environment.SetEnvironmentVariable("OWNER_PHONE_NUMBER", "+15551234567");
     }
 
     // Functions that must never appear in autonomous kernel profiles.
@@ -232,11 +233,12 @@ public class SecurityTests
     }
 
     [Fact]
-    public async Task AutonomousToolGuardFilter_AllowsEverythingInChatProfile()
+    public async Task AutonomousToolGuardFilter_AllowsOwnerOnlyFunction_ForOwnerInChatProfile()
     {
-        // Chat is human-in-the-loop and unrestricted — the filter must not block send_sms there.
+        // Chat is human-in-the-loop and unrestricted for the owner — send_sms must pass.
         var kernel = new Kernel();
         kernel.Data["profile"] = KernelProfile.Chat;
+        kernel.Data["isOwner"] = true;
         kernel.FunctionInvocationFilters.Add(
             new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
 
@@ -245,6 +247,43 @@ public class SecurityTests
 
         var result = await kernel.InvokeAsync(fn);
         result.GetValue<string>().Should().Be("sent");
+    }
+
+    [Theory]
+    [InlineData("send_sms")]
+    [InlineData("send_email")]
+    [InlineData("create_calendar_event")]
+    public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
+    {
+        // A non-owner registered user is read-only: owner-only functions are hard-denied even
+        // in the otherwise-unrestricted Chat profile. Missing/false isOwner == not-owner.
+        var kernel = new Kernel();
+        kernel.Data["profile"] = KernelProfile.Chat;
+        kernel.Data["isOwner"] = false;
+        kernel.FunctionInvocationFilters.Add(
+            new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+
+        var fn = KernelFunctionFactory.CreateFromMethod(() => "would-act-as-owner", functionName: functionName);
+        kernel.Plugins.AddFromFunctions("TestPlugin", [fn]);
+
+        var act = async () => await kernel.InvokeAsync(fn);
+
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            because: $"non-owners must not be able to invoke owner-only '{functionName}'");
+    }
+
+    [Fact]
+    public void OwnerOnlyFunctions_AreReadDeniedToNonOwners_ButReadsAreNot()
+    {
+        // The owner-only axis covers send/write actions; read functions stay open to all users.
+        KernelProfilePolicy.IsOwnerOnly("send_sms").Should().BeTrue();
+        KernelProfilePolicy.IsOwnerOnly("send_email").Should().BeTrue();
+        KernelProfilePolicy.IsOwnerOnly("create_calendar_event").Should().BeTrue();
+
+        KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
+        KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
+        KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
+        KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();
     }
 
     // --- Finding B: per-request kernel isolation ---
@@ -359,11 +398,13 @@ public class SecurityTests
 
     private static Agent BuildMockAgent(StandingRule rule, UserProfile user, bool shouldNotify, string message)
     {
+        Environment.SetEnvironmentVariable("OWNER_PHONE_NUMBER", "+15551234567");
         var mockAgent = new Mock<Agent>(
             new Mock<IKernelFactory>().Object,
             null!,
             new Mock<IHistoryService>().Object,
-            new CorrelationContext()) { CallBase = false };
+            new CorrelationContext(),
+            new OwnerService()) { CallBase = false };
         mockAgent
             .Setup(a => a.EvaluateStandingRule(rule, user))
             .ReturnsAsync(new StandingRuleEvaluation

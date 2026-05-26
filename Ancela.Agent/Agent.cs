@@ -11,7 +11,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace Ancela.Agent;
 
-public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCompletionService, IHistoryService _historyService, CorrelationContext _correlation)
+public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCompletionService, IHistoryService _historyService, CorrelationContext _correlation, OwnerService _ownerService)
 {
     public async Task<string> Chat(string message, string userPhoneNumber, string agentPhoneNumber, UserProfile user, string[] mediaUrls)
     {
@@ -276,25 +276,23 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         kernel.Data["agentPhoneNumber"] = agentPhoneNumber;
         kernel.Data["userPhoneNumber"] = userPhoneNumber;
 
+        var isOwner = _ownerService.IsOwner(userPhoneNumber);
+        kernel.Data["isOwner"] = isOwner;
+
         var profile = kernel.Data.TryGetValue("profile", out var p) ? (KernelProfile)p : KernelProfile.Chat;
 
-        // Advertise only the functions the profile allows so denied tools never enter the
-        // tool schema (KernelProfilePolicy is the single source of truth; the
-        // AutonomousToolGuardFilter enforces the same set as a hard-deny backstop).
+        // Advertise only the functions this caller may use so denied tools never enter the
+        // tool schema. Two orthogonal restrictions apply (KernelProfilePolicy is the single
+        // source of truth; AutonomousToolGuardFilter hard-denies the same set as a backstop):
+        //   1. Profile allow-list — autonomous profiles are restricted to read-only tools.
+        //   2. Owner-only — non-owner users can't send SMS/email or write the owner's calendar.
         var allowedNames = KernelProfilePolicy.AllowedFunctions(profile);
-        FunctionChoiceBehavior functionChoiceBehavior;
-        if (allowedNames is not null)
-        {
-            var allowed = kernel.Plugins
-                .SelectMany(plugin => plugin)
-                .Where(f => allowedNames.Contains(f.Name))
-                .ToList();
-            functionChoiceBehavior = FunctionChoiceBehavior.Auto(functions: allowed);
-        }
-        else
-        {
-            functionChoiceBehavior = FunctionChoiceBehavior.Auto();
-        }
+        var advertised = kernel.Plugins
+            .SelectMany(plugin => plugin)
+            .Where(f => allowedNames is null || allowedNames.Contains(f.Name))
+            .Where(f => isOwner || !KernelProfilePolicy.IsOwnerOnly(f.Name))
+            .ToList();
+        var functionChoiceBehavior = FunctionChoiceBehavior.Auto(functions: advertised);
 
         var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings
         { FunctionChoiceBehavior = functionChoiceBehavior };

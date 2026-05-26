@@ -83,6 +83,10 @@ public abstract class AgentTestBase
         Environment.SetEnvironmentVariable("TWILIO_ACCOUNT_SID", "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
         Environment.SetEnvironmentVariable("TWILIO_AUTH_TOKEN", "test-token");
         var smsService = new SmsService();
+
+        // Treat the test user as the owner so no owner-only function filtering applies here.
+        Environment.SetEnvironmentVariable("OWNER_PHONE_NUMBER", UserPhoneNumber);
+        var ownerService = new OwnerService();
         var smsPlugin = new SmsPlugin(smsService);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
@@ -113,7 +117,8 @@ public abstract class AgentTestBase
             kernelFactory.Object,
             chatCompletionService,
             MockHistoryService.Object,
-            new CorrelationContext());
+            new CorrelationContext(),
+            ownerService);
 
         // Create test user profile
         TestUser = new UserProfile

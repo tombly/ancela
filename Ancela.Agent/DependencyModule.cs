@@ -37,6 +37,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<Agent>();
         builder.Services.AddSingleton<ChatInterceptor>();
         builder.Services.AddSingleton<SmsService>();
+        builder.Services.AddSingleton<OwnerService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
