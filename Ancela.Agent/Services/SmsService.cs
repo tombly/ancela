@@ -22,9 +22,6 @@ public class SmsService
 
     public virtual async Task Send(string phoneNumbers, string message)
     {
-        if (message.Length > 160)
-            message = string.Concat(message.AsSpan(0, 157), "...");
-
         foreach (var phoneNumber in phoneNumbers.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             await MessageResource.CreateAsync(

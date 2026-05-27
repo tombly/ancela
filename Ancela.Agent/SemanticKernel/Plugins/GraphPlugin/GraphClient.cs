@@ -232,13 +232,16 @@ public class GraphClient : IGraphClient
     public async Task<ContactModel?> GetUserContactByNameAsync(string name)
     {
         var searchTerm = name.Trim();
+        // Escape single quotes per OData (double them) so names like "O'Brien" don't
+        // malform the filter, and so caller-supplied text can't inject filter syntax.
+        var filterTerm = searchTerm.Replace("'", "''");
 
         var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
         {
             // Request specific properties.
             config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "companyName", "jobTitle", "givenName", "surname"];
             // Filter by display name, given name, or surname containing the search term.
-            config.QueryParameters.Filter = $"startswith(displayName,'{searchTerm}') or startswith(givenName,'{searchTerm}') or startswith(surname,'{searchTerm}')";
+            config.QueryParameters.Filter = $"startswith(displayName,'{filterTerm}') or startswith(givenName,'{filterTerm}') or startswith(surname,'{filterTerm}')";
             // Get top 10 matches.
             config.QueryParameters.Top = 10;
         });

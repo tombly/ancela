@@ -52,7 +52,7 @@ public class AuditFilter(IAuditLog _auditLog, CorrelationContext _correlation, I
                     Plugin = context.Function.PluginName ?? string.Empty,
                     Function = context.Function.Name,
                     Arguments = SerializeArguments(context.Arguments),
-                    Result = error is null ? Truncate(context.Result?.ToString()) : null,
+                    Result = error is null ? SerializeResult(context.Result) : null,
                     Success = error is null,
                     Error = error,
                     DurationMs = durationMs,
@@ -74,9 +74,55 @@ public class AuditFilter(IAuditLog _auditLog, CorrelationContext _correlation, I
         }
     }
 
-    private static string? Truncate(string? value, int maxLength = 500)
+    /// <summary>
+    /// Captures a tool result as JSON so the audit log preserves what the agent actually
+    /// returned (not just a type name). Strings pass through untouched; complex objects are
+    /// JSON-serialized; anything that fails to serialize falls back to ToString().
+    /// </summary>
+    private static string? SerializeResult(object? result)
+    {
+        switch (result)
+        {
+            case null:
+                return null;
+            // Already a string (e.g. rule decisions, SMS text) — store as-is, just truncate.
+            case string s:
+                return Truncate(s);
+        }
+
+        try
+        {
+            return TruncateJson(JsonSerializer.Serialize(result));
+        }
+        catch
+        {
+            return Truncate(result.ToString());
+        }
+    }
+
+    private const int MaxResultLength = 2000;
+
+    private static string? Truncate(string? value, int maxLength = MaxResultLength)
     {
         if (value is null) return null;
         return value.Length > maxLength ? value[..maxLength] + "…" : value;
+    }
+
+    /// <summary>
+    /// JSON-aware truncation: short payloads are returned verbatim; over-long ones are wrapped
+    /// in a valid JSON envelope carrying a preview, so downstream readers always get parseable
+    /// JSON rather than a string cut mid-token.
+    /// </summary>
+    private static string TruncateJson(string json, int maxLength = MaxResultLength)
+    {
+        if (json.Length <= maxLength)
+            return json;
+
+        return JsonSerializer.Serialize(new
+        {
+            truncated = true,
+            originalLength = json.Length,
+            preview = json[..maxLength],
+        });
     }
 }

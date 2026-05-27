@@ -33,6 +33,10 @@ public class ReminderQueueProcessor(
             return;
         }
 
+        // Send first, then mark sent. Service Bus is at-least-once, so a crash or lock loss
+        // between these two steps can cause a redelivery to resend (status is still Scheduled).
+        // This is deliberate: for reminders a rare duplicate text is preferable to claiming-
+        // before-send, which would silently drop the reminder if the send then failed.
         await _smsService.Send(reminder.UserPhoneNumber, reminder.Message);
         var markedSent = await _store.MarkSentAsync(reminder.Id, reminder.AgentPhoneNumber, DateTimeOffset.UtcNow);
 

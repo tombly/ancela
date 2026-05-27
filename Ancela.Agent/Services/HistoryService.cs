@@ -48,8 +48,10 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
     {
         var container = await GetContainerAsync();
 
+        // Bound the result to the 10 most recent regardless of whether ExpireAsync has
+        // kept up; otherwise a lagging/failed trim would feed unbounded history to the model.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp ASC")
+            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp DESC OFFSET 0 LIMIT 10")
             .WithParameter("@agentPhoneNumber", agentPhoneNumber)
             .WithParameter("@userPhoneNumber", userPhoneNumber);
 
@@ -62,6 +64,8 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
             entries.AddRange(response);
         }
 
+        // Query returns newest-first; chat history is consumed oldest-first.
+        entries.Reverse();
         return [.. entries];
     }
 
@@ -86,7 +90,16 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
         {
             var entriesToDelete = entries.Skip(10);
             foreach (var entry in entriesToDelete)
-                await container.DeleteItemAsync<HistoryEntry>(entry.Id.ToString(), new PartitionKey(agentPhoneNumber));
+            {
+                try
+                {
+                    await container.DeleteItemAsync<HistoryEntry>(entry.Id.ToString(), new PartitionKey(agentPhoneNumber));
+                }
+                catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    // A concurrent write for the same user may have already trimmed this entry.
+                }
+            }
         }
     }
 }
