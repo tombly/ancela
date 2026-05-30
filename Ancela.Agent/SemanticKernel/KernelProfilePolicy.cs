@@ -18,10 +18,11 @@ public static class KernelProfilePolicy
     // Read-only functions for StandingRule evaluation. Email and calendar content are
     // excluded: both are untrusted input channels (anyone can send an email or inject
     // text into a meeting invite), and standing rules don't need them to check external
-    // conditions (prices, news, etc.).
+    // conditions (prices, news, etc.). web_fetch is excluded because it takes an
+    // attacker-controllable URL — a direct exfiltration channel for any injected content.
     private static readonly HashSet<string> StandingRuleAllowed = new(StringComparer.OrdinalIgnoreCase)
     {
-        "web_search", "web_fetch",
+        "web_search",
         "get_todos", "get_knowledge",
         "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
@@ -30,9 +31,11 @@ public static class KernelProfilePolicy
     // Read-only functions for ScheduledTask execution. Email and calendar are included
     // because tasks like "daily calendar summary" or "email digest" legitimately need
     // them. The system prompt explicitly marks their content as untrusted data.
+    // web_fetch is excluded because it takes an attacker-controllable URL — a direct
+    // exfiltration channel for any injected content.
     private static readonly HashSet<string> ScheduledTaskAllowed = new(StringComparer.OrdinalIgnoreCase)
     {
-        "web_search", "web_fetch",
+        "web_search",
         "get_todos", "get_knowledge",
         "get_calendar_events", "get_recent_emails", "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
