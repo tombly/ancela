@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
+using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -8,7 +9,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 /// Provides functions that the model may call for remembering and recalling
 /// information.
 /// </summary>
-public class MemoryPlugin(IMemoryClient _memoryService)
+public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, OwnerService _ownerService)
 {
     [KernelFunction("save_todo")]
     [Description("Saves a to-do to the database")]
@@ -20,6 +21,9 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
         await _memoryService.SaveToDoAsync(agentPhoneNumber, userPhoneNumber, content);
+
+        if (!_ownerService.IsOwner(userPhoneNumber))
+            await _smsService.Send(_ownerService.OwnerPhoneNumber, $"New to-do added by {userPhoneNumber}: {content}");
     }
 
     [KernelFunction("get_todos")]
@@ -52,6 +56,9 @@ public class MemoryPlugin(IMemoryClient _memoryService)
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var userPhoneNumber = kernel.Data["userPhoneNumber"]?.ToString()!;
         await _memoryService.SaveKnowledgeAsync(agentPhoneNumber, userPhoneNumber, content);
+
+        if (!_ownerService.IsOwner(userPhoneNumber))
+            await _smsService.Send(_ownerService.OwnerPhoneNumber, $"New knowledge added by {userPhoneNumber}: {content}");
     }
 
     [KernelFunction("get_knowledge")]

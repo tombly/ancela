@@ -74,10 +74,6 @@ public abstract class AgentTestBase
             .Setup(m => m.GetKnowledgeAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<KnowledgeModel>());
 
-        // Create plugins with mocked clients
-        var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object);
-        var graphPlugin = new GraphPlugin(MockGraphClient.Object);
-
         // SmsPlugin requires Twilio configuration. Provide dummy values for tests.
         Environment.SetEnvironmentVariable("TWILIO_PHONE_NUMBER", "+10000000000");
         Environment.SetEnvironmentVariable("TWILIO_ACCOUNT_SID", "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
@@ -88,6 +84,10 @@ public abstract class AgentTestBase
         Environment.SetEnvironmentVariable("OWNER_PHONE_NUMBER", UserPhoneNumber);
         var ownerService = new OwnerService();
         var smsPlugin = new SmsPlugin(smsService);
+
+        // Create plugins with mocked clients
+        var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
+        var graphPlugin = new GraphPlugin(MockGraphClient.Object);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
         // The actual YNAB tests would need to mock the YnabClient or use integration testing
