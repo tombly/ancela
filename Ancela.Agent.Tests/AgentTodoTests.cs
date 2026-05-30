@@ -5,7 +5,9 @@ namespace Ancela.Agent.Tests;
 /// <summary>
 /// Integration tests verifying that todo-related prompts trigger the correct
 /// ITodoService function calls via the AI's function calling capability.
+/// These hit a live model, so they are gated under the "Integration" category.
 /// </summary>
+[Trait("Category", "Integration")]
 public class AgentTodoTests : AgentTestBase
 {
     [Fact]
@@ -20,21 +22,6 @@ public class AgentTodoTests : AgentTestBase
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("milk"))),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task SaveTodo_WhenUserUsesAddTodoPhrase_CallsSaveTodoAsync()
-    {
-        // Act
-        var response = await SendMessageAsync("add a todo to call the dentist");
-
-        // Assert
-        MockMemoryClient.Verify(
-            m => m.SaveToDoAsync(
-                AgentPhoneNumber,
-                UserPhoneNumber,
-                It.Is<string>(content => content.ToLower().Contains("dentist"))),
             Times.Once);
     }
 

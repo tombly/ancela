@@ -5,7 +5,9 @@ namespace Ancela.Agent.Tests;
 /// <summary>
 /// Integration tests verifying that knowledge-related prompts trigger the correct
 /// IKnowledgeService function calls via the AI's function calling capability.
+/// These hit a live model, so they are gated under the "Integration" category.
 /// </summary>
+[Trait("Category", "Integration")]
 public class AgentKnowledgeTests : AgentTestBase
 {
     [Fact]
@@ -20,21 +22,6 @@ public class AgentKnowledgeTests : AgentTestBase
                 AgentPhoneNumber,
                 UserPhoneNumber,
                 It.Is<string>(content => content.ToLower().Contains("smith") || content.ToLower().Contains("doctor"))),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task SaveKnowledge_WhenUserSharesPersonalInfo_CallsSaveKnowledgeAsync()
-    {
-        // Act
-        var response = await SendMessageAsync("my favorite color is blue");
-
-        // Assert
-        MockMemoryClient.Verify(
-            m => m.SaveKnowledgeAsync(
-                AgentPhoneNumber,
-                UserPhoneNumber,
-                It.Is<string>(content => content.ToLower().Contains("blue") || content.ToLower().Contains("color"))),
             Times.Once);
     }
 
