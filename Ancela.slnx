@@ -6,6 +6,7 @@
   </Configurations>
   <Project Path="Ancela.AppHost/Ancela.AppHost.csproj" />
   <Project Path="Ancela.Agent/Ancela.Agent.csproj" />
+  <Project Path="Ancela.Cli/Ancela.Cli.csproj" />
   <Project Path="Ancela.Agent.Tests/Ancela.Agent.Tests.csproj" />
   <Project Path="Ancela.FunctionApp/Ancela.FunctionApp.csproj" />
   <Project Path="Ancela.ServiceDefaults/Ancela.ServiceDefaults.csproj" />

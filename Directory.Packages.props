@@ -35,6 +35,13 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.14.0" />
     <!-- Twilio package -->
     <PackageVersion Include="Twilio" Version="7.13.7" />
+    <!-- CLI packages -->
+    <PackageVersion Include="Spectre.Console" Version="0.55.2" />
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
+    <PackageVersion Include="Spectre.Console.Json" Version="0.55.2" />
+    <PackageVersion Include="Azure.Identity" Version="1.21.0" />
+    <PackageVersion Include="Microsoft.Azure.Cosmos" Version="3.54.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
     <!-- Test packages -->
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="FluentAssertions" Version="6.12.0" />
