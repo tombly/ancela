@@ -128,6 +128,7 @@ public abstract class AgentTestBase
             UserPhoneNumber = UserPhoneNumber,
             Name = "Test User",
             TimeZone = "America/Los_Angeles",
+            Location = "San Francisco, CA",
             CreatedAt = DateTimeOffset.UtcNow,
             RegisteredAt = DateTimeOffset.UtcNow
         };

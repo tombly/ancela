@@ -68,6 +68,7 @@ public class ChatInterceptorTests
         UserPhoneNumber = phone,
         Name = "Someone",
         TimeZone = "America/Los_Angeles",
+        Location = "San Francisco, CA",
         CreatedAt = DateTimeOffset.UtcNow,
         RegisteredAt = DateTimeOffset.UtcNow,
     };

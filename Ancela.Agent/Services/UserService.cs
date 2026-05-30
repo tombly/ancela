@@ -12,6 +12,7 @@ public class UserProfile
     public required string UserPhoneNumber { get; set; }
     public string? Name { get; set; }       // null = registration pending
     public string? TimeZone { get; set; }   // IANA tz id, e.g. "America/Los_Angeles"; null = pending
+    public string? Location { get; set; }   // human-readable home location, e.g. "Seattle, WA"; null = not captured
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? RegisteredAt { get; set; }
 }
@@ -20,7 +21,7 @@ public interface IUserService
 {
     Task<UserProfile> CreatePendingAsync(string agentPhoneNumber, string userPhoneNumber);
     Task<UserProfile?> GetAsync(string agentPhoneNumber, string userPhoneNumber);
-    Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone);
+    Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone, string location);
     Task DeleteAsync(string agentPhoneNumber, string userPhoneNumber);
 }
 
@@ -69,13 +70,14 @@ public class UserService(CosmosClient _cosmosClient) : IUserService
         return null;
     }
 
-    public async Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone)
+    public async Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone, string location)
     {
         var container = await GetContainerAsync();
         var profile = await GetAsync(agentPhoneNumber, userPhoneNumber)
             ?? throw new InvalidOperationException($"No pending profile for {userPhoneNumber}");
         profile.Name = name;
         profile.TimeZone = timeZone;
+        profile.Location = location;
         profile.RegisteredAt = DateTimeOffset.UtcNow;
         await container.ReplaceItemAsync(profile, profile.Id.ToString(), new PartitionKey(agentPhoneNumber));
     }

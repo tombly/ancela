@@ -50,6 +50,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
             - Your phone number is '{agentPhoneNumber}'.
             - You are currently chatting with {user.Name}, whose phone number is '{userPhoneNumber}'.
             - The user's current local date and time is {localTime:f} ({user.TimeZone}).
+            - The user's home location is {user.Location}. Use it as the default for location-dependent requests (weather, local conditions, "near me") unless the user names a different place.
             - You have the following capabilities:
                 1. To-Dos:
                    - You can create, read, update, and delete to-dos for the user.
@@ -156,10 +157,10 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
     {
         var instructions = """
             You are Ancela, a personal AI assistant that communicates via SMS.
-            You are onboarding a new user. Your only goal right now is to collect their name and timezone, then call register_user.
+            You are onboarding a new user. Your only goal right now is to collect their name and home location, then call register_user.
             Start by greeting them and asking for their name.
-            Once you have their name, ask what city or region they're in so you can determine their timezone.
-            Resolve the city or region to an IANA timezone ID (e.g., 'America/Los_Angeles'), confirm it back to the user in plain language, then call register_user.
+            Once you have their name, ask what city or region they're in. This serves two purposes: it determines their timezone and is saved as their home location for queries like weather.
+            Resolve the city or region to an IANA timezone ID (e.g., 'America/Los_Angeles'), confirm the location back to the user in plain language, then call register_user with their name, the IANA timezone, and the city/region in the user's own words as the location.
             Keep all responses short — this is SMS.
             """;
 
