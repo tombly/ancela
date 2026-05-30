@@ -62,6 +62,7 @@ public class SecurityTests
         services.AddSingleton<IGraphClient>(_ => new Mock<IGraphClient>().Object);
         services.AddSingleton<IMemoryClient>(_ => new Mock<IMemoryClient>().Object);
         services.AddSingleton<SmsService, SpySmsService>();
+        services.AddSingleton<OwnerService>();
         services.AddSingleton<YnabClient>();
         services.AddSingleton<GraphPlugin>();
         services.AddSingleton<MemoryPlugin>();
