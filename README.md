@@ -81,14 +81,14 @@ injection could shape the *content* of a message delivered to the owner's own nu
 lower impact, since there is no third-party destination and the owner can sanity-check
 it.
 
-**Shared memory and "memory laundering".** Ancela's memory is shared across the
+**Shared memory and memory laundering.** Ancela's memory is shared across the
 instance, so a malicious user could try to smuggle instructions into later runs by
 storing them as knowledge or to-dos. We mitigate that in two ways. First, saved memory
 keeps provenance metadata about who created it (`userPhoneNumber`), so entries are not
 treated as anonymous facts. Second, autonomous profiles explicitly treat retrieved
 memory content — like web pages, email bodies, and calendar text — as untrusted data,
 not instructions to follow. This provenance tagging does not make stored content
-*trusted*; it mainly reduces "memory laundering" risk by preserving where a memory came
+*trusted*; it mainly reduces memory laundering risk by preserving where a memory came
 from and making it auditable when the model encounters it again.
 
 ## Getting Started
