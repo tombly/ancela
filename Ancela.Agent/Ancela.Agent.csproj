@@ -15,6 +15,8 @@
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="Ynab.Api.Client" />
     <PackageReference Include="Ynab.Api.Client.Extensions" />
+    <PackageReference Include="Remarkable.Api.Client" />
+    <PackageReference Include="QuestPDF" />
   </ItemGroup>
   
   <ItemGroup>

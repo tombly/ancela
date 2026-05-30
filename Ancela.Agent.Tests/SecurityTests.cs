@@ -2,6 +2,7 @@ using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
@@ -91,6 +92,8 @@ public class SecurityTests
                 new CorrelationContext()));
         services.AddSingleton<ITavilyClient>(_ => new Mock<ITavilyClient>().Object);
         services.AddSingleton<WebPlugin>();
+        services.AddSingleton<IRemarkableService>(_ => new Mock<IRemarkableService>().Object);
+        services.AddSingleton<RemarkablePlugin>();
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);

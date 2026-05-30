@@ -1,6 +1,7 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
@@ -37,7 +38,8 @@ public sealed class KernelFactory(
     ScheduledTaskPlugin _scheduledTaskPlugin,
     RegistrationPlugin _registrationPlugin,
     WebPlugin _webPlugin,
-    SmsPlugin _smsPlugin) : IKernelFactory
+    SmsPlugin _smsPlugin,
+    RemarkablePlugin _remarkablePlugin) : IKernelFactory
 {
     public Kernel Create(KernelProfile profile)
     {
@@ -62,6 +64,7 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_registrationPlugin);
                 plugins.AddFromObject(_webPlugin);
                 plugins.AddFromObject(_smsPlugin);
+                plugins.AddFromObject(_remarkablePlugin);
                 break;
         }
 

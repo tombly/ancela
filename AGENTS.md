@@ -86,6 +86,9 @@ azd up
 - `YnabPlugin/` - YNAB (You Need A Budget) integration
   - `YnabPlugin.cs` - Kernel functions for reading budget and transaction data
   - `YnabClient.cs` - YNAB API client
+- `RemarkablePlugin/` - reMarkable tablet integration (owner-only)
+  - `RemarkablePlugin.cs` - `send_to_remarkable` kernel function
+  - `RemarkableService.cs` - Renders text to PDF with QuestPDF and uploads via `Remarkable.Api.Client`. Requires `REMARKABLE_DEVICE_TOKEN` env var (obtained one-time via `rmpair`).
 
 ### Ancela.Agent.Tests
 - `AgentTestBase.cs` - Base class for agent tests

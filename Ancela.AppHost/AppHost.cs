@@ -24,6 +24,7 @@ var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
 var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
+var remarkableDeviceToken = builder.AddParameter("remarkable-device-token", true);
 
 var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
 var chat = openai.AddModel("chat", "gpt-5-mini");
@@ -85,6 +86,7 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("GRAPH_CLIENT_SECRET", graphClientSecretParameter)
     .WithEnvironment("YNAB_ACCESS_TOKEN", ynabAccessToken)
     .WithEnvironment("TAVILY_API_KEY", tavilyApiKey)
+    .WithEnvironment("REMARKABLE_DEVICE_TOKEN", remarkableDeviceToken)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();

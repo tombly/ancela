@@ -3,6 +3,7 @@ using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
@@ -16,6 +17,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI;
+using QuestPDF.Infrastructure;
 
 // Needed for IFunctionInvocationFilter registration
 #pragma warning disable SKEXP0001
@@ -32,6 +34,8 @@ public static class DependencyModule
         ArgumentNullException.ThrowIfNull(builder);
 
         AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics", true);
+
+        QuestPDF.Settings.License = LicenseType.Community;
 
         // Register core services.
         builder.Services.AddSingleton<Agent>();
@@ -65,6 +69,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<IScheduledTaskScheduler, ScheduledTaskScheduler>();
         builder.Services.AddSingleton<RegistrationPlugin>();
         builder.Services.AddSingleton<WebPlugin>();
+        builder.Services.AddSingleton<RemarkablePlugin>();
+        builder.Services.AddSingleton<IRemarkableService, RemarkableService>();
+        builder.Services.AddHttpClient("remarkable");
         builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
         builder.Services.AddSingleton<ITavilyClient, TavilyClient>();
         builder.Services.AddHttpClient("tavily", client =>

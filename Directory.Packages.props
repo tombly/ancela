@@ -57,5 +57,8 @@
     <!-- YNAB packages -->
     <PackageVersion Include="Ynab.Api.Client" Version="1.73.1" />
     <PackageVersion Include="Ynab.Api.Client.Extensions" Version="1.73.6" />
+    <!-- reMarkable + PDF -->
+    <PackageVersion Include="Remarkable.Api.Client" Version="0.2.0" />
+    <PackageVersion Include="QuestPDF" Version="2026.5.0" />
   </ItemGroup>
 </Project>

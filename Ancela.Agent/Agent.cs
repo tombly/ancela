@@ -106,7 +106,13 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                      and `delete_standing_rule` to manage them.
                    - Choose reminders for "remind me at/on <time>"; choose standing rules for
                      "let me know if/when <condition>".
-                11. Scheduled Tasks:
+                11. reMarkable:
+                   - You can send text content to the user's reMarkable tablet as a PDF using
+                     `send_to_remarkable`. The user provides (or you choose) a short title
+                     shown on the device, and the body text becomes the PDF content.
+                   - Use this when the user explicitly asks to "send to my reMarkable",
+                     "put on my reMarkable", or similar. Don't push content there unprompted.
+                12. Scheduled Tasks:
                    - A scheduled task runs on a recurring clock schedule and sends the user a
                      freshly generated message each time, e.g. "send me a summary of my
                      calendar each morning" or "text me my budget every Friday at 5pm".
@@ -123,7 +129,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                      and `delete_scheduled_task` to manage them.
             - Use the appropriate plugin functions to perform actions related to
               todos, knowledge, calendar, email, contacts, personal finance, reminders,
-              standing rules, scheduled tasks, and SMS.
+              standing rules, scheduled tasks, SMS, and reMarkable.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;

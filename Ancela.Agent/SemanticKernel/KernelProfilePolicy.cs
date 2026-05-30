@@ -68,7 +68,7 @@ public static class KernelProfilePolicy
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "send_sms", "send_email", "create_calendar_event",
+        "send_sms", "send_email", "create_calendar_event", "send_to_remarkable",
     };
 
     /// <summary>
