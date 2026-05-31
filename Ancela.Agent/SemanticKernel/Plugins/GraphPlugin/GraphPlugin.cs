@@ -42,12 +42,14 @@ public class GraphPlugin(IGraphClient graphClient)
     #region Email
 
     [KernelFunction("get_recent_emails")]
-    [Description("Retrieves the most recent emails for the user.")]
+    [Description("Retrieves recent emails from one of the user's mail folders. Reads the inbox unless the user explicitly asks for sent or deleted mail.")]
     public async Task<EmailModel[]> GetRecentEmailsAsync(
-         [Description("The maximum number of emails to retrieve.")]
-         int maxResults = 50)
+         [Description("Which mail folder to read: Inbox, Sent, or Deleted. Defaults to Inbox.")]
+         MailFolder folder = MailFolder.Inbox,
+         [Description("How many days back to retrieve emails from. Defaults to 30.")]
+         int daysBack = 30)
     {
-        return await graphClient.GetUserEmailsAsync(maxResults);
+        return await graphClient.GetUserEmailsAsync(folder, daysBack);
     }
 
     [KernelFunction("send_email")]

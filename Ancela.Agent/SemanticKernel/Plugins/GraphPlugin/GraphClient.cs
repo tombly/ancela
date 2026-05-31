@@ -8,7 +8,7 @@ public interface IGraphClient
 {
     Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
-    Task<EmailModel[]> GetUserEmailsAsync(int maxResults = 50);
+    Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int daysBack = 30);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
@@ -141,14 +141,38 @@ public class GraphClient : IGraphClient
 
     #region Email
 
-    public async Task<EmailModel[]> GetUserEmailsAsync(int maxResults = 10)
+    /// <summary>
+    /// The most messages returned per call, regardless of the time window, so the
+    /// payload stays bounded.
+    /// </summary>
+    private const int EmailResultCap = 50;
+
+    public async Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int daysBack = 30)
     {
-        var messages = await _appClient.Users[_entraUserId].Messages.GetAsync((config) =>
+        // Map our restricted folder set to Graph's well-known folder names.
+        var folderId = folder switch
+        {
+            MailFolder.Inbox => "inbox",
+            MailFolder.Sent => "sentitems",
+            MailFolder.Deleted => "deleteditems",
+            _ => "inbox"
+        };
+
+        // Clamp the window to a sane range: at least one day (so a zero/negative value
+        // can't yield a future cutoff that returns nothing) and at most ~10 years (so a
+        // huge value can't underflow DateTimeOffset in AddDays). The result is capped at
+        // EmailResultCap regardless, so a wide window just means "most recent".
+        var days = Math.Clamp(daysBack, 1, 3650);
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-days).ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        var messages = await _appClient.Users[_entraUserId].MailFolders[folderId].Messages.GetAsync((config) =>
         {
             // Request specific properties.
             config.QueryParameters.Select = ["subject", "from", "receivedDateTime", "bodyPreview", "isRead"];
-            // Get most recent emails.
-            config.QueryParameters.Top = maxResults;
+            // Only emails received within the requested time window (unquoted date literal).
+            config.QueryParameters.Filter = $"receivedDateTime ge {cutoff}";
+            // Safety cap: at most the most-recent results within the window.
+            config.QueryParameters.Top = EmailResultCap;
             // Sort by received date, most recent first.
             config.QueryParameters.Orderby = ["receivedDateTime desc"];
         });
