@@ -26,6 +26,7 @@ public static class KernelProfilePolicy
         "get_todos", "get_knowledge",
         "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
+        "get_transactions", "get_scheduled_transactions",
     };
 
     // Read-only functions for ScheduledTask execution. Email and calendar are included
@@ -39,6 +40,7 @@ public static class KernelProfilePolicy
         "get_todos", "get_knowledge",
         "get_calendar_events", "get_recent_emails", "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
+        "get_transactions", "get_scheduled_transactions",
     };
 
     /// <summary>
