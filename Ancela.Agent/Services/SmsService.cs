@@ -9,6 +9,11 @@ namespace Ancela.Agent.Services;
 /// </summary>
 public class SmsService
 {
+    // Twilio rejects message bodies longer than 1600 characters, so cap the body
+    // and mark it when content is dropped rather than letting the send throw.
+    private const int MaxSmsLength = 1600;
+    private const string TruncationSuffix = "... (truncated)";
+
     private readonly string _twilioPhoneNumber;
 
     public SmsService()
@@ -22,12 +27,19 @@ public class SmsService
 
     public virtual async Task Send(string phoneNumbers, string message)
     {
+        var body = Truncate(message);
+
         foreach (var phoneNumber in phoneNumbers.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
             await MessageResource.CreateAsync(
                 from: new PhoneNumber(_twilioPhoneNumber),
                 to: new PhoneNumber(phoneNumber),
-                body: message);
+                body: body);
         }
     }
+
+    private static string Truncate(string message) =>
+        message.Length <= MaxSmsLength
+            ? message
+            : message[..(MaxSmsLength - TruncationSuffix.Length)].TrimEnd() + TruncationSuffix;
 }
