@@ -17,6 +17,12 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
     private const string DatabaseName = "anceladb";
     private const string ContainerName = "history";
 
+    // Number of most-recent entries (interleaved user + agent) retained and fed to the
+    // model per user. Recency-by-count, not by time: conversations can be highly async,
+    // so a thread resumed days later still carries its last turns. GetHistoryAsync and
+    // ExpireAsync must use the same bound or trimmed entries could leak into the model.
+    private const int MaxHistoryEntries = 20;
+
     private async Task<Container> GetContainerAsync()
     {
         var database = await _cosmosClient.CreateDatabaseIfNotExistsAsync(DatabaseName);
@@ -48,10 +54,10 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
     {
         var container = await GetContainerAsync();
 
-        // Bound the result to the 10 most recent regardless of whether ExpireAsync has
+        // Bound the result to the most recent entries regardless of whether ExpireAsync has
         // kept up; otherwise a lagging/failed trim would feed unbounded history to the model.
         var query = new QueryDefinition(
-            "SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp DESC OFFSET 0 LIMIT 10")
+            $"SELECT * FROM c WHERE c.agentPhoneNumber = @agentPhoneNumber AND c.userPhoneNumber = @userPhoneNumber ORDER BY c.timestamp DESC OFFSET 0 LIMIT {MaxHistoryEntries}")
             .WithParameter("@agentPhoneNumber", agentPhoneNumber)
             .WithParameter("@userPhoneNumber", userPhoneNumber);
 
@@ -85,10 +91,10 @@ public class HistoryService(CosmosClient _cosmosClient) : IHistoryService
             entries.AddRange(response);
         }
 
-        // Delete entries beyond the 10 most recent.
-        if (entries.Count > 10)
+        // Delete entries beyond the most recent.
+        if (entries.Count > MaxHistoryEntries)
         {
-            var entriesToDelete = entries.Skip(10);
+            var entriesToDelete = entries.Skip(MaxHistoryEntries);
             foreach (var entry in entriesToDelete)
             {
                 try
