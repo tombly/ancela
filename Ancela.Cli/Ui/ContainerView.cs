@@ -21,6 +21,7 @@ public static class ContainerView
         ["reminders"] = ["id", "userPhoneNumber", "dueAt", "message", "status", "sentAt"],
         ["standing_rules"] = ["id", "userPhoneNumber", "description", "evaluationIntervalHours", "status", "lastEvaluatedAt", "lastNotifiedAt"],
         ["scheduled_tasks"] = ["id", "userPhoneNumber", "description", "timeOfDay", "daysOfWeek", "status", "lastRunAt"],
+        ["projects"] = ["id", "userPhoneNumber", "name", "isArchived", "updatedAt"],
     };
 
     // Integer enum fields → value names, keyed by "container.field".

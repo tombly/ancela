@@ -21,6 +21,7 @@ public sealed class CosmosBrowser(CosmosClientProvider _provider)
         new("reminders", "One-shot scheduled reminders"),
         new("standing_rules", "Standing rules evaluated on a schedule"),
         new("scheduled_tasks", "Recurring scheduled tasks"),
+        new("projects", "Shared project workspaces (entries embedded)"),
     ];
 
     private Container GetContainer(string endpoint, string container) =>

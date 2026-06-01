@@ -1,0 +1,72 @@
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin.Models;
+using Moq;
+
+namespace Ancela.Agent.Tests;
+
+/// <summary>
+/// Integration tests verifying that project-related prompts trigger the correct
+/// IProjectStore calls via the model's function calling. These hit a live model,
+/// so they are gated under the "Integration" category.
+/// </summary>
+[Trait("Category", "Integration")]
+public class AgentProjectsTests : AgentTestBase
+{
+    [Fact]
+    public async Task CreateProject_WhenUserStartsAProject_CallsCreateAsync()
+    {
+        await SendMessageAsync("start a new project called Backpacking Trip");
+
+        MockProjectStore.Verify(
+            p => p.CreateAsync(It.Is<Project>(proj => proj.Name.ToLower().Contains("backpacking"))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ListProjects_WhenUserAsks_CallsListAsync()
+    {
+        SetupExistingProjects(
+            CreateProjectSummary("Backpacking Trip"),
+            CreateProjectSummary("Things to Sell"));
+
+        await SendMessageAsync("what projects do I have?");
+
+        MockProjectStore.Verify(p => p.ListAsync(AgentPhoneNumber), Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task AddEntry_WhenUserAddsItemToProject_CallsAddEntryAsync()
+    {
+        var projectId = Guid.NewGuid();
+        SetupExistingProjects(CreateProjectSummary("Things to Sell", projectId));
+        SetupProject(CreateProject("Things to Sell", projectId));
+        MockProjectStore
+            .Setup(p => p.AddEntryAsync(projectId, AgentPhoneNumber, It.IsAny<ProjectEntry>()))
+            .ReturnsAsync(true);
+
+        await SendMessageAsync("add a road bike to my Things to Sell project");
+
+        MockProjectStore.Verify(
+            p => p.AddEntryAsync(projectId, AgentPhoneNumber,
+                It.Is<ProjectEntry>(e => e.Content.ToLower().Contains("bike"))),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ArchiveProject_WhenUserFinishes_CallsUpdateWithArchived()
+    {
+        var projectId = Guid.NewGuid();
+        SetupExistingProjects(CreateProjectSummary("Verify Account Beneficiaries", projectId));
+        SetupProject(CreateProject("Verify Account Beneficiaries", projectId));
+        MockProjectStore
+            .Setup(p => p.UpdateAsync(projectId, AgentPhoneNumber, It.IsAny<string?>(),
+                It.IsAny<string?>(), It.IsAny<bool?>(), It.IsAny<string?>()))
+            .ReturnsAsync(true);
+
+        await SendMessageAsync("I'm done with the Verify Account Beneficiaries project, archive it");
+
+        MockProjectStore.Verify(
+            p => p.UpdateAsync(projectId, AgentPhoneNumber, It.IsAny<string?>(),
+                It.IsAny<string?>(), true, It.IsAny<string?>()),
+            Times.Once);
+    }
+}

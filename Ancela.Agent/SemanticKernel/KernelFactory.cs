@@ -1,5 +1,6 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
@@ -32,6 +33,7 @@ public sealed class KernelFactory(
     IServiceProvider _sp,
     GraphPlugin _graphPlugin,
     MemoryPlugin _memoryPlugin,
+    ProjectsPlugin _projectsPlugin,
     YnabPlugin _ynabPlugin,
     ReminderPlugin _reminderPlugin,
     StandingRulePlugin _standingRulePlugin,
@@ -57,6 +59,7 @@ public sealed class KernelFactory(
                 // building OpenAIPromptExecutionSettings (A3).
                 plugins.AddFromObject(_graphPlugin);
                 plugins.AddFromObject(_memoryPlugin);
+                plugins.AddFromObject(_projectsPlugin);
                 plugins.AddFromObject(_ynabPlugin);
                 plugins.AddFromObject(_reminderPlugin);
                 plugins.AddFromObject(_standingRulePlugin);

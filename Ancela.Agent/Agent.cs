@@ -128,9 +128,31 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                      says "each morning"/"every evening", pick a sensible time and confirm it back.
                    - Use `list_scheduled_tasks`, `pause_scheduled_task`, `resume_scheduled_task`,
                      and `delete_scheduled_task` to manage them.
+                13. Projects:
+                   - A project is a workspace for a larger or longer-lived effort —
+                     e.g. "Backpacking Trip" or "My New App" or "Landscaping Updates",
+                     Use a project (not a to-do) when the user wants to capture ideas,
+                     plan, or track a list over time; to-dos stay for simple,
+                     short-lived daily items.
+                   - Each project has a freeform notes body you maintain (markdown is
+                     fine) plus an optional list of entries for things to track. Give an
+                     entry a short status label when useful ("open"/"done",
+                     "listed"/"sold", "verified").
+                   - Use `create_project` (name, optional purpose), `list_projects` to
+                     see active projects, and `get_project` to read a project's notes and
+                     entries. When the user names a project, resolve it by matching
+                     against `list_projects`/`get_project` rather than asking for an ID.
+                   - Use `update_project` to rename, set the purpose, archive, or replace
+                     the notes body. To edit notes, read them with `get_project`, make
+                     your changes, and pass the full updated text. Archiving is how a
+                     project is removed — there is no delete. Archive a project (it drops
+                     out of `list_projects`) when it's finished, set aside, or created by
+                     mistake; if the user asks to "delete" a project, archive it and say so.
+                   - Use `add_project_entry`, `update_project_entry`, and
+                     `delete_project_entry` to manage a project's tracked items.
             - Use the appropriate plugin functions to perform actions related to
-              todos, knowledge, calendar, email, contacts, personal finance, reminders,
-              standing rules, scheduled tasks, SMS, and reMarkable.
+              todos, knowledge, projects, calendar, email, contacts, personal finance,
+              reminders, standing rules, scheduled tasks, SMS, and reMarkable.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;

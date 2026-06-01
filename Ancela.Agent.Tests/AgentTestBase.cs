@@ -2,6 +2,8 @@ using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -30,6 +32,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IHistoryService> MockHistoryService;
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
+    protected readonly Mock<IProjectStore> MockProjectStore;
 
     // System under test
     protected readonly Agent Agent;
@@ -58,6 +61,7 @@ public abstract class AgentTestBase
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
+        MockProjectStore = new Mock<IProjectStore>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -74,6 +78,11 @@ public abstract class AgentTestBase
             .Setup(m => m.GetKnowledgeAsync(It.IsAny<string>()))
             .ReturnsAsync(Array.Empty<KnowledgeModel>());
 
+        // Default: no projects
+        MockProjectStore
+            .Setup(p => p.ListAsync(It.IsAny<string>()))
+            .ReturnsAsync(Array.Empty<ProjectSummary>());
+
         // SmsPlugin requires Twilio configuration. Provide dummy values for tests.
         Environment.SetEnvironmentVariable("TWILIO_PHONE_NUMBER", "+10000000000");
         Environment.SetEnvironmentVariable("TWILIO_ACCOUNT_SID", "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX");
@@ -88,6 +97,7 @@ public abstract class AgentTestBase
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
+        var projectsPlugin = new ProjectsPlugin(MockProjectStore.Object);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
         // The actual YNAB tests would need to mock the YnabClient or use integration testing
@@ -107,6 +117,7 @@ public abstract class AgentTestBase
                 var pluginCollection = new KernelPluginCollection();
                 pluginCollection.AddFromObject(graphPlugin);
                 pluginCollection.AddFromObject(memoryPlugin);
+                pluginCollection.AddFromObject(projectsPlugin);
                 pluginCollection.AddFromObject(ynabPlugin);
                 pluginCollection.AddFromObject(smsPlugin);
                 return new Kernel(plugins: pluginCollection);
@@ -164,6 +175,22 @@ public abstract class AgentTestBase
             .ReturnsAsync(entries);
     }
 
+    /// <summary>Configures list_projects to return the given project summaries.</summary>
+    protected void SetupExistingProjects(params ProjectSummary[] projects)
+    {
+        MockProjectStore
+            .Setup(p => p.ListAsync(AgentPhoneNumber))
+            .ReturnsAsync(projects);
+    }
+
+    /// <summary>Configures get_project to return the given project (by its ID).</summary>
+    protected void SetupProject(Project project)
+    {
+        MockProjectStore
+            .Setup(p => p.GetAsync(project.Id, AgentPhoneNumber))
+            .ReturnsAsync(project);
+    }
+
     /// <summary>
     /// Creates a ToDoModel for testing.
     /// </summary>
@@ -192,5 +219,30 @@ public abstract class AgentTestBase
             Created = DateTimeOffset.UtcNow,
             Deleted = null
         };
+    }
+
+    /// <summary>Creates a Project for testing.</summary>
+    protected static Project CreateProject(string name, Guid? id = null, string? purpose = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new Project
+        {
+            Id = id ?? Guid.NewGuid(),
+            AgentPhoneNumber = AgentPhoneNumber,
+            UserPhoneNumber = UserPhoneNumber,
+            Name = name,
+            Purpose = purpose,
+            Notes = "",
+            IsArchived = false,
+            Entries = [],
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+    }
+
+    /// <summary>Creates a ProjectSummary for testing.</summary>
+    protected static ProjectSummary CreateProjectSummary(string name, Guid? id = null, string? purpose = null)
+    {
+        return new ProjectSummary { Id = id ?? Guid.NewGuid(), Name = name, Purpose = purpose };
     }
 }

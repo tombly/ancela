@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
@@ -56,6 +57,8 @@ public static class DependencyModule
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
+        builder.Services.AddSingleton<ProjectsPlugin>();
+        builder.Services.AddSingleton<IProjectStore, ProjectStore>();
         builder.Services.AddSingleton<YnabPlugin>();
         builder.Services.AddSingleton<YnabClient>();
         builder.Services.AddSingleton<ReminderPlugin>();
