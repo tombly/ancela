@@ -56,8 +56,14 @@ public class ProjectsPlugin(IProjectStore _store)
         var id = ParseId(projectId, nameof(projectId));
         var project = await _store.GetAsync(id, agentPhoneNumber)
             ?? throw new InvalidOperationException($"Project {id} not found.");
-        // Hide soft-deleted entries from the model.
-        project.Entries = [.. project.Entries.Where(e => !e.Deleted)];
+        // Hide soft-deleted entries from the model, and order so entries of the same
+        // category are adjacent (uncategorized last) — gives the model a grouped view
+        // of named lists within the project. OrderBy is stable, so insertion order is
+        // preserved within each category.
+        project.Entries = [.. project.Entries
+            .Where(e => !e.Deleted)
+            .OrderBy(e => string.IsNullOrWhiteSpace(e.Category))
+            .ThenBy(e => e.Category, StringComparer.OrdinalIgnoreCase)];
         return project;
     }
 
@@ -77,11 +83,12 @@ public class ProjectsPlugin(IProjectStore _store)
     }
 
     [KernelFunction("add_project_entry")]
-    [Description("Adds a trackable entry to a project, e.g. an account to verify or an item to sell. Optionally give it a short status label like 'open', 'done', 'listed', or 'sold'. Returns the new entry's ID.")]
+    [Description("Adds a trackable entry to a project, e.g. an account to verify, an item to sell, or a packing-list item. Optionally give it a short status label like 'open'/'done'/'sold', and a category label to group it into a named list within the project (e.g. 'packing', 'gear', 'trail-candidate'). Returns the new entry's ID.")]
     public async Task<string> AddProjectEntryAsync(Kernel kernel,
         [Description("The project ID (GUID) to add the entry to.")] string projectId,
-        [Description("The entry text, e.g. 'Fidelity brokerage account'.")] string content,
-        [Description("Optional short status label, e.g. 'open' or 'done'.")] string? status = null)
+        [Description("The entry text, e.g. 'Fidelity brokerage account' or 'tent'.")] string content,
+        [Description("Optional short status label, e.g. 'open' or 'done'.")] string? status = null,
+        [Description("Optional category label that groups this entry into a named list within the project, e.g. 'packing' or 'trail-candidate'. Reuse the exact same label for items that belong in the same list.")] string? category = null)
     {
         var (agentPhoneNumber, _) = RequireContext(kernel);
         var pid = ParseId(projectId, nameof(projectId));
@@ -93,6 +100,7 @@ public class ProjectsPlugin(IProjectStore _store)
             Id = Guid.NewGuid(),
             Content = content.Trim(),
             Status = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
+            Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
             Deleted = false,
         };
         var ok = await _store.AddEntryAsync(pid, agentPhoneNumber, entry);
@@ -100,17 +108,18 @@ public class ProjectsPlugin(IProjectStore _store)
     }
 
     [KernelFunction("update_project_entry")]
-    [Description("Updates an entry's text and/or status within a project. Use get_project to look up the project and entry IDs.")]
+    [Description("Updates an entry's text, status, and/or category within a project. Use get_project to look up the project and entry IDs.")]
     public async Task<string> UpdateProjectEntryAsync(Kernel kernel,
         [Description("The project ID (GUID) the entry belongs to.")] string projectId,
         [Description("The entry ID (GUID) to update.")] string entryId,
         [Description("New entry text, or omit to leave unchanged.")] string? content = null,
-        [Description("New status label, or omit to leave unchanged.")] string? status = null)
+        [Description("New status label, or omit to leave unchanged.")] string? status = null,
+        [Description("New category label to move the entry into a different named list, or omit to leave unchanged.")] string? category = null)
     {
         var (agentPhoneNumber, _) = RequireContext(kernel);
         var pid = ParseId(projectId, nameof(projectId));
         var eid = ParseId(entryId, nameof(entryId));
-        var ok = await _store.UpdateEntryAsync(pid, agentPhoneNumber, eid, content, status);
+        var ok = await _store.UpdateEntryAsync(pid, agentPhoneNumber, eid, content, status, category);
         return ok ? $"Updated entry {eid}." : $"Entry {eid} not found in project {pid}.";
     }
 

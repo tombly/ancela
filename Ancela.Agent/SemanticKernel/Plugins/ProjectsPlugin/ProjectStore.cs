@@ -11,7 +11,7 @@ public interface IProjectStore
     Task<Project?> GetAsync(Guid id, string agentPhoneNumber);
     Task<bool> UpdateAsync(Guid id, string agentPhoneNumber, string? name, string? purpose, bool? isArchived, string? notes);
     Task<bool> AddEntryAsync(Guid projectId, string agentPhoneNumber, ProjectEntry entry);
-    Task<bool> UpdateEntryAsync(Guid projectId, string agentPhoneNumber, Guid entryId, string? content, string? status);
+    Task<bool> UpdateEntryAsync(Guid projectId, string agentPhoneNumber, Guid entryId, string? content, string? status, string? category);
     Task<bool> SoftDeleteEntryAsync(Guid projectId, string agentPhoneNumber, Guid entryId);
 }
 
@@ -92,7 +92,7 @@ public class ProjectStore(CosmosClient _cosmosClient) : IProjectStore
             PatchOperation.Set("/updatedAt", DateTimeOffset.UtcNow));
     }
 
-    public async Task<bool> UpdateEntryAsync(Guid projectId, string agentPhoneNumber, Guid entryId, string? content, string? status)
+    public async Task<bool> UpdateEntryAsync(Guid projectId, string agentPhoneNumber, Guid entryId, string? content, string? status, string? category)
     {
         var container = await GetContainerAsync();
         var project = await GetAsync(projectId, agentPhoneNumber);
@@ -101,6 +101,7 @@ public class ProjectStore(CosmosClient _cosmosClient) : IProjectStore
 
         if (content is not null) entry.Content = content;
         if (status is not null) entry.Status = status;
+        if (category is not null) entry.Category = category;
         project.UpdatedAt = DateTimeOffset.UtcNow;
         await container.ReplaceItemAsync(project, projectId.ToString(), new PartitionKey(agentPhoneNumber));
         return true;

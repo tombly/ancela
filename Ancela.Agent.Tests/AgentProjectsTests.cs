@@ -52,6 +52,28 @@ public class AgentProjectsTests : AgentTestBase
     }
 
     [Fact]
+    public async Task AddEntries_WhenUserAddsAList_GroupsThemUnderOneCategory()
+    {
+        var projectId = Guid.NewGuid();
+        SetupExistingProjects(CreateProjectSummary("Backpacking Trip", projectId));
+        SetupProject(CreateProject("Backpacking Trip", projectId));
+        var captured = new List<ProjectEntry>();
+        MockProjectStore
+            .Setup(p => p.AddEntryAsync(projectId, AgentPhoneNumber, It.IsAny<ProjectEntry>()))
+            .Callback<Guid, string, ProjectEntry>((_, _, e) => captured.Add(e))
+            .ReturnsAsync(true);
+
+        await SendMessageAsync(
+            "add a packing list to my Backpacking Trip project with a tent, sleeping bag, and stove");
+
+        // Each item lands as its own entry, all sharing one (case-insensitive) category
+        // so they group into a single named list within the project.
+        Assert.True(captured.Count >= 3, $"expected >= 3 entries, got {captured.Count}");
+        Assert.All(captured, e => Assert.False(string.IsNullOrWhiteSpace(e.Category)));
+        Assert.Single(captured.Select(e => e.Category!.ToLowerInvariant()).Distinct());
+    }
+
+    [Fact]
     public async Task ArchiveProject_WhenUserFinishes_CallsUpdateWithArchived()
     {
         var projectId = Guid.NewGuid();

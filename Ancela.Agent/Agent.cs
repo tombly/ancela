@@ -225,6 +225,12 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                      fine) plus an optional list of entries for things to track. Give an
                      entry a short status label when useful ("open"/"done",
                      "listed"/"sold", "verified").
+                   - A project can hold several distinct lists at once (e.g. a trip with
+                     trail candidates, a packing list, and a gear list). Put each entry's
+                     list in its category label and reuse the exact same label for items
+                     that belong together ("packing", "gear", "trail-candidate"); leave
+                     it off for one-off items. get_project returns entries grouped by
+                     category — render each category as its own list.
                    - Use `create_project` (name, optional purpose), `list_projects` to
                      see active projects, and `get_project` to read a project's notes and
                      entries. When the user names a project, resolve it by matching
