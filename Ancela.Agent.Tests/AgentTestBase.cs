@@ -132,7 +132,8 @@ public abstract class AgentTestBase
             MockHistoryService.Object,
             new CorrelationContext(),
             ownerService,
-            MockMediaService.Object);
+            MockMediaService.Object,
+            MockProjectStore.Object);
 
         // Create test user profile
         TestUser = new UserProfile
