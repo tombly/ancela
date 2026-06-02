@@ -1,4 +1,5 @@
 using Ancela.Agent.SemanticKernel;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Microsoft.SemanticKernel;
@@ -91,7 +92,10 @@ public class AgentMediaTests
         var kernelFactory = new Mock<IKernelFactory>();
         kernelFactory.Setup(f => f.Create(It.IsAny<KernelProfile>())).Returns(() => new Kernel());
 
-        return new Agent(kernelFactory.Object, chat.Object, history, new CorrelationContext(), new OwnerService(), media);
+        var projectStore = new Mock<IProjectStore>();
+        projectStore.Setup(p => p.ListAsync(It.IsAny<string>())).ReturnsAsync([]);
+
+        return new Agent(kernelFactory.Object, chat.Object, history, new CorrelationContext(), new OwnerService(), media, projectStore.Object);
     }
 
     // Captures the content stored for the User history entry (the description-augmented message).
