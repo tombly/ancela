@@ -33,6 +33,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
     protected readonly Mock<IProjectStore> MockProjectStore;
+    protected readonly Mock<IMediaService> MockMediaService;
 
     // System under test
     protected readonly Agent Agent;
@@ -62,6 +63,7 @@ public abstract class AgentTestBase
         MockMemoryClient = new Mock<IMemoryClient>();
         MockGraphClient = new Mock<IGraphClient>();
         MockProjectStore = new Mock<IProjectStore>();
+        MockMediaService = new Mock<IMediaService>();
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -129,7 +131,8 @@ public abstract class AgentTestBase
             chatCompletionService,
             MockHistoryService.Object,
             new CorrelationContext(),
-            ownerService);
+            ownerService,
+            MockMediaService.Object);
 
         // Create test user profile
         TestUser = new UserProfile

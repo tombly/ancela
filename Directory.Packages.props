@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Aspire packages -->
+    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.3.5" />
     <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.3.5" />
     <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.3.5" />
     <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.3.5" />

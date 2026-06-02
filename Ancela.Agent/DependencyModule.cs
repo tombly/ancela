@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -42,6 +43,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<Agent>();
         builder.Services.AddSingleton<ChatInterceptor>();
         builder.Services.AddSingleton<SmsService>();
+        builder.Services.AddSingleton<IMediaService, MediaService>();
         builder.Services.AddSingleton<OwnerService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<IUserService, UserService>();
@@ -82,6 +84,16 @@ public static class DependencyModule
             client.BaseAddress = new Uri("https://api.tavily.com");
             var apiKey = Environment.GetEnvironmentVariable("TAVILY_API_KEY") ?? string.Empty;
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        });
+
+        // Twilio media URLs require HTTP Basic auth (account SID : auth token). The handler follows
+        // Twilio's redirect to its pre-signed CDN and strips this header cross-origin automatically.
+        builder.Services.AddHttpClient(MediaService.TwilioMediaClientName, client =>
+        {
+            var accountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID") ?? string.Empty;
+            var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN") ?? string.Empty;
+            var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{accountSid}:{authToken}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
         });
 
         // Register a chat completion service for use by the kernels.

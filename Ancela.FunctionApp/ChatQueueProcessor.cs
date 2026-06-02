@@ -23,7 +23,7 @@ public class ChatQueueProcessor(ILogger<ChatQueueProcessor> _logger, ChatInterce
             message.Content,
             message.UserPhoneNumber,
             message.AgentPhoneNumber,
-            message.MediaUrls);
+            message.Media);
 
         if (reply != null)
             await _smsService.Send(message.UserPhoneNumber, reply);
@@ -39,5 +39,5 @@ public record ChatQueueMessage
     public string Content { get; init; } = string.Empty;
     public string UserPhoneNumber { get; init; } = string.Empty;
     public string AgentPhoneNumber { get; init; } = string.Empty;
-    public string[] MediaUrls { get; init; } = [];
+    public Media[] Media { get; init; } = [];
 }

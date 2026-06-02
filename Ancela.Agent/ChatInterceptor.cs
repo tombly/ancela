@@ -12,7 +12,7 @@ public class ChatInterceptor(
     SmsService _smsService,
     Agent _agent)
 {
-    public async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber, string[] mediaUrls)
+    public async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber, Media[] media)
     {
         var trimmed = message.Trim();
         var isOwner = _ownerService.IsOwner(userPhoneNumber);
@@ -29,7 +29,7 @@ public class ChatInterceptor(
         }
 
         if (trimmed.Equals("hello ancela", StringComparison.OrdinalIgnoreCase))
-            return await HandleHello(message, userPhoneNumber, agentPhoneNumber, isOwner, mediaUrls);
+            return await HandleHello(message, userPhoneNumber, agentPhoneNumber, isOwner, media);
 
         if (trimmed.Equals("goodbye ancela", StringComparison.OrdinalIgnoreCase))
             return await HandleGoodbye(userPhoneNumber, agentPhoneNumber);
@@ -43,12 +43,12 @@ public class ChatInterceptor(
         }
 
         if (user.Name == null)
-            return await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, mediaUrls);
+            return await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, media);
 
-        return await _agent.Chat(message, userPhoneNumber, agentPhoneNumber, user, mediaUrls);
+        return await _agent.Chat(message, userPhoneNumber, agentPhoneNumber, user, media);
     }
 
-    private async Task<string?> HandleHello(string message, string userPhoneNumber, string agentPhoneNumber, bool isOwner, string[] mediaUrls)
+    private async Task<string?> HandleHello(string message, string userPhoneNumber, string agentPhoneNumber, bool isOwner, Media[] media)
     {
         _logger.LogInformation("Intercepted 'hello' command from {UserPhoneNumber}", userPhoneNumber);
 
@@ -58,7 +58,7 @@ public class ChatInterceptor(
             // A profile created by an owner invite is pending (Name == null) until onboarded.
             return existing.Name != null
                 ? "You already have an account."
-                : await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, mediaUrls);
+                : await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, media);
         }
 
         // No profile: only the owner may self-register. Everyone else must be invited first.
@@ -70,7 +70,7 @@ public class ChatInterceptor(
         }
 
         await _userService.CreatePendingAsync(agentPhoneNumber, userPhoneNumber);
-        return await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, mediaUrls);
+        return await _agent.Onboard(message, userPhoneNumber, agentPhoneNumber, media);
     }
 
     private async Task<string> HandleGoodbye(string userPhoneNumber, string agentPhoneNumber)

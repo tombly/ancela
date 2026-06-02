@@ -39,8 +39,9 @@ public class ChatInterceptorTests
             null!,
             new Mock<IHistoryService>().Object,
             new CorrelationContext(),
-            new OwnerService()) { CallBase = false };
-        _agent.Setup(a => a.Onboard(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string[]>()))
+            new OwnerService(),
+            new Mock<IMediaService>().Object) { CallBase = false };
+        _agent.Setup(a => a.Onboard(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Media[]>()))
             .ReturnsAsync("ONBOARDING");
 
         _interceptor = new ChatInterceptor(
@@ -150,7 +151,7 @@ public class ChatInterceptorTests
 
         reply.Should().BeNull();
         _userService.Verify(u => u.CreatePendingAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
-        _agent.Verify(a => a.Onboard(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string[]>()), Times.Never);
+        _agent.Verify(a => a.Onboard(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Media[]>()), Times.Never);
     }
 
     [Fact]
@@ -161,7 +162,7 @@ public class ChatInterceptorTests
         var reply = await _interceptor.HandleMessage("hello ancela", GuestPhoneNumber, AgentPhoneNumber, []);
 
         reply.Should().Be("ONBOARDING");
-        _agent.Verify(a => a.Onboard("hello ancela", GuestPhoneNumber, AgentPhoneNumber, It.IsAny<string[]>()), Times.Once);
+        _agent.Verify(a => a.Onboard("hello ancela", GuestPhoneNumber, AgentPhoneNumber, It.IsAny<Media[]>()), Times.Once);
     }
 
     [Fact]
@@ -171,6 +172,6 @@ public class ChatInterceptorTests
 
         reply.Should().Be("ONBOARDING");
         _userService.Verify(u => u.CreatePendingAsync(AgentPhoneNumber, OwnerPhoneNumber), Times.Once);
-        _agent.Verify(a => a.Onboard("hello ancela", OwnerPhoneNumber, AgentPhoneNumber, It.IsAny<string[]>()), Times.Once);
+        _agent.Verify(a => a.Onboard("hello ancela", OwnerPhoneNumber, AgentPhoneNumber, It.IsAny<Media[]>()), Times.Once);
     }
 }

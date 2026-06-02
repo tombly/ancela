@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Ancela.Agent.Services;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -40,15 +41,17 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ServiceBusClient _service
                 return badResponse;
             }
 
-            // Extract media URLs if present.
-            var mediaUrls = new List<string>();
+            // Extract media (URL + content type) if present. Twilio posts MediaUrl{i} and the
+            // matching MediaContentType{i}; carrying both lets the agent tell image from non-image
+            // without sniffing bytes.
+            var media = new List<Media>();
             if (int.TryParse(formValues["NumMedia"], out var numMedia) && numMedia > 0)
             {
                 for (int i = 0; i < numMedia; i++)
                 {
                     var mediaUrl = formValues[$"MediaUrl{i}"];
                     if (!string.IsNullOrWhiteSpace(mediaUrl))
-                        mediaUrls.Add(mediaUrl);
+                        media.Add(new Media(mediaUrl, formValues[$"MediaContentType{i}"] ?? string.Empty));
                 }
             }
 
@@ -57,7 +60,7 @@ public class SmsFunction(ILogger<SmsFunction> _logger, ServiceBusClient _service
                 Content = body ?? string.Empty,
                 UserPhoneNumber = userPhoneNumber,
                 AgentPhoneNumber = agentPhoneNumber,
-                MediaUrls = [.. mediaUrls]
+                Media = [.. media]
             };
 
             var sender = _serviceBusClient.CreateSender(ChatQueueMessage.QueueName);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Ancela.Agent.Services;
 using Azure.Messaging.ServiceBus;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -32,15 +33,15 @@ public class MessageFunction(ILogger<MessageFunction> _logger, ServiceBusClient 
                 return badResponse;
             }
 
-            // Extract media URLs if present
-            var mediaUrls = new List<string>();
+            // Extract media (URL + content type) if present, mirroring the Twilio webhook.
+            var media = new List<Media>();
             if (int.TryParse(formValues["NumMedia"], out var numMedia) && numMedia > 0)
             {
                 for (int i = 0; i < numMedia; i++)
                 {
                     var mediaUrl = formValues[$"MediaUrl{i}"];
                     if (!string.IsNullOrWhiteSpace(mediaUrl))
-                        mediaUrls.Add(mediaUrl);
+                        media.Add(new Media(mediaUrl, formValues[$"MediaContentType{i}"] ?? string.Empty));
                 }
             }
 
@@ -49,7 +50,7 @@ public class MessageFunction(ILogger<MessageFunction> _logger, ServiceBusClient 
                 Content = body ?? string.Empty,
                 UserPhoneNumber = userPhoneNumber,
                 AgentPhoneNumber = agentPhoneNumber,
-                MediaUrls = [.. mediaUrls]
+                Media = [.. media]
             };
 
             var sender = _serviceBusClient.CreateSender(ChatQueueMessage.QueueName);
