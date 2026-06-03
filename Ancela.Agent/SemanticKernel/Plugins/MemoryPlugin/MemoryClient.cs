@@ -58,7 +58,7 @@ public class MemoryClient(CosmosClient _cosmosClient) : IMemoryClient
 
         var container = await GetKnowledgeContainerAsync();
 
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.agentPhoneNumber = @phoneNumber")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.agentPhoneNumber = @phoneNumber AND (NOT IS_DEFINED(c.deleted) OR IS_NULL(c.deleted))")
                         .WithParameter("@phoneNumber", agentPhoneNumber);
         var iterator = container.GetItemQueryIterator<KnowledgeModel>(query);
         var entries = new List<KnowledgeModel>();
@@ -117,7 +117,7 @@ public class MemoryClient(CosmosClient _cosmosClient) : IMemoryClient
 
         var container = await GetToDoContainerAsync();
 
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.agentPhoneNumber = @phoneNumber")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.agentPhoneNumber = @phoneNumber AND (NOT IS_DEFINED(c.deleted) OR IS_NULL(c.deleted))")
                         .WithParameter("@phoneNumber", agentPhoneNumber);
         var iterator = container.GetItemQueryIterator<ToDoModel>(query);
         var todos = new List<ToDoModel>();
