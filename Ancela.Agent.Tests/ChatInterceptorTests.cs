@@ -1,4 +1,5 @@
 using Ancela.Agent.SemanticKernel;
+using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,7 +41,8 @@ public class ChatInterceptorTests
             new Mock<IHistoryService>().Object,
             new CorrelationContext(),
             new OwnerService(),
-            new Mock<IMediaService>().Object) { CallBase = false };
+            new Mock<IMediaService>().Object,
+            new Mock<IProjectStore>().Object) { CallBase = false };
         _agent.Setup(a => a.Onboard(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Media[]>()))
             .ReturnsAsync("ONBOARDING");
 

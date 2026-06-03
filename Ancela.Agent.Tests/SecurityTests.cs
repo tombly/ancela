@@ -411,7 +411,8 @@ public class SecurityTests
             new Mock<IHistoryService>().Object,
             new CorrelationContext(),
             new OwnerService(),
-            new Mock<IMediaService>().Object) { CallBase = false };
+            new Mock<IMediaService>().Object,
+            new Mock<IProjectStore>().Object) { CallBase = false };
         mockAgent
             .Setup(a => a.EvaluateStandingRule(rule, user))
             .ReturnsAsync(new StandingRuleEvaluation
