@@ -204,7 +204,6 @@ public abstract class AgentTestBase
         {
             Id = id ?? Guid.NewGuid(),
             Content = content,
-            UserPhoneNumber = UserPhoneNumber,
             Created = DateTimeOffset.UtcNow,
             Deleted = null
         };
