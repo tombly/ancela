@@ -25,6 +25,10 @@ var graphClientSecretParameter = builder.AddParameter("graph-client-secret", tru
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
 var remarkableDeviceToken = builder.AddParameter("remarkable-device-token", true);
+// Required for access management: the owner's Base32 TOTP secret. invite/revoke require a
+// current code and fail closed without this, so set it (the rest of the agent runs without it).
+// Generate one with `ancela enroll` and scan the QR into an authenticator app.
+var ownerTotpSecret = builder.AddParameter("owner-totp-secret", true);
 
 var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
 var chat = openai.AddModel("chat", "gpt-5-mini");
@@ -87,6 +91,7 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("YNAB_ACCESS_TOKEN", ynabAccessToken)
     .WithEnvironment("TAVILY_API_KEY", tavilyApiKey)
     .WithEnvironment("REMARKABLE_DEVICE_TOKEN", remarkableDeviceToken)
+    .WithEnvironment("OWNER_TOTP_SECRET", ownerTotpSecret)
     .WithExternalHttpEndpoints();
 
 builder.Build().Run();

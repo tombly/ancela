@@ -45,6 +45,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<SmsService>();
         builder.Services.AddSingleton<IMediaService, MediaService>();
         builder.Services.AddSingleton<OwnerService>();
+        builder.Services.AddSingleton<TotpService>();
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();

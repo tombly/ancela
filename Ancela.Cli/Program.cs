@@ -16,6 +16,7 @@ services.AddSingleton<Dashboard>();
 services.AddTransient<PingCommand>();
 services.AddTransient<ListContainerCommand>();
 services.AddTransient<ShowContainerCommand>();
+services.AddTransient<EnrollCommand>();
 
 var registrar = new TypeRegistrar(services);
 var app = new CommandApp(registrar);
@@ -34,6 +35,11 @@ app.Configure(config =>
     config.AddCommand<ShowContainerCommand>("show")
         .WithDescription("Show one document from any container as full JSON.")
         .WithExample("show", "standing_rules", "36a6cf48");
+
+    config.AddCommand<EnrollCommand>("enroll")
+        .WithDescription("Set up the owner TOTP secret and render its QR for an authenticator app.")
+        .WithExample("enroll")
+        .WithExample("enroll", "--new");
 });
 
 // No arguments → drop into the interactive hybrid shell. Otherwise run headless.

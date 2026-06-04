@@ -42,11 +42,25 @@ Data model implications:
 - **Chat history is per-user** (filtered by `userPhoneNumber`).
 - Reminders, standing rules, and scheduled tasks are created and listed per-user.
 
-Access boundary: the gate on "who is an authorized user" is reachability of the
-Twilio number plus sending `hello ancela`. There is no allow-list, so registration
-is currently bounded only by knowledge of the number. Because the agent can read and
-send the owner's mail and read their finances, restricting registration to an
-owner-defined allow-list of numbers is recommended hardening (see security notes).
+Access boundary: only the owner self-registers; everyone else must be `invite`d by
+the owner (by phone number) before `hello ancela` does anything, and the owner can
+`revoke` them. Identity, though, still rests on the SMS sender number, which is
+spoofable — so the highest-value privilege (the owner's own `invite`/`revoke`) is the
+weakest point if someone spoofs the owner's number.
+
+**Owner step-up (TOTP), required.** `invite`/`revoke` require a second factor: the
+owner appends a current 6-digit authenticator code (e.g. `invite +15551234567 408291`),
+verified server-side via RFC 6238. This binds access-management to *possession of the
+secret*, not just the claimed number. The gate **fails closed**: `OWNER_TOTP_SECRET`
+must be set, and if it is missing (or malformed) access-management is refused rather
+than falling back to number-only — it cannot be bypassed by leaving the secret unset.
+Run `ancela enroll` to mint a secret and scan its QR into an authenticator app, then
+set `OWNER_TOTP_SECRET`. (Self-registration and normal chat are unaffected, so a fresh
+instance still runs; only `invite`/`revoke` are gated. If the owner loses their
+authenticator, re-run `ancela enroll` and reset the secret.) Caveat — the code travels
+in the SMS body, which Twilio and the carriers can see, so this defends against number
+spoofing, not against an attacker who can read the owner's texts or the application
+logs; it is lightweight hardening, not hardware MFA.
 
 What is *not* in the trust model: untrusted **web content** fetched by the agent
 (`web_search` / `web_fetch`) is not trusted, and neither is any external page reached

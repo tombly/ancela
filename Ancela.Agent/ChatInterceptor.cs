@@ -10,7 +10,8 @@ public class ChatInterceptor(
     CorrelationContext _correlation,
     OwnerService _ownerService,
     SmsService _smsService,
-    Agent _agent)
+    Agent _agent,
+    TotpService _totp)
 {
     public async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber, Media[] media)
     {
@@ -21,11 +22,21 @@ public class ChatInterceptor(
         // to normal handling (and an uninvited sender is dropped below).
         if (isOwner)
         {
-            if (TryParseCommand(trimmed, "invite", out var inviteTarget))
-                return await HandleInvite(inviteTarget, userPhoneNumber, agentPhoneNumber);
+            if (TryParseCommand(trimmed, "invite", out var inviteArg))
+            {
+                var (deny, target) = await CheckStepUpAsync("invite", inviteArg, userPhoneNumber, agentPhoneNumber);
+                if (deny != null)
+                    return deny;
+                return await HandleInvite(target, userPhoneNumber, agentPhoneNumber);
+            }
 
-            if (TryParseCommand(trimmed, "revoke", out var revokeTarget))
-                return await HandleRevoke(revokeTarget, userPhoneNumber, agentPhoneNumber);
+            if (TryParseCommand(trimmed, "revoke", out var revokeArg))
+            {
+                var (deny, target) = await CheckStepUpAsync("revoke", revokeArg, userPhoneNumber, agentPhoneNumber);
+                if (deny != null)
+                    return deny;
+                return await HandleRevoke(target, userPhoneNumber, agentPhoneNumber);
+            }
         }
 
         if (trimmed.Equals("hello ancela", StringComparison.OrdinalIgnoreCase))
@@ -127,6 +138,56 @@ public class ChatInterceptor(
         await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, "revoke", success: true, error: null, target: target);
         _logger.LogInformation("Owner revoked access for {Target}", target);
         return $"Revoked access for {target}.";
+    }
+
+    // Owner step-up: the access-management commands (invite/revoke) require a current 6-digit TOTP
+    // code as their last token — a second factor on top of the (spoofable) SMS sender number.
+    // Returns a deny message to send back, or null to proceed along with the argument minus the
+    // code. Step-up is REQUIRED: if no secret is configured the command is refused (fail-closed),
+    // so the gate can never be bypassed by simply leaving OWNER_TOTP_SECRET unset.
+    private async Task<(string? Deny, string Argument)> CheckStepUpAsync(
+        string command, string argument, string ownerPhoneNumber, string agentPhoneNumber)
+    {
+        if (!_totp.IsConfigured)
+        {
+            _logger.LogWarning("Owner attempted '{Command}' but step-up (OWNER_TOTP_SECRET) is not configured", command);
+            await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, command, success: false, error: "step-up not configured");
+            return ("Access management needs step-up, which isn't set up. Configure OWNER_TOTP_SECRET (run `ancela enroll`) first.", argument);
+        }
+
+        var (rest, code) = SplitTrailingCode(argument);
+        if (code is null)
+        {
+            await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, command, success: false, error: "step-up code missing");
+            return ($"That command needs your authenticator code. Resend as: {command} <number> <code>.", argument);
+        }
+
+        if (!_totp.VerifyOwnerCode(code))
+        {
+            _logger.LogWarning("Owner step-up failed for '{Command}' — invalid TOTP code", command);
+            await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, command, success: false, error: "step-up code invalid");
+            return ("That code didn't match. Check your authenticator and try again.", argument);
+        }
+
+        return (null, rest);
+    }
+
+    // Peels a trailing 6-digit authenticator code off a command argument, returning the remaining
+    // text and the code (or null when the last whitespace-separated token isn't a 6-digit group).
+    // Since step-up is required, the owner always appends a code, so the number+code form is the
+    // norm; a number formatted so its final group is six digits with no code is the rare ambiguity.
+    private static (string Remaining, string? Code) SplitTrailingCode(string argument)
+    {
+        var trimmed = argument.TrimEnd();
+        var lastSpace = trimmed.LastIndexOf(' ');
+        if (lastSpace < 0)
+            return (argument, null);
+
+        var lastToken = trimmed[(lastSpace + 1)..];
+        if (lastToken.Length == 6 && lastToken.All(char.IsAsciiDigit))
+            return (trimmed[..lastSpace].TrimEnd(), lastToken);
+
+        return (argument, null);
     }
 
     // Matches "<command> <argument>" case-insensitively, requiring whitespace after the command
