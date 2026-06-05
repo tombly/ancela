@@ -158,6 +158,40 @@ public abstract class AgentTestBase
     }
 
     /// <summary>
+    /// Sends <paramref name="message"/> and runs <paramref name="verify"/>, retrying the whole
+    /// exchange up to <paramref name="attempts"/> times before surfacing the failure. Live-model
+    /// tool selection is non-deterministic — on a given run the model may skip a tool call or
+    /// take another path — so a single miss shouldn't fail the build, while a genuine routing
+    /// regression still fails every attempt. Mock invocations accumulate across attempts, so the
+    /// <paramref name="verify"/> should use <c>Times.AtLeastOnce</c> rather than <c>Times.Once</c>.
+    /// Returns the response from the attempt that satisfied <paramref name="verify"/>.
+    /// <paramref name="reset"/> runs before each attempt — use it to clear any per-attempt state
+    /// (e.g. a captured-arguments list) so a retry isn't polluted by a previous attempt.
+    /// </summary>
+    protected async Task<string> SendUntilAsync(string message, Action verify, int attempts = 3, Action? reset = null)
+    {
+        Exception? lastFailure = null;
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            try
+            {
+                reset?.Invoke();
+                var response = await SendMessageAsync(message);
+                verify();
+                return response;
+            }
+            catch (Exception ex)
+            {
+                // Either the model took a different path this run, or a transient API error —
+                // retry. The last failure is rethrown if every attempt misses.
+                lastFailure = ex;
+            }
+        }
+
+        throw lastFailure!;
+    }
+
+    /// <summary>
     /// Configures the mock to return specific todos when GetToDosAsync is called.
     /// Useful for testing delete operations that need existing todo IDs.
     /// </summary>
