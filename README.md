@@ -1,27 +1,69 @@
 # Ancela
 
-Ancela is an experimental AI assistant. The goal of this project is to create an assistant that is actually useful by integrating with real-world services, supplementing them with special AI abilities, and possessing limited autonomy. 
+Ancela is an experimental, single-owner AI assistant you talk to by text message.
+Send it an SMS and it can manage your calendar and email, track to-dos and projects,
+look things up on the web, watch for conditions and remind you — acting on your behalf
+across the real-world services it's connected to.
 
-## How It Works
+> **Experimental personal project, not a product.** It's wired to one owner's accounts
+> and makes deliberate trust trade-offs (see [Security & trust model](#security--trust-model))
+> that only make sense for a personal, self-hosted deployment.
 
-Ancela is built using modern cloud-native patterns: .NET Aspire for infrastructure-as-code, Azure Functions for serverless compute, Azure Cosmos DB for scalable storage, and Semantic Kernel for AI orchestration. The assistant interacts with users via SMS using Twilio, and leverages OpenAI GPT models to understand and respond to natural language requests.
+## What it can do
 
-Ancela's capabilities include:
-- Managing todos
-- Accessing calendar events (read and create)
-- Reading and sending emails
-- Searching contacts
-- Storing persistent knowledge
-- Accessing personal finances
-- Sending SMS messages
-- Searching and fetching web content
-- Scheduling one-time SMS reminders
-- Watching standing rules (recurring conditions that notify when met)
-- Running scheduled tasks (recurring actions that report back on a clock schedule)
+You interact entirely over SMS. Under the hood the assistant has a set of capabilities:
+
+- **Calendar & email** — read your calendar, create events, read your inbox, and send mail (via Microsoft Graph).
+- **Contacts** — look up people's details from your address book.
+- **Money** — check account balances and recent transactions (via YNAB).
+- **Memory** — remember facts about you and keep a shared list of to-dos.
+- **Projects** — longer-lived workspaces for bigger efforts, with freeform notes and trackable, categorized entries (a trip, a list to work through over time, ideas to collect).
+- **Reminders** — schedule a one-time SMS reminder for a specific time.
+- **Standing rules** — watch a recurring condition on a timer and notify you when it's met.
+- **Scheduled tasks** — run a recurring action on a clock schedule and report back (e.g. a daily calendar summary).
+- **Web** — search the web and fetch page content to answer questions.
+- **reMarkable** — send a document to your reMarkable tablet (owner only).
+
+### Example prompts
+
+```
+hello ancela                                    ← start a session
+Remember that my favorite color is blue
+Add a to-do: buy milk, eggs, and bread
+What's on my calendar tomorrow?
+Create a lunch with Sarah next Friday at 1 PM
+Any new emails? Reply to Sarah that I'm running late
+What's John's email address?
+How much is in my checking account?
+Remind me to call the dentist at 9am Monday
+Every morning at 7, text me my calendar for the day
+Let me know if I get an email from the landlord
+Start a project for our backpacking trip and add a packing list
+```
+
+## Architecture
+
+Ancela is a cloud-native .NET application orchestrated with [Aspire](https://learn.microsoft.com/dotnet/aspire/).
+
+The message flow:
+
+1. A user texts the assistant's **Twilio** number.
+2. Twilio posts the message to an **Azure Functions** HTTP trigger, which enqueues it to **Azure Service Bus** and returns immediately.
+3. A queue processor picks up the message. A lightweight interceptor handles session and access commands (`hello ancela`, `invite`, `revoke`); everything else is handed to the agent.
+4. The **agent** builds a [Semantic Kernel](https://learn.microsoft.com/semantic-kernel/) instance per request, exposes its capabilities as kernel functions, and lets **OpenAI (`gpt-5-mini`)** decide which to call via automatic function calling.
+5. Those functions read and write **Azure Cosmos DB** and reach out to Microsoft Graph, YNAB, the web (Tavily), Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
+
+**Autonomous work** (standing rules and scheduled tasks) runs the same agent from a timer/queue with no user present, under a restricted kernel profile (see [Security & trust model](#security--trust-model)).
 
 ![Design](Images/design.svg)
 
-## Design & trust model
+*The diagram shows the core chat path. Autonomous work (reminders, standing rules, scheduled tasks) runs the same agent off its own Service Bus queues and is described above.*
+
+**Tech stack:** .NET 10 / C# 13 · Aspire (orchestration + Bicep infrastructure-as-code) · Azure Functions (isolated worker) · Azure Cosmos DB · Azure Service Bus · Semantic Kernel + OpenAI · Twilio · Microsoft Graph · YNAB · reMarkable.
+
+A companion read-only CLI (`Ancela.Cli`) browses the Cosmos containers for auditing and runs owner TOTP enrollment.
+
+## Security & trust model
 
 Ancela is a **single-owner** assistant. Each deployed instance is wired to exactly
 one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
@@ -37,8 +79,8 @@ owner's data as by-design, not as a vulnerability.
 
 Data model implications:
 - All Cosmos containers partition on `/agentPhoneNumber` (one value per instance).
-- **Knowledge and to-dos are shared** across the instance's authorized users — it is
-  one shared memory, by design.
+- **Knowledge, to-dos, and projects are shared** across the instance's authorized
+  users — it is one shared memory, by design.
 - **Chat history is per-user** (filtered by `userPhoneNumber`).
 - Reminders, standing rules, and scheduled tasks are created and listed per-user.
 
@@ -105,133 +147,87 @@ not instructions to follow. This provenance tagging does not make stored content
 *trusted*; it mainly reduces memory laundering risk by preserving where a memory came
 from and making it auditable when the model encounters it again.
 
-## Getting Started
+## Build & run
 
-### Local Development
+### Prerequisites
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/tombly/ancela.git
-   cd ancela
-   ```
-2. **Configure Graph Access**
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [Aspire tooling](https://learn.microsoft.com/dotnet/aspire/fundamentals/setup-tooling) and the Azure CLI for deployment
+- Accounts/keys: OpenAI, Twilio (with a phone number), a Microsoft Entra app registration, and (optionally) YNAB
 
-- Navigate to your organization's Entra admin center [https://aad.portal.azure.com/] and login with a Global administrator account.
+### 1. Configure Microsoft Graph access
 
-- Select a directory and then select App registrations under Manage.
+In your organization's [Entra admin center](https://aad.portal.azure.com/), create an
+**App registration** (single-tenant, no redirect URI) and note its **Application
+(client) ID** and **Directory (tenant) ID**. Under **API permissions**, add these
+*Application* permissions and **grant admin consent**: `User.Read.All`,
+`Calendars.ReadWrite`, `Contacts.Read`, `Mail.Read`, `Mail.Send`. Then create a
+**client secret** under **Certificates & secrets** and copy its value.
 
-- Select New registration. Enter a name for your application, for example, Ancela AI.
+### 2. Set user secrets
 
-- Set Supported account types to Accounts in this organizational directory only.
+From the AppHost project:
 
-- Leave Redirect URI empty.
-
-- Select Register. On the application's Overview page, copy the value of the Application (client) ID and Directory (tenant) ID and save them, you will need these values in the next step.
-
-- Select API permissions under Manage.
-
-- Remove the default User.Read permission under Configured permissions by selecting the ellipses (...) in its row and selecting Remove permission.
-
-- Perform the following steps for each of the permissions `User.Read.All`, `Calendars.ReadWrite`, `Contacts.Read`, `Mail.Read`, and `Mail.Send`:
-
-  - Select Add a permission, then Microsoft Graph.
-
-  - Select Application permissions.
-
-  - Select that permission, then select Add permissions.
-
-- Select Grant admin consent for..., then select Yes to provide admin consent for the selected permission.
-
-- Select Certificates and secrets under Manage, then select New client secret.
-
-- Enter a description, choose a duration, and select Add.
-
-- Copy the secret from the Value column, you will need it in the next step.
-
-3. **Configure user secrets**
-   
-   Navigate to the AppHost project folder and set your secrets:
-   ```bash
-   cd Ancela.AppHost
-   dotnet user-secrets set Parameters:openai-api-key "your-openai-api-key"
-   dotnet user-secrets set Parameters:twilio-account-sid "your-twilio-account-sid"
-   dotnet user-secrets set Parameters:twilio-auth-token "your-twilio-auth-token"
-   dotnet user-secrets set Parameters:twilio-phone-number "your-twilio-phone-number"
-   dotnet user-secrets set Parameters:graph-user-id "your-entra-user-id"
-   dotnet user-secrets set Parameters:graph-tenant-id "your-entra-tenant-id"
-   dotnet user-secrets set Parameters:graph-client-id "your-graph-app-client-id"
-   dotnet user-secrets set Parameters:graph-client-secret "your-graph-app-client-secret"
-   dotnet user-secrets set Parameters:ynab-access-token "your-ynab-access-token"
-   ```
-
-4. **Set environment variables**
-
-   Two environment variables control Azure resource naming. Set them in your shell profile (e.g. `~/.zshrc`) so they're never committed to the repo:
-   ```bash
-   export ANCELA_RESOURCE_PREFIX=your-unique-prefix   # prefixed onto all Azure resource names
-   export ANCELA_RESOURCE_GROUP=your-resource-group   # used by configure_cosmos.sh
-   ```
-
-5. **Run locally**
-   ```bash
-   dotnet run --project Ancela.AppHost
-   ```
-
-   The Aspire dashboard will launch, showing all running services and their endpoints.
-
-### Deployment to Azure
-
-1. **Configure infrastructure**
-   
-   The project uses .NET Aspire for infrastructure-as-code. Bicep templates generated by Aspire are generated in `Ancela.AppHost/aspire-output/`.
-
-2. **Deploy using Aspire**
-   ```bash
-   ANCELA_RESOURCE_PREFIX=your-unique-prefix aspire publish
-   aspire deploy --clear-cache
-   ```
-
-   `aspire publish` bakes the prefix into generated Bicep resource names. `aspire deploy` will prompt you for the resource group name and any required secrets on each run. You can easily grab secret values from user secrets:
-   ```bash
-   cd Ancela.AppHost
-   dotnet user-secrets list | grep Parameters
-   ```
-
-3. **Post-deployment configuration**
-
-   After deploying, grant your Entra principal the Contributor role for Cosmos DB so you can access Data Explorer and create the Cosmos DB database and containers:
-   ```bash
-   ANCELA_RESOURCE_PREFIX=your-unique-prefix ANCELA_RESOURCE_GROUP=your-resource-group ./configure_cosmos.sh
-   ```
-
-## Usage
-
-### Starting a Session
-
-Send an SMS to your Twilio number:
-```
-hello ancela
+```bash
+cd Ancela.AppHost
+dotnet user-secrets set Parameters:openai-api-key      "..."
+dotnet user-secrets set Parameters:twilio-account-sid  "..."
+dotnet user-secrets set Parameters:twilio-auth-token   "..."
+dotnet user-secrets set Parameters:twilio-phone-number "..."
+dotnet user-secrets set Parameters:graph-user-id       "..."   # the owner's Entra user ID
+dotnet user-secrets set Parameters:graph-tenant-id     "..."
+dotnet user-secrets set Parameters:graph-client-id     "..."
+dotnet user-secrets set Parameters:graph-client-secret "..."
+dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
 ```
 
-### Interacting
+To use owner step-up (`invite`/`revoke`), also set `OWNER_TOTP_SECRET` to the value
+produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).
 
+### 3. Set resource-naming environment variables
+
+Two variables control Azure resource naming. Put them in your shell profile (e.g.
+`~/.zshrc`) so they're never committed:
+
+```bash
+export ANCELA_RESOURCE_PREFIX=your-unique-prefix   # prefixed onto all Azure resource names
+export ANCELA_RESOURCE_GROUP=your-resource-group   # used by configure_cosmos.sh
 ```
-Remember that my favorite color is blue
-Save a todo: buy milk, eggs, and bread
-List my todos
-What's on my calendar today?
-Do I have any meetings tomorrow?
-Create a calendar event for lunch with Sarah next Friday at 1 PM
-Do I have any new emails?
-Email Sarah and let her know the meeting is rescheduled
-What's John's email address?
-How much is in my checking account?
+
+### 4. Run locally
+
+```bash
+dotnet run --project Ancela.AppHost
+```
+
+The Aspire dashboard launches and shows every service and its endpoints.
+
+### Deploy to Azure
+
+Aspire generates Bicep templates into `Ancela.AppHost/aspire-output/`.
+
+```bash
+ANCELA_RESOURCE_PREFIX=your-unique-prefix aspire publish   # bake the prefix into resource names
+aspire deploy --clear-cache                                # prompts for resource group + secrets
+```
+
+You can pull secret values from user secrets to paste during deploy:
+
+```bash
+cd Ancela.AppHost && dotnet user-secrets list | grep Parameters
+```
+
+After the first deploy, grant your Entra principal the Contributor role on Cosmos DB,
+then create the database and containers:
+
+```bash
+ANCELA_RESOURCE_PREFIX=your-unique-prefix ANCELA_RESOURCE_GROUP=your-resource-group ./configure_cosmos.sh
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Made with ❤️ using .NET Aspire**
+**Made with ❤️ using Aspire**
