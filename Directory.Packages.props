@@ -5,7 +5,6 @@
   <ItemGroup>
     <!-- Aspire packages -->
     <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.4.2" />
-    <PackageVersion Include="Aspire.Azure.Storage.Queues" Version="13.4.2" />
     <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.4.2" />
     <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.4.2" />
     <PackageVersion Include="Aspire.Hosting.Azure.Functions" Version="13.4.2" />
@@ -19,7 +18,6 @@
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.CosmosDB" Version="4.14.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
-    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Queues" Version="5.5.3" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.ServiceBus" Version="5.22.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
     <!-- Microsoft Application Insights -->

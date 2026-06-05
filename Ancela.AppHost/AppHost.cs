@@ -51,8 +51,6 @@ var storage = builder.AddAzureStorage("storage")
                      });
 
 var blobs = storage.AddBlobs("blobs");
-var queues = storage.AddQueues("queues");
-var tables = storage.AddTables("tables");
 
 var serviceBus = builder.AddAzureServiceBus("servicebus")
                         .RunAsEmulator()
@@ -76,7 +74,6 @@ var chatQueue = serviceBus.AddServiceBusQueue("chat-messages");
 var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>("functionapp")
     .WithReference(cosmosDb)
     .WithReference(blobs)
-    .WithReference(tables)
     .WithReference(serviceBus)
     .WithReference(chat)
     .WithHostStorage(storage)
