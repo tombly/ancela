@@ -1,3 +1,4 @@
+using System.Globalization;
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
@@ -51,27 +52,33 @@ public class GraphClient : IGraphClient
         var startDate = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
         var endDate = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-        // Get all calendars for the user.
+        // Get all calendars in the user's default calendar group.
         var calendars = await _appClient.Users[_entraUserId].Calendars.GetAsync();
 
         var allEvents = new List<Event>();
 
         if (calendars?.Value != null)
         {
-            // Iterate through each calendar and get events.
+            // Pull each calendar's events with CalendarView, which expands recurring series
+            // into their individual occurrences within the window. A plain /events query
+            // returns only single events and series *masters* (whose start/end are the first
+            // occurrence), so recurring meetings on a given day are silently missed.
             foreach (var calendar in calendars.Value)
             {
-                var events = await _appClient.Users[_entraUserId].Calendars[calendar.Id].Events.GetAsync((config) =>
+                var events = await _appClient.Users[_entraUserId].Calendars[calendar.Id].CalendarView.GetAsync((config) =>
                 {
+                    // CalendarView takes the range as query parameters (not a $filter) and
+                    // returns every occurrence overlapping it, including multi-day events.
+                    config.QueryParameters.StartDateTime = startDate;
+                    config.QueryParameters.EndDateTime = endDate;
                     // Request specific properties.
                     config.QueryParameters.Select = ["subject", "start", "end", "organizer"];
-                    // Filter events that overlap with the date range (including multi-day events).
-                    // An event overlaps if it starts before the range ends AND ends after the range starts.
-                    config.QueryParameters.Filter = $"start/dateTime lt '{endDate}' and end/dateTime gt '{startDate}'";
                     // Get at most 50 results per calendar.
                     config.QueryParameters.Top = 50;
                     // Sort by start time.
                     config.QueryParameters.Orderby = ["start/dateTime"];
+                    // Return start/end in UTC so they parse unambiguously below.
+                    config.Headers.Add("Prefer", "outlook.timezone=\"UTC\"");
                 });
 
                 if (events?.Value != null)
@@ -79,17 +86,26 @@ public class GraphClient : IGraphClient
             }
         }
 
-        // Sort all events by start time and map to model.
+        // Map to model and sort by absolute start instant across all calendars.
         return allEvents
             .Where(e => e.Start?.DateTime != null && e.End?.DateTime != null)
-            .OrderBy(e => e.Start!.DateTime)
             .Select(e => new EventModel
             {
                 Description = e.Subject ?? string.Empty,
-                Start = DateTimeOffset.Parse(e.Start!.DateTime!),
-                End = DateTimeOffset.Parse(e.End!.DateTime!)
-            }).ToArray();
+                Start = ParseGraphUtc(e.Start!.DateTime!),
+                End = ParseGraphUtc(e.End!.DateTime!)
+            })
+            .OrderBy(e => e.Start)
+            .ToArray();
     }
+
+    // CalendarView returns times as a zone-less string (e.g. "2026-06-04T13:00:00.0000000")
+    // alongside a separate TimeZone field. With the Prefer: outlook.timezone="UTC" header that
+    // zone is UTC, so parse the string as universal rather than letting DateTimeOffset assume
+    // the host's local zone (which would be wrong anywhere but a UTC host).
+    private static DateTimeOffset ParseGraphUtc(string dateTime) =>
+        DateTimeOffset.Parse(dateTime, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
     /// <summary>
     /// Creates a new calendar event. The start/end dates must be in the format:
