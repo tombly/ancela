@@ -25,6 +25,11 @@ var graphClientSecretParameter = builder.AddParameter("graph-client-secret", tru
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
 var remarkableDeviceToken = builder.AddParameter("remarkable-device-token", true);
+var fitbitClientId = builder.AddParameter("fitbit-client-id", true);
+var fitbitClientSecret = builder.AddParameter("fitbit-client-secret", true);
+// One-time bootstrap seed from `ancela fitbit auth`. After first use the agent stores the
+// rotating refresh token in Cosmos; change this value to re-consent.
+var fitbitRefreshToken = builder.AddParameter("fitbit-refresh-token", true);
 // Required for access management: the owner's Base32 TOTP secret. invite/revoke require a
 // current code and fail closed without this, so set it (the rest of the agent runs without it).
 // Generate one with `ancela enroll` and scan the QR into an authenticator app.
@@ -88,6 +93,9 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("YNAB_ACCESS_TOKEN", ynabAccessToken)
     .WithEnvironment("TAVILY_API_KEY", tavilyApiKey)
     .WithEnvironment("REMARKABLE_DEVICE_TOKEN", remarkableDeviceToken)
+    .WithEnvironment("FITBIT_CLIENT_ID", fitbitClientId)
+    .WithEnvironment("FITBIT_CLIENT_SECRET", fitbitClientSecret)
+    .WithEnvironment("FITBIT_REFRESH_TOKEN", fitbitRefreshToken)
     .WithEnvironment("OWNER_TOTP_SECRET", ownerTotpSecret)
     .WithExternalHttpEndpoints();
 
