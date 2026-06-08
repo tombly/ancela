@@ -66,7 +66,7 @@ public static class KernelProfilePolicy
     }
 
     // Functions that act on the owner's shared resources, send on the agent's behalf, or
-    // read owner-private data (health data from Fitbit). Non-owner users are denied access
+    // read owner-private data (Google Health data). Non-owner users are denied access
     // even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)

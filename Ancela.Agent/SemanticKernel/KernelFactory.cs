@@ -8,7 +8,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.FitbitPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
@@ -36,7 +36,7 @@ public sealed class KernelFactory(
     MemoryPlugin _memoryPlugin,
     ProjectsPlugin _projectsPlugin,
     YnabPlugin _ynabPlugin,
-    FitbitPlugin _fitbitPlugin,
+    GoogleHealthPlugin _googleHealthPlugin,
     ReminderPlugin _reminderPlugin,
     StandingRulePlugin _standingRulePlugin,
     ScheduledTaskPlugin _scheduledTaskPlugin,
@@ -63,7 +63,7 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_memoryPlugin);
                 plugins.AddFromObject(_projectsPlugin);
                 plugins.AddFromObject(_ynabPlugin);
-                plugins.AddFromObject(_fitbitPlugin);
+                plugins.AddFromObject(_googleHealthPlugin);
                 plugins.AddFromObject(_reminderPlugin);
                 plugins.AddFromObject(_standingRulePlugin);
                 plugins.AddFromObject(_scheduledTaskPlugin);

@@ -17,7 +17,7 @@ services.AddTransient<PingCommand>();
 services.AddTransient<ListContainerCommand>();
 services.AddTransient<ShowContainerCommand>();
 services.AddTransient<EnrollCommand>();
-services.AddTransient<FitbitAuthCommand>();
+services.AddTransient<GoogleHealthAuthCommand>();
 
 var registrar = new TypeRegistrar(services);
 var app = new CommandApp(registrar);
@@ -42,12 +42,12 @@ app.Configure(config =>
         .WithExample("enroll")
         .WithExample("enroll", "--new");
 
-    config.AddBranch("fitbit", fitbit =>
+    config.AddBranch("health", health =>
     {
-        fitbit.SetDescription("Fitbit integration setup.");
-        fitbit.AddCommand<FitbitAuthCommand>("auth")
-            .WithDescription("Run the one-time Fitbit OAuth consent and print the seed refresh token.")
-            .WithExample("fitbit", "auth");
+        health.SetDescription("Google Health integration setup.");
+        health.AddCommand<GoogleHealthAuthCommand>("auth")
+            .WithDescription("Run the one-time Google Health OAuth consent and print the seed refresh token.")
+            .WithExample("health", "auth");
     });
 });
 

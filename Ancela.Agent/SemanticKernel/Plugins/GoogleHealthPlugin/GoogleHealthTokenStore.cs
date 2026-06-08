@@ -1,35 +1,34 @@
 using System.Net;
-using Ancela.Agent.SemanticKernel.Plugins.FitbitPlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin.Models;
 using Microsoft.Azure.Cosmos;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.FitbitPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 
-public interface IFitbitTokenStore
+public interface IGoogleHealthTokenStore
 {
-    /// <summary>Reads the Fitbit token document, or null if none has been bootstrapped yet.</summary>
+    /// <summary>Reads the Google Health token document, or null if none has been bootstrapped yet.</summary>
     Task<OAuthToken?> GetAsync();
 
     /// <summary>
     /// Persists the token. When <see cref="OAuthToken.ETag"/> is set the write is conditional
     /// (optimistic concurrency) and throws <see cref="CosmosException"/> with
-    /// <see cref="HttpStatusCode.PreconditionFailed"/> if another writer won the race; a first-time
-    /// create that races throws <see cref="HttpStatusCode.Conflict"/>. On success the token's ETag
-    /// is refreshed from the response.
+    /// <see cref="HttpStatusCode.PreconditionFailed"/> if another writer won the race. On success
+    /// the token's ETag is refreshed from the response. Callers treat persistence as best-effort:
+    /// because Google refresh tokens are durable, a failed write is not fatal.
     /// </summary>
     Task SaveAsync(OAuthToken token);
 }
 
 /// <summary>
-/// Cosmos-backed store for the single owner OAuth token, in the <c>oauth_tokens</c> container
-/// (partitioned by <c>/provider</c>). Mirrors the lazy-create shape of the other stores. This
-/// container is deliberately NOT registered in the read-only CLI catalog so the audit viewer
-/// cannot dump the access/refresh tokens.
+/// Cosmos-backed store for the single owner OAuth token, in the shared <c>oauth_tokens</c> container
+/// (partitioned by <c>/provider</c>). Deliberately NOT registered in the read-only CLI catalog so the
+/// audit viewer cannot dump the access/refresh tokens.
 /// </summary>
-public class FitbitTokenStore(CosmosClient _cosmosClient) : IFitbitTokenStore
+public class GoogleHealthTokenStore(CosmosClient _cosmosClient) : IGoogleHealthTokenStore
 {
     private const string DatabaseName = "anceladb";
     private const string ContainerName = "oauth_tokens";
-    private const string FitbitProvider = "fitbit";
+    private const string Provider = "google-health";
 
     private async Task<Container> GetContainerAsync()
     {
@@ -45,7 +44,7 @@ public class FitbitTokenStore(CosmosClient _cosmosClient) : IFitbitTokenStore
         var container = await GetContainerAsync();
         try
         {
-            var response = await container.ReadItemAsync<OAuthToken>(FitbitProvider, new PartitionKey(FitbitProvider));
+            var response = await container.ReadItemAsync<OAuthToken>(Provider, new PartitionKey(Provider));
             var token = response.Resource;
             token.ETag = response.ETag;
             return token;
@@ -61,8 +60,6 @@ public class FitbitTokenStore(CosmosClient _cosmosClient) : IFitbitTokenStore
         var container = await GetContainerAsync();
         var partitionKey = new PartitionKey(token.Provider);
 
-        // No ETag → first write (create, races as Conflict). ETag → conditional replace
-        // (races as PreconditionFailed). The client treats both as "someone else won, re-read".
         ItemResponse<OAuthToken> response = token.ETag is null
             ? await container.CreateItemAsync(token, partitionKey)
             : await container.ReplaceItemAsync(

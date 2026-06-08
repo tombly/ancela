@@ -9,6 +9,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -70,6 +71,12 @@ public class SecurityTests
         services.AddSingleton<MemoryPlugin>();
         services.AddSingleton<SmsPlugin>();
         services.AddSingleton<YnabPlugin>();
+        services.AddSingleton<GoogleHealthPlugin>(sp => new GoogleHealthPlugin(
+            new GoogleHealthClient(
+                new Mock<IHttpClientFactory>().Object,
+                new Mock<IGoogleHealthTokenStore>().Object,
+                new GoogleHealthCredentials(),
+                NullLogger<GoogleHealthClient>.Instance)));
         services.AddSingleton<ReminderPlugin>(sp =>
             new ReminderPlugin(
                 new Mock<IReminderStore>().Object,

@@ -81,7 +81,7 @@ az cosmosdb sql container create \
   --name "audit" \
   --partition-key-path "/agentPhoneNumber"
 
-# Holds the single owner OAuth token per provider (e.g. fitbit). Deliberately omitted from the
+# Holds the single owner OAuth token per provider (e.g. google-health). Deliberately omitted from the
 # read-only CLI catalog so the audit viewer can't dump access/refresh tokens.
 az cosmosdb sql container create \
   --account-name $cosmos_account \
