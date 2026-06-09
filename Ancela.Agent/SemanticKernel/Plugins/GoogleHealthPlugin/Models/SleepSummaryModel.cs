@@ -2,8 +2,9 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin.Models;
 
 /// <summary>
 /// Sleep summary for a single date, from the Google Health API reconciled sleep stream.
-/// <see cref="Stages"/> is null when the session wasn't staged (classic sleep); all minute
-/// fields are nullable so "unavailable" never collapses to zero.
+/// <see cref="Stages"/> is null when the session wasn't staged (classic sleep); the summary
+/// minute fields are nullable so "unavailable" never collapses to zero. The per-stage minutes
+/// on <see cref="SleepStages"/> are non-nullable and only populated when <see cref="Stages"/> is set.
 /// </summary>
 public class SleepSummaryModel
 {

@@ -11,7 +11,7 @@ public class DailyActivityModel
 
     public int Steps { get; set; }
 
-    /// <summary>Total distance for the day in kilometres (the API reports metres).</summary>
+    /// <summary>Total distance for the day in kilometres (the API reports millimetres).</summary>
     public double DistanceKm { get; set; }
 
     /// <summary>Total calories burned for the day (kcal).</summary>

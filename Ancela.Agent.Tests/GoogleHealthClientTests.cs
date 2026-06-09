@@ -281,7 +281,18 @@ public class GoogleHealthClientTests
 
         var act = () => client.GetHeartRateAsync("2026-06-01", "2026-06-20");
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*14-day*");
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*within 14 days*");
+    }
+
+    [Fact]
+    public async Task InvalidDate_Throws_InsteadOfSilentlyReturningToday()
+    {
+        // Health data must not silently resolve a malformed date to today; the agent gets the message.
+        var client = CreateClient(new FakeHandler(), FreshStore());
+
+        var act = () => client.GetDailyActivityAsync("not-a-date");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Could not parse*");
     }
 
     // ---- Helpers -----------------------------------------------------------

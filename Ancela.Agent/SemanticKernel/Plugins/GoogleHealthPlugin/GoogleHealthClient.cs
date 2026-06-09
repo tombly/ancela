@@ -132,7 +132,7 @@ public class GoogleHealthClient(
             (start, end) = (end, start);
         if (end.DayNumber - start.DayNumber > MaxHeartRateRangeDays)
             throw new InvalidOperationException(
-                $"The Google Health API limits resting heart rate to a {MaxHeartRateRangeDays}-day range; request a narrower window.");
+                $"Resting heart rate is limited to start and end dates within {MaxHeartRateRangeDays} days of each other; request a narrower window.");
 
         // Daily summaries support list/reconcile (not dailyRollUp); reconcile yields one merged point
         // per day (list returns a row per data source). Filter by snake_case date.
@@ -338,12 +338,15 @@ public class GoogleHealthClient(
     private static string Fingerprint(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
+    // Fail loud on an unparseable date rather than silently returning today's data — the exception
+    // message reaches the model, so the agent can ask for a corrected date instead of misreporting.
     private static DateOnly ResolveDate(string date) =>
         string.Equals(date, "today", StringComparison.OrdinalIgnoreCase)
             ? DateOnly.FromDateTime(DateTime.UtcNow)
             : DateOnly.TryParse(date, CultureInfo.InvariantCulture, out var parsed)
                 ? parsed
-                : DateOnly.FromDateTime(DateTime.UtcNow);
+                : throw new InvalidOperationException(
+                    $"Could not parse the date '{date}'. Use YYYY-MM-DD format or 'today'.");
 
     // CivilDateTime nests a google.type.Date under "date"; "time" defaults to midnight when omitted.
     private static object Civil(DateOnly day) => new { date = new { year = day.Year, month = day.Month, day = day.Day } };
