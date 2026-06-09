@@ -156,6 +156,27 @@ public class GoogleHealthClientTests
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*not connected*");
     }
 
+    [Fact]
+    public async Task ExpiredRefreshToken_InvalidGrant_ThrowsReauthMessageForTheAgentToRelay()
+    {
+        // A near-expiry doc forces a refresh; Google answers 400 invalid_grant when the refresh token
+        // has expired/been revoked. The message must name `ancela health auth` so the agent (which
+        // relays the exception text) can tell the owner exactly how to reconnect.
+        var store = new Mock<IGoogleHealthTokenStore>();
+        store.Setup(s => s.GetAsync()).ReturnsAsync(
+            Doc("access1", "refresh1", DateTimeOffset.UtcNow.AddMinutes(1), Fingerprint(Seed)));
+        var handler = new FakeHandler
+        {
+            TokenStatus = HttpStatusCode.BadRequest,
+            TokenJson = () => "{\"error\":\"invalid_grant\",\"error_description\":\"Token has been expired or revoked.\"}",
+        };
+        var client = CreateClient(handler, store.Object);
+
+        var act = () => client.GetDailyActivityAsync("2026-06-06");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*ancela health auth*");
+    }
+
     // ---- Mapping -----------------------------------------------------------
 
     [Fact]
@@ -166,8 +187,8 @@ public class GoogleHealthClientTests
             RollupJsonByType =
             {
                 ["steps"] = Rollup("steps", "\"countSum\":8421"),
-                ["distance"] = Rollup("distance", "\"metersSum\":6430"),
-                ["total-calories"] = Rollup("totalCalories", "\"kilocaloriesSum\":2310.4"),
+                ["distance"] = Rollup("distance", "\"millimetersSum\":6430000"),
+                ["total-calories"] = Rollup("totalCalories", "\"kcalSum\":2310.4"),
                 ["active-minutes"] = Rollup("activeMinutes",
                     "\"activeMinutesRollupByActivityLevel\":[{\"activityLevel\":\"LIGHT\",\"activeMinutesSum\":180},{\"activityLevel\":\"MODERATE\",\"activeMinutesSum\":15},{\"activityLevel\":\"VIGOROUS\",\"activeMinutesSum\":22}]"),
             },
@@ -185,33 +206,38 @@ public class GoogleHealthClientTests
     }
 
     [Fact]
-    public async Task MapsSleep_WithStages()
+    public async Task MapsSleep_WithStages_DeduplicatingStageSummary()
     {
+        // stagesSummary lists each stage twice (as the live API does); all numbers are JSON strings.
         const string json = """
-        {"dataPoints":[{"sleep":{"type":"STAGES","duration":"28800s","efficiency":94.0,
-          "sleepSummary":{"stageSummary":[
-            {"stage":"DEEP","duration":"4680s"},{"stage":"LIGHT","duration":"13800s"},
-            {"stage":"REM","duration":"5400s"},{"stage":"AWAKE","duration":"1200s"}]}}}]}
+        {"dataPoints":[{"sleep":{"type":"STAGES","summary":{
+          "minutesInSleepPeriod":"480","minutesAsleep":"398","minutesAwake":"20",
+          "stagesSummary":[
+            {"type":"DEEP","minutes":"78"},{"type":"LIGHT","minutes":"230"},
+            {"type":"REM","minutes":"90"},{"type":"AWAKE","minutes":"20"},
+            {"type":"DEEP","minutes":"78"},{"type":"LIGHT","minutes":"230"},
+            {"type":"REM","minutes":"90"},{"type":"AWAKE","minutes":"20"}]}}}]}
         """;
         var client = CreateClient(new FakeHandler { ReconcileJson = json }, FreshStore());
 
         var result = await client.GetSleepSummaryAsync("2026-06-06");
 
         result.Stages.Should().NotBeNull();
-        result.Stages!.DeepMinutes.Should().Be(78);
+        result.Stages!.DeepMinutes.Should().Be(78);   // first occurrence, not summed
         result.Stages.LightMinutes.Should().Be(230);
         result.Stages.RemMinutes.Should().Be(90);
         result.Stages.AwakeMinutes.Should().Be(20);
-        result.AsleepMinutes.Should().Be(398);   // deep + light + rem
-        result.InBedMinutes.Should().Be(480);     // total duration
-        result.Efficiency.Should().Be(94);
+        result.AsleepMinutes.Should().Be(398);
+        result.InBedMinutes.Should().Be(480);
+        result.Efficiency.Should().Be(83);            // round(398 / 480 * 100)
     }
 
     [Fact]
     public async Task MapsSleep_WithoutStages_LeavesStagesNull()
     {
         const string json = """
-        {"dataPoints":[{"sleep":{"type":"classic","duration":"18000s","efficiency":88.0}}]}
+        {"dataPoints":[{"sleep":{"type":"classic","summary":{
+          "minutesInSleepPeriod":"330","minutesAsleep":"300","minutesAwake":"30"}}}]}
         """;
         var client = CreateClient(new FakeHandler { ReconcileJson = json }, FreshStore());
 
@@ -219,30 +245,33 @@ public class GoogleHealthClientTests
 
         result.Stages.Should().BeNull();
         result.AsleepMinutes.Should().Be(300);
-        result.Efficiency.Should().Be(88);
+        result.InBedMinutes.Should().Be(330);
+        result.Efficiency.Should().Be(91);            // round(300 / 330 * 100)
     }
 
     [Fact]
-    public async Task MapsRestingHeartRate_ToleratingMissingValues()
+    public async Task MapsRestingHeartRate_FromReconciledDailyValues()
     {
+        // reconcile returns one point per day; beatsPerMinute is a single JSON-string value, and a
+        // day without a computed value omits it. Date is nested under dailyRestingHeartRate.
         const string json = """
-        {"rollupDataPoints":[
-          {"civilStartTime":{"year":2026,"month":6,"day":5},
-           "value":{"dailyRestingHeartRate":{"beatsPerMinuteAvg":58.2,"beatsPerMinuteMin":54,"beatsPerMinuteMax":63}}},
-          {"civilStartTime":{"year":2026,"month":6,"day":6},
-           "value":{"dailyRestingHeartRate":{}}}
+        {"dataPoints":[
+          {"dailyRestingHeartRate":{"date":{"year":2026,"month":6,"day":6},"beatsPerMinute":"64"}},
+          {"dailyRestingHeartRate":{"date":{"year":2026,"month":6,"day":5},"beatsPerMinute":"65"}},
+          {"dailyRestingHeartRate":{"date":{"year":2026,"month":6,"day":7}}}
         ]}
         """;
-        var client = CreateClient(new FakeHandler { RollupDefaultJson = json }, FreshStore());
+        var client = CreateClient(new FakeHandler { ReconcileJson = json }, FreshStore());
 
-        var result = await client.GetHeartRateAsync("2026-06-05", "2026-06-06");
+        var result = await client.GetHeartRateAsync("2026-06-05", "2026-06-07");
 
-        result.Should().HaveCount(2);
-        result[0].Date.Should().Be("2026-06-05");
-        result[0].RestingHeartRate.Should().Be(58);
-        result[0].Min.Should().Be(54);
-        result[0].Max.Should().Be(63);
-        result[1].RestingHeartRate.Should().BeNull();
+        result.Should().HaveCount(3);
+        result[0].Date.Should().Be("2026-06-05");   // ordered ascending by date
+        result[0].RestingHeartRate.Should().Be(65);
+        result[1].Date.Should().Be("2026-06-06");
+        result[1].RestingHeartRate.Should().Be(64);
+        result[2].Date.Should().Be("2026-06-07");
+        result[2].RestingHeartRate.Should().BeNull();
     }
 
     [Fact]
@@ -296,7 +325,7 @@ public class GoogleHealthClientTests
         "{\"access_token\":\"" + accessToken + "\",\"expires_in\":3599,\"token_type\":\"Bearer\"}";
 
     private static string Rollup(string valueKey, string innerJson) =>
-        "{\"rollupDataPoints\":[{\"value\":{\"" + valueKey + "\":{" + innerJson + "}}}]}";
+        "{\"rollupDataPoints\":[{\"" + valueKey + "\":{" + innerJson + "}}]}";
 
     private static string Fingerprint(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
@@ -317,6 +346,7 @@ public class GoogleHealthClientTests
         public List<string?> SentBearers { get; } = [];
 
         public Func<string>? TokenJson { get; set; }
+        public HttpStatusCode TokenStatus { get; set; } = HttpStatusCode.OK;
         public TimeSpan TokenDelay { get; set; } = TimeSpan.Zero;
         public Dictionary<string, string> RollupJsonByType { get; } = [];
         public string RollupDefaultJson { get; set; } = "{}";
@@ -336,7 +366,7 @@ public class GoogleHealthClientTests
                     SentRefreshTokens.Add(FormValue(form, "refresh_token"));
                 }
                 if (TokenDelay > TimeSpan.Zero) await Task.Delay(TokenDelay, cancellationToken);
-                return Json(TokenJson?.Invoke() ?? throw new InvalidOperationException("TokenJson not configured."));
+                return Json(TokenJson?.Invoke() ?? throw new InvalidOperationException("TokenJson not configured."), TokenStatus);
             }
 
             lock (_gate) SentBearers.Add(request.Headers.Authorization?.Parameter);
@@ -358,8 +388,8 @@ public class GoogleHealthClientTests
             return end < 0 ? path[start..] : path[start..end];
         }
 
-        private static HttpResponseMessage Json(string json) =>
-            new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        private static HttpResponseMessage Json(string json, HttpStatusCode status = HttpStatusCode.OK) =>
+            new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
         private static string? FormValue(string body, string key) => body
             .Split('&', StringSplitOptions.RemoveEmptyEntries)

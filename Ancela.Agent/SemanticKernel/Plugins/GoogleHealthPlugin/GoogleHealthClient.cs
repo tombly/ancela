@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin.Models;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,10 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 /// cache. A failed Cosmos write is non-fatal — the in-memory token keeps working and the stored
 /// (still-valid) refresh token is reused next time. The first refresh token is seeded once from
 /// <see cref="GoogleHealthCredentials.SeedRefreshToken"/>; changing the seed re-bootstraps.
+///
+/// Endpoint paths use kebab-case data type ids (e.g. <c>daily-resting-heart-rate</c>); filter
+/// expressions use snake_case (e.g. <c>daily_resting_heart_rate.date</c>). The API serializes int64
+/// values as JSON strings, so deserialization allows reading numbers from strings.
 /// </summary>
 public class GoogleHealthClient(
     IHttpClientFactory _httpClientFactory,
@@ -29,11 +34,15 @@ public class GoogleHealthClient(
     public const string ClientName = "googlehealth";
     private const string Provider = "google-health";
     private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
-
-    // Resting heart rate (and calorie) roll-ups are capped at a 14-day range by the API.
     private const int MaxHeartRateRangeDays = 14;
 
     private static readonly TimeSpan ExpirySkew = TimeSpan.FromMinutes(2);
+
+    // The API serializes int64 fields (countSum, minutes, …) as JSON strings.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
 
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
     private OAuthToken? _cached;
@@ -52,7 +61,7 @@ public class GoogleHealthClient(
         var activeTask = DailyRollUpAsync("active-minutes", range);
         await Task.WhenAll(stepsTask, distanceTask, caloriesTask, activeTask);
 
-        var byLevel = FirstValue(activeTask.Result)?.ActiveMinutes?.ByLevel ?? [];
+        var byLevel = FirstPoint(activeTask.Result)?.ActiveMinutes?.ByLevel ?? [];
         int LevelMinutes(string level) => (int)(byLevel
             .FirstOrDefault(b => string.Equals(b.ActivityLevel, level, StringComparison.OrdinalIgnoreCase))?
             .ActiveMinutesSum ?? 0);
@@ -60,9 +69,9 @@ public class GoogleHealthClient(
         return new DailyActivityModel
         {
             Date = day.ToString("yyyy-MM-dd"),
-            Steps = (int)(FirstValue(stepsTask.Result)?.Steps?.CountSum ?? 0),
-            DistanceKm = (FirstValue(distanceTask.Result)?.Distance?.MetersSum ?? 0) / 1000.0,
-            CaloriesOut = (int)Math.Round(FirstValue(caloriesTask.Result)?.TotalCalories?.KilocaloriesSum ?? 0),
+            Steps = (int)(FirstPoint(stepsTask.Result)?.Steps?.CountSum ?? 0),
+            DistanceKm = (FirstPoint(distanceTask.Result)?.Distance?.MillimetersSum ?? 0) / 1_000_000.0,
+            CaloriesOut = (int)Math.Round(FirstPoint(caloriesTask.Result)?.TotalCalories?.KcalSum ?? 0),
             LightActiveMinutes = LevelMinutes("LIGHT"),
             ModerateActiveMinutes = LevelMinutes("MODERATE"),
             VigorousActiveMinutes = LevelMinutes("VIGOROUS"),
@@ -72,43 +81,47 @@ public class GoogleHealthClient(
     public async Task<SleepSummaryModel> GetSleepSummaryAsync(string date)
     {
         var day = ResolveDate(date);
-        var response = await ReconcileSleepAsync(day);
+        // Sleep is filed under its wake (end) date; filter the reconciled stream by civil end time.
+        var filter = $"sleep.interval.civil_end_time >= \"{day:yyyy-MM-dd}\" AND " +
+                     $"sleep.interval.civil_end_time < \"{day.AddDays(1):yyyy-MM-dd}\"";
+        var response = await GetAsync<ReconcileResponse>(
+            $"/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}");
 
-        // Pick the longest session for the date (the main sleep).
+        // Pick the main (longest) session for the date.
         var session = (response.DataPoints ?? [])
             .Select(d => d.Sleep)
-            .Where(s => s is not null)
-            .OrderByDescending(s => ParseDurationMinutes(s!.Duration) ?? 0)
+            .Where(s => s?.Summary is not null)
+            .OrderByDescending(s => s!.Summary!.MinutesInSleepPeriod)
             .FirstOrDefault();
 
-        var summary = new SleepSummaryModel { Date = day.ToString("yyyy-MM-dd") };
-        if (session is null)
-            return summary;
+        var result = new SleepSummaryModel { Date = day.ToString("yyyy-MM-dd") };
+        if (session?.Summary is not { } summary)
+            return result;
 
-        var stageSummary = session.SleepSummary?.StageSummary;
-        if (stageSummary is { Length: > 0 })
+        var stages = summary.StagesSummary ?? [];
+        if (string.Equals(session.Type, "STAGES", StringComparison.OrdinalIgnoreCase) && stages.Length > 0)
         {
-            int StageMinutes(string stage) => stageSummary
-                .Where(s => string.Equals(s.Stage, stage, StringComparison.OrdinalIgnoreCase))
-                .Sum(s => ParseDurationMinutes(s.Duration) ?? 0);
+            // stagesSummary lists each stage twice; take the first per type rather than summing.
+            int StageMinutes(string type) => stages
+                .Where(s => string.Equals(s.Type, type, StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Minutes)
+                .FirstOrDefault();
 
-            summary.Stages = new SleepStages
+            result.Stages = new SleepStages
             {
                 DeepMinutes = StageMinutes("DEEP"),
                 LightMinutes = StageMinutes("LIGHT"),
                 RemMinutes = StageMinutes("REM"),
                 AwakeMinutes = StageMinutes("AWAKE"),
             };
-            summary.AsleepMinutes = summary.Stages.DeepMinutes + summary.Stages.LightMinutes + summary.Stages.RemMinutes;
-        }
-        else
-        {
-            summary.AsleepMinutes = ParseDurationMinutes(session.Duration);
         }
 
-        summary.InBedMinutes = ParseDurationMinutes(session.Duration);
-        summary.Efficiency = session.Efficiency is { } efficiency ? (int)Math.Round(efficiency) : null;
-        return summary;
+        result.AsleepMinutes = summary.MinutesAsleep;
+        result.InBedMinutes = summary.MinutesInSleepPeriod;
+        result.Efficiency = summary.MinutesInSleepPeriod > 0
+            ? (int)Math.Round(summary.MinutesAsleep * 100.0 / summary.MinutesInSleepPeriod)
+            : null;
+        return result;
     }
 
     public async Task<HeartRateModel[]> GetHeartRateAsync(string startDate, string endDate)
@@ -121,20 +134,23 @@ public class GoogleHealthClient(
             throw new InvalidOperationException(
                 $"The Google Health API limits resting heart rate to a {MaxHeartRateRangeDays}-day range; request a narrower window.");
 
-        var response = await DailyRollUpAsync("daily-resting-heart-rate", (start, end.AddDays(1)));
+        // Daily summaries support list/reconcile (not dailyRollUp); reconcile yields one merged point
+        // per day (list returns a row per data source). Filter by snake_case date.
+        var filter = $"daily_resting_heart_rate.date >= \"{start:yyyy-MM-dd}\" AND " +
+                     $"daily_resting_heart_rate.date < \"{end.AddDays(1):yyyy-MM-dd}\"";
+        var response = await GetAsync<RestingHeartRateResponse>(
+            $"/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints:reconcile?pageSize=100&filter={Uri.EscapeDataString(filter)}");
 
-        return (response.RollupDataPoints ?? [])
-            .Select(point =>
+        // The value is a single beatsPerMinute (JSON string), with the date nested under it.
+        return (response.DataPoints ?? [])
+            .Select(point => point.DailyRestingHeartRate)
+            .Where(resting => resting is not null)
+            .Select(resting => new HeartRateModel
             {
-                var resting = point.Value?.DailyRestingHeartRate;
-                return new HeartRateModel
-                {
-                    Date = FormatCivil(point.CivilStartTime) ?? start.ToString("yyyy-MM-dd"),
-                    RestingHeartRate = resting?.BeatsPerMinuteAvg is { } avg ? (int)Math.Round(avg) : null,
-                    Min = resting?.BeatsPerMinuteMin,
-                    Max = resting?.BeatsPerMinuteMax,
-                };
+                Date = FormatDate(resting!.Date) ?? start.ToString("yyyy-MM-dd"),
+                RestingHeartRate = resting.BeatsPerMinute,
             })
+            .OrderBy(h => h.Date, StringComparer.Ordinal)
             .ToArray();
     }
 
@@ -147,19 +163,12 @@ public class GoogleHealthClient(
             range = new { start = Civil(range.Start), end = Civil(range.EndExclusive) },
             windowSizeDays = 1,
         };
-        return SendJsonAsync<RollupResponse>(
-            HttpMethod.Post, $"/v4/users/me/dataTypes/{dataType}/dataPoints:dailyRollUp", body);
+        return PostAsync<RollupResponse>($"/v4/users/me/dataTypes/{dataType}/dataPoints:dailyRollUp", body);
     }
 
-    private Task<ReconcileResponse> ReconcileSleepAsync(DateOnly day)
-    {
-        // Filter the reconciled sleep stream to the target date. The exact civil-time filter grammar
-        // is provisional and should be confirmed against a live response.
-        var filter = $"civilStartTime >= \"{day:yyyy-MM-dd}T00:00:00\" AND " +
-                     $"civilStartTime < \"{day.AddDays(1):yyyy-MM-dd}T00:00:00\"";
-        var path = $"/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
-        return SendJsonAsync<ReconcileResponse>(HttpMethod.Get, path, body: null);
-    }
+    private Task<T> PostAsync<T>(string path, object body) => SendJsonAsync<T>(HttpMethod.Post, path, body);
+
+    private Task<T> GetAsync<T>(string path) => SendJsonAsync<T>(HttpMethod.Get, path, body: null);
 
     private async Task<T> SendJsonAsync<T>(HttpMethod method, string path, object? body)
     {
@@ -169,7 +178,7 @@ public class GoogleHealthClient(
             if (first.StatusCode != HttpStatusCode.Unauthorized)
             {
                 first.EnsureSuccessStatusCode();
-                return (await first.Content.ReadFromJsonAsync<T>())!;
+                return (await first.Content.ReadFromJsonAsync<T>(JsonOptions))!;
             }
         }
 
@@ -177,7 +186,7 @@ public class GoogleHealthClient(
         accessToken = await GetAccessTokenAsync(staleAccessToken: accessToken);
         using var retry = await SendAsync(method, path, body, accessToken);
         retry.EnsureSuccessStatusCode();
-        return (await retry.Content.ReadFromJsonAsync<T>())!;
+        return (await retry.Content.ReadFromJsonAsync<T>(JsonOptions))!;
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body, string accessToken)
@@ -276,7 +285,20 @@ public class GoogleHealthClient(
         };
 
         using var response = await client.SendAsync(request);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            // Kernel-function exception messages are relayed to the model as the tool result, so the
+            // agent repeats whatever we say here. invalid_grant means the refresh token expired or was
+            // revoked (Google "Testing"-mode tokens last ~7 days) — give the owner the exact next step
+            // instead of a bare "400 Bad Request" the model can only guess at.
+            var error = await ReadTokenErrorAsync(response);
+            if (string.Equals(error, "invalid_grant", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Google Health access has expired and needs to be reconnected. Re-run `ancela health auth` " +
+                    "to get a new refresh token, then update the GOOGLE_HEALTH_REFRESH_TOKEN secret and redeploy.");
+            throw new InvalidOperationException(
+                $"Google Health token refresh failed ({(int)response.StatusCode}: {error ?? "unknown_error"}).");
+        }
         var body = await response.Content.ReadFromJsonAsync<TokenResponse>()
             ?? throw new InvalidOperationException("Google token endpoint returned an empty body.");
 
@@ -294,8 +316,22 @@ public class GoogleHealthClient(
 
     // ---- Helpers -----------------------------------------------------------
 
-    private static RollupValue? FirstValue(RollupResponse response) =>
-        response.RollupDataPoints?.FirstOrDefault()?.Value;
+    // Reads the OAuth error code (e.g. "invalid_grant") from a failed token response; null if absent.
+    private static async Task<string?> ReadTokenErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var error = await response.Content.ReadFromJsonAsync<TokenErrorResponse>();
+            return error?.Error;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static RollupDataPoint? FirstPoint(RollupResponse response) =>
+        response.RollupDataPoints?.FirstOrDefault();
 
     private static bool IsFresh(OAuthToken token) => token.ExpiresAt > DateTimeOffset.UtcNow.Add(ExpirySkew);
 
@@ -309,21 +345,11 @@ public class GoogleHealthClient(
                 ? parsed
                 : DateOnly.FromDateTime(DateTime.UtcNow);
 
-    private static object Civil(DateOnly day) => new { year = day.Year, month = day.Month, day = day.Day };
+    // CivilDateTime nests a google.type.Date under "date"; "time" defaults to midnight when omitted.
+    private static object Civil(DateOnly day) => new { date = new { year = day.Year, month = day.Month, day = day.Day } };
 
-    private static string? FormatCivil(CivilTime? civil) =>
-        civil is null ? null : $"{civil.Year:D4}-{civil.Month:D2}-{civil.Day:D2}";
-
-    /// <summary>Parses a protobuf Duration (e.g. "28800s") to whole minutes.</summary>
-    private static int? ParseDurationMinutes(string? duration)
-    {
-        if (string.IsNullOrEmpty(duration))
-            return null;
-        var seconds = duration.EndsWith('s') ? duration[..^1] : duration;
-        return double.TryParse(seconds, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-            ? (int)Math.Round(value / 60)
-            : null;
-    }
+    private static string? FormatDate(CivilDate? date) =>
+        date is null ? null : $"{date.Year:D4}-{date.Month:D2}-{date.Day:D2}";
 
     // ---- Google Health API response DTOs (deserialization only) ------------
 
@@ -334,6 +360,25 @@ public class GoogleHealthClient(
         [JsonPropertyName("expires_in")] public int ExpiresIn { get; set; }
     }
 
+    private sealed class TokenErrorResponse
+    {
+        [JsonPropertyName("error")] public string? Error { get; set; }
+        [JsonPropertyName("error_description")] public string? ErrorDescription { get; set; }
+    }
+
+    private sealed class CivilDateTime
+    {
+        [JsonPropertyName("date")] public CivilDate? Date { get; set; }
+    }
+
+    private sealed class CivilDate
+    {
+        [JsonPropertyName("year")] public int Year { get; set; }
+        [JsonPropertyName("month")] public int Month { get; set; }
+        [JsonPropertyName("day")] public int Day { get; set; }
+    }
+
+    // Roll-up: the data-type field sits directly on the data point (no "value" wrapper).
     private sealed class RollupResponse
     {
         [JsonPropertyName("rollupDataPoints")] public RollupDataPoint[]? RollupDataPoints { get; set; }
@@ -341,24 +386,11 @@ public class GoogleHealthClient(
 
     private sealed class RollupDataPoint
     {
-        [JsonPropertyName("civilStartTime")] public CivilTime? CivilStartTime { get; set; }
-        [JsonPropertyName("value")] public RollupValue? Value { get; set; }
-    }
-
-    private sealed class CivilTime
-    {
-        [JsonPropertyName("year")] public int Year { get; set; }
-        [JsonPropertyName("month")] public int Month { get; set; }
-        [JsonPropertyName("day")] public int Day { get; set; }
-    }
-
-    private sealed class RollupValue
-    {
+        [JsonPropertyName("civilStartTime")] public CivilDateTime? CivilStartTime { get; set; }
         [JsonPropertyName("steps")] public StepsValue? Steps { get; set; }
         [JsonPropertyName("distance")] public DistanceValue? Distance { get; set; }
         [JsonPropertyName("totalCalories")] public TotalCaloriesValue? TotalCalories { get; set; }
         [JsonPropertyName("activeMinutes")] public ActiveMinutesValue? ActiveMinutes { get; set; }
-        [JsonPropertyName("dailyRestingHeartRate")] public RestingHeartRateValue? DailyRestingHeartRate { get; set; }
     }
 
     private sealed class StepsValue
@@ -368,12 +400,12 @@ public class GoogleHealthClient(
 
     private sealed class DistanceValue
     {
-        [JsonPropertyName("metersSum")] public long MetersSum { get; set; }
+        [JsonPropertyName("millimetersSum")] public long MillimetersSum { get; set; }
     }
 
     private sealed class TotalCaloriesValue
     {
-        [JsonPropertyName("kilocaloriesSum")] public double KilocaloriesSum { get; set; }
+        [JsonPropertyName("kcalSum")] public double KcalSum { get; set; }
     }
 
     private sealed class ActiveMinutesValue
@@ -385,13 +417,6 @@ public class GoogleHealthClient(
     {
         [JsonPropertyName("activityLevel")] public string? ActivityLevel { get; set; }
         [JsonPropertyName("activeMinutesSum")] public long ActiveMinutesSum { get; set; }
-    }
-
-    private sealed class RestingHeartRateValue
-    {
-        [JsonPropertyName("beatsPerMinuteAvg")] public double? BeatsPerMinuteAvg { get; set; }
-        [JsonPropertyName("beatsPerMinuteMin")] public int? BeatsPerMinuteMin { get; set; }
-        [JsonPropertyName("beatsPerMinuteMax")] public int? BeatsPerMinuteMax { get; set; }
     }
 
     private sealed class ReconcileResponse
@@ -407,19 +432,37 @@ public class GoogleHealthClient(
     private sealed class SleepValue
     {
         [JsonPropertyName("type")] public string? Type { get; set; }
-        [JsonPropertyName("duration")] public string? Duration { get; set; }
-        [JsonPropertyName("efficiency")] public double? Efficiency { get; set; }
-        [JsonPropertyName("sleepSummary")] public SleepSummaryDto? SleepSummary { get; set; }
+        [JsonPropertyName("summary")] public SleepSummaryDto? Summary { get; set; }
     }
 
     private sealed class SleepSummaryDto
     {
-        [JsonPropertyName("stageSummary")] public StageSummary[]? StageSummary { get; set; }
+        [JsonPropertyName("minutesInSleepPeriod")] public int MinutesInSleepPeriod { get; set; }
+        [JsonPropertyName("minutesAsleep")] public int MinutesAsleep { get; set; }
+        [JsonPropertyName("minutesAwake")] public int MinutesAwake { get; set; }
+        [JsonPropertyName("stagesSummary")] public StageSummary[]? StagesSummary { get; set; }
     }
 
     private sealed class StageSummary
     {
-        [JsonPropertyName("stage")] public string? Stage { get; set; }
-        [JsonPropertyName("duration")] public string? Duration { get; set; }
+        [JsonPropertyName("type")] public string? Type { get; set; }
+        [JsonPropertyName("minutes")] public int Minutes { get; set; }
+    }
+
+    // reconcile: dataPoints[].dailyRestingHeartRate = { date, beatsPerMinute, … } — one per day.
+    private sealed class RestingHeartRateResponse
+    {
+        [JsonPropertyName("dataPoints")] public RestingHeartRateDataPoint[]? DataPoints { get; set; }
+    }
+
+    private sealed class RestingHeartRateDataPoint
+    {
+        [JsonPropertyName("dailyRestingHeartRate")] public RestingHeartRateValue? DailyRestingHeartRate { get; set; }
+    }
+
+    private sealed class RestingHeartRateValue
+    {
+        [JsonPropertyName("date")] public CivilDate? Date { get; set; }
+        [JsonPropertyName("beatsPerMinute")] public int? BeatsPerMinute { get; set; }
     }
 }

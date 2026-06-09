@@ -171,20 +171,14 @@ public sealed class GoogleHealthAuthCommand : AsyncCommand<GoogleHealthAuthComma
     private static void RenderResult(string refreshToken)
     {
         AnsiConsole.WriteLine();
-        var body = new Grid();
-        body.AddColumn(new GridColumn().PadRight(2));
-        body.AddColumn();
-        body.AddRow("[grey]Refresh token[/]", $"[white]{refreshToken}[/]");
-
-        AnsiConsole.Write(new Panel(body)
-        {
-            Header = new PanelHeader(" google health refresh token "),
-            Border = BoxBorder.Rounded,
-            BorderStyle = Theme.Accent,
-        });
-        AnsiConsole.MarkupLine("[grey]Set it as the bootstrap seed (the agent caches and refreshes it thereafter):[/]");
-        AnsiConsole.MarkupLineInterpolated(
-            $"  [deepskyblue1]cd Ancela.AppHost && dotnet user-secrets set Parameters:google-health-refresh-token \"{refreshToken}\"[/]");
+        AnsiConsole.Write(new Rule("[springgreen2]Google Health connected[/]").LeftJustified());
+        AnsiConsole.MarkupLine("[grey]Refresh token (copy this exact line):[/]");
+        // Raw writes bypass Spectre word-wrapping, which corrupts a long token/command on copy.
+        Console.Out.WriteLine(refreshToken);
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[grey]Or set it directly (run from Ancela.AppHost):[/]");
+        Console.Out.WriteLine($"dotnet user-secrets set Parameters:google-health-refresh-token \"{refreshToken}\"");
+        AnsiConsole.WriteLine();
         AnsiConsole.MarkupLine("[grey]To re-consent later, run this again and update that value.[/]");
         AnsiConsole.WriteLine();
     }
