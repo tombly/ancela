@@ -41,6 +41,7 @@ public static class KernelProfilePolicy
         "get_calendar_events", "get_recent_emails", "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
+        "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
     };
 
     /// <summary>
@@ -64,19 +65,21 @@ public static class KernelProfilePolicy
         return allowed is null || allowed.Contains(functionName);
     }
 
-    // Functions that act on the owner's shared resources or send on the agent's behalf:
-    // sending SMS/email and writing the owner's calendar. Non-owner users get read-only
-    // access, so these are denied to them even in the otherwise-unrestricted Chat profile.
+    // Functions that act on the owner's shared resources, send on the agent's behalf, or
+    // read owner-private data (Google Health data). Non-owner users are denied access
+    // even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "send_sms", "send_email", "create_calendar_event", "send_to_remarkable",
+        "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
     };
 
     /// <summary>
-    /// True if <paramref name="functionName"/> may only be invoked by the owner. Enforced
-    /// independently of profile: <see cref="Agent"/> drops these from the advertised set for
-    /// non-owners, and <see cref="AutonomousToolGuardFilter"/> hard-denies them as a backstop.
+    /// True if <paramref name="functionName"/> may only be invoked by the owner (covers both
+    /// send/write actions and owner-private reads such as health data). Enforced independently
+    /// of profile: <see cref="Agent"/> drops these from the advertised set for non-owners, and
+    /// <see cref="AutonomousToolGuardFilter"/> hard-denies them as a backstop.
     /// </summary>
     public static bool IsOwnerOnly(string functionName) => OwnerOnlyFunctions.Contains(functionName);
 }

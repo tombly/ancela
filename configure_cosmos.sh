@@ -80,3 +80,12 @@ az cosmosdb sql container create \
   --database-name "anceladb" \
   --name "audit" \
   --partition-key-path "/agentPhoneNumber"
+
+# Holds the single owner OAuth token per provider (e.g. google-health). Deliberately omitted from the
+# read-only CLI catalog so the audit viewer can't dump access/refresh tokens.
+az cosmosdb sql container create \
+  --account-name $cosmos_account \
+  --resource-group $resource_group \
+  --database-name "anceladb" \
+  --name "oauth_tokens" \
+  --partition-key-path "/provider"

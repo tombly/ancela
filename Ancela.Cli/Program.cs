@@ -17,6 +17,7 @@ services.AddTransient<PingCommand>();
 services.AddTransient<ListContainerCommand>();
 services.AddTransient<ShowContainerCommand>();
 services.AddTransient<EnrollCommand>();
+services.AddTransient<GoogleHealthAuthCommand>();
 
 var registrar = new TypeRegistrar(services);
 var app = new CommandApp(registrar);
@@ -40,6 +41,14 @@ app.Configure(config =>
         .WithDescription("Set up the owner TOTP secret and render its QR for an authenticator app.")
         .WithExample("enroll")
         .WithExample("enroll", "--new");
+
+    config.AddBranch("health", health =>
+    {
+        health.SetDescription("Google Health integration setup.");
+        health.AddCommand<GoogleHealthAuthCommand>("auth")
+            .WithDescription("Run the one-time Google Health OAuth consent and print the seed refresh token.")
+            .WithExample("health", "auth");
+    });
 });
 
 // No arguments → drop into the interactive hybrid shell. Otherwise run headless.
