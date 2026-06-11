@@ -94,7 +94,7 @@ aspire deploy --clear-cache
 
 #### Semantic Kernel (`SemanticKernel/` folder)
 - `KernelFactory.cs` - Builds a fresh `Kernel` per request for a given `KernelProfile` (`Chat`, `Onboarding`, `StandingRule`, `ScheduledTask`), loads plugins, and attaches the invocation filters. Onboarding loads only `RegistrationPlugin`.
-- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`.
+- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`, the Google Health reads, and the diagnostics self-check `check_services`/`check_anomalies`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`.
 
 #### Plugins (`SemanticKernel/Plugins/` folder)
 Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/service for I/O.
@@ -109,6 +109,7 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 - `ScheduledTaskPlugin/` - Recurring actions on a clock schedule (store + scheduler).
 - `RegistrationPlugin/` - User onboarding (`register_user`).
 - `RemarkablePlugin/` - `send_to_remarkable` (owner-only); renders text to PDF with QuestPDF and uploads via `Remarkable.Api.Client`. Requires `REMARKABLE_DEVICE_TOKEN` (obtained one-time via `rmpair`).
+- `DiagnosticsPlugin/` - Owner-only, on-demand self-check ("how are you?"): `check_services` probes every external dependency (Cosmos, Service Bus dead-letter queues, Twilio, Graph, YNAB, Tavily, Google Health, reMarkable); `check_anomalies` scans the audit container and applies deterministic thresholds (`AnomalyEvaluator`) for unknown senders, failed TOTP step-ups, guard denials, high search/SMS/email volume, and tool errors.
 
 ### Ancela.Cli
 Read-only Spectre.Console TUI for auditing the deployed Cosmos data and minting the owner TOTP secret. Commands: `ping`, `list`, `show` (browse containers), and `enroll` (generate `OWNER_TOTP_SECRET` + QR).

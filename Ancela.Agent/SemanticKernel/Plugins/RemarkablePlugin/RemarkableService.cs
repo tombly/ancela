@@ -8,6 +8,12 @@ namespace Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 public interface IRemarkableService
 {
     Task<string> SendTextAsync(string visibleName, string text, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Verifies the device token by minting (or reusing) a session token, without uploading
+    /// anything — the self-check's reMarkable probe. Throws when not configured or rejected.
+    /// </summary>
+    Task VerifyAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -35,6 +41,12 @@ public sealed class RemarkableService(IHttpClientFactory _httpClientFactory) : I
         using var pdf = RenderPdf(visibleName, text);
         var result = await client.UploadPdfAsync(sessionToken, visibleName, pdf, cancellationToken).ConfigureAwait(false);
         return result.DocumentId;
+    }
+
+    public async Task VerifyAsync(CancellationToken cancellationToken = default)
+    {
+        var client = new RemarkableClient(_httpClientFactory.CreateClient("remarkable"));
+        await GetSessionTokenAsync(client, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<string> GetSessionTokenAsync(RemarkableClient client, CancellationToken cancellationToken)

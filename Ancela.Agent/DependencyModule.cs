@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using Ancela.Agent.SemanticKernel;
+using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
@@ -84,6 +85,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<RemarkablePlugin>();
         builder.Services.AddSingleton<IRemarkableService, RemarkableService>();
         builder.Services.AddHttpClient("remarkable");
+        builder.Services.AddSingleton<DiagnosticsPlugin>();
+        builder.Services.AddSingleton<IServiceHealthChecker, ServiceHealthChecker>();
+        builder.Services.AddSingleton<IAuditAnomalyScanner, AuditAnomalyScanner>();
         builder.Services.AddSingleton<IKernelFactory, KernelFactory>();
         builder.Services.AddSingleton<ITavilyClient, TavilyClient>();
         builder.Services.AddHttpClient("tavily", client =>

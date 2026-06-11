@@ -1,4 +1,5 @@
 using Ancela.Agent.SemanticKernel;
+using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
@@ -51,6 +52,7 @@ public class SecurityTests
         "create_reminder", "cancel_reminder",
         "create_standing_rule", "pause_standing_rule", "resume_standing_rule", "delete_standing_rule",
         "create_scheduled_task", "pause_scheduled_task", "resume_scheduled_task", "delete_scheduled_task",
+        "check_services", "check_anomalies",  // self-check is owner-initiated, on-demand only
     };
 
     private static IKernelFactory BuildFactory()
@@ -103,6 +105,9 @@ public class SecurityTests
         services.AddSingleton<WebPlugin>();
         services.AddSingleton<IRemarkableService>(_ => new Mock<IRemarkableService>().Object);
         services.AddSingleton<RemarkablePlugin>();
+        services.AddSingleton<IServiceHealthChecker>(_ => new Mock<IServiceHealthChecker>().Object);
+        services.AddSingleton<IAuditAnomalyScanner>(_ => new Mock<IAuditAnomalyScanner>().Object);
+        services.AddSingleton<DiagnosticsPlugin>();
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);
@@ -266,6 +271,8 @@ public class SecurityTests
     [InlineData("send_sms")]
     [InlineData("send_email")]
     [InlineData("create_calendar_event")]
+    [InlineData("check_services")]
+    [InlineData("check_anomalies")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -292,6 +299,10 @@ public class SecurityTests
         KernelProfilePolicy.IsOwnerOnly("send_sms").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("send_email").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("create_calendar_event").Should().BeTrue();
+        KernelProfilePolicy.IsOwnerOnly("check_services").Should().BeTrue(
+            because: "the self-check reveals operational/security posture and is owner-only");
+        KernelProfilePolicy.IsOwnerOnly("check_anomalies").Should().BeTrue(
+            because: "the self-check reveals operational/security posture and is owner-only");
 
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();

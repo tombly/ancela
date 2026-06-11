@@ -1,4 +1,5 @@
 using Twilio;
+using Twilio.Rest.Api.V2010;
 using Twilio.Rest.Api.V2010.Account;
 using Twilio.Types;
 
@@ -36,6 +37,16 @@ public class SmsService
                 to: new PhoneNumber(phoneNumber),
                 body: body);
         }
+    }
+
+    /// <summary>
+    /// Fetches the Twilio account status (e.g. "active", "suspended") — the self-check's
+    /// outbound-SMS probe. Inbound delivery needs no probe: receiving the message proved it.
+    /// </summary>
+    public virtual async Task<string> CheckAccountStatusAsync()
+    {
+        var account = await AccountResource.FetchAsync();
+        return account.Status.ToString();
     }
 
     private static string Truncate(string message) =>
