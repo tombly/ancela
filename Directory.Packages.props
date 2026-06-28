@@ -4,16 +4,16 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Aspire packages -->
-    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Hosting.Azure.Functions" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Hosting.Azure.ServiceBus" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Azure.Messaging.ServiceBus" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Microsoft.Azure.Cosmos" Version="13.4.3" />
-    <PackageVersion Include="Aspire.Hosting.OpenAI" Version="13.4.3" />
+    <PackageVersion Include="Aspire.Azure.Storage.Blobs" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Azure.CosmosDB" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Azure.Functions" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.Azure.ServiceBus" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Azure.Messaging.ServiceBus" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Microsoft.Azure.Cosmos" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.OpenAI" Version="13.4.6" />
     <!-- Microsoft Azure Functions packages -->
-    <PackageVersion Include="Aspire.OpenAI" Version="13.4.3-preview.1.26305.13" />
+    <PackageVersion Include="Aspire.OpenAI" Version="13.4.6-preview.1.26319.6" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.CosmosDB" Version="4.14.0" />
