@@ -18,6 +18,8 @@ public class YnabClient
         _client = new YnabApiClient(httpClient);
     }
 
+    public async Task CheckUserAsync() => await _client.GetUserAsync();
+
     public async Task<AccountsSummaryModel> GetAccountsAsync()
     {
         var budgetDetail = await _client.GetBudgetDetailAsync();

@@ -116,8 +116,20 @@ public class ServiceHealthChecker(
 
     private async Task<(string Status, string Detail)> ProbeYnabAsync()
     {
-        var summary = await _ynabClient.GetAccountsAsync();
-        return ("ok", $"token valid; {summary.Accounts.Length} account(s) visible");
+        Exception? lastEx = null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                await _ynabClient.CheckUserAsync();
+                return ("ok", "token valid; /user reachable");
+            }
+            catch (Exception ex)
+            {
+                lastEx = ex;
+            }
+        }
+        throw lastEx!;
     }
 
     private async Task<(string Status, string Detail)> ProbeTavilyAsync()
