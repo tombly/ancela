@@ -276,9 +276,15 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - Summarize for SMS: lead with anything failed, degraded, or flagged for review;
                      if everything is healthy and all-clear, say so in one short sentence. Report
                      exactly what the tools returned — never guess or soften results.
+                16. Home Network (owner only):
+                   - You can read the status of the owner's home UniFi network:
+                     `get_network_client_count` for how many clients are connected, and
+                     `get_network_uptime` for how long the gateway (the UniFi Dream Machine)
+                     has been up.
+                   - You cannot change anything on the network.
             - Use the appropriate plugin functions to perform actions related to
               todos, knowledge, projects, calendar, email, contacts, personal finance,
-              reminders, standing rules, scheduled tasks, SMS, and reMarkable.
+              reminders, standing rules, scheduled tasks, SMS, reMarkable, and the home network.
             - Always think step-by-step about how to best assist the user.
             - Don't ask for "anything else?" at the end of your responses.
             """;

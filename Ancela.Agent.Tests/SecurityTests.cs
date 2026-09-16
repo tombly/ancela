@@ -12,6 +12,7 @@ using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
@@ -108,6 +109,8 @@ public class SecurityTests
         services.AddSingleton<IServiceHealthChecker>(_ => new Mock<IServiceHealthChecker>().Object);
         services.AddSingleton<IAuditAnomalyScanner>(_ => new Mock<IAuditAnomalyScanner>().Object);
         services.AddSingleton<DiagnosticsPlugin>();
+        services.AddSingleton<IUnifiClient>(_ => new Mock<IUnifiClient>().Object);
+        services.AddSingleton<UnifiPlugin>();
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);
@@ -273,6 +276,8 @@ public class SecurityTests
     [InlineData("create_calendar_event")]
     [InlineData("check_services")]
     [InlineData("check_anomalies")]
+    [InlineData("get_network_client_count")]
+    [InlineData("get_network_uptime")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -303,6 +308,10 @@ public class SecurityTests
             because: "the self-check reveals operational/security posture and is owner-only");
         KernelProfilePolicy.IsOwnerOnly("check_anomalies").Should().BeTrue(
             because: "the self-check reveals operational/security posture and is owner-only");
+        KernelProfilePolicy.IsOwnerOnly("get_network_client_count").Should().BeTrue(
+            because: "who is connected at home is presence data");
+        KernelProfilePolicy.IsOwnerOnly("get_network_uptime").Should().BeTrue(
+            because: "home network status is owner-private");
 
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();

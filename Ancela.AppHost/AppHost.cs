@@ -24,6 +24,9 @@ var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
 var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
+// Site Manager API key from unifi.ui.com (Settings -> API Keys); reads the home UniFi console
+// through Ubiquiti's cloud Connector.
+var unifiApiKey = builder.AddParameter("unifi-api-key", true);
 var remarkableDeviceToken = builder.AddParameter("remarkable-device-token", true);
 var googleHealthClientId = builder.AddParameter("google-health-client-id", true);
 var googleHealthClientSecret = builder.AddParameter("google-health-client-secret", true);
@@ -92,11 +95,18 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("GRAPH_CLIENT_SECRET", graphClientSecretParameter)
     .WithEnvironment("YNAB_ACCESS_TOKEN", ynabAccessToken)
     .WithEnvironment("TAVILY_API_KEY", tavilyApiKey)
+    .WithEnvironment("UNIFI_API_KEY", unifiApiKey)
     .WithEnvironment("REMARKABLE_DEVICE_TOKEN", remarkableDeviceToken)
     .WithEnvironment("GOOGLE_HEALTH_CLIENT_ID", googleHealthClientId)
     .WithEnvironment("GOOGLE_HEALTH_CLIENT_SECRET", googleHealthClientSecret)
     .WithEnvironment("GOOGLE_HEALTH_REFRESH_TOKEN", googleHealthRefreshToken)
     .WithEnvironment("OWNER_TOTP_SECRET", ownerTotpSecret)
-    .WithExternalHttpEndpoints();
+    .WithExternalHttpEndpoints()
+    .PublishAsAzureContainerApp((infrastructure, app) =>
+    {
+        // Cap scale-out at one replica so queue bursts can't bill extra replicas. Aspire
+        // already sets minReplicas to 1, keeping a live host for the Service Bus triggers.
+        app.Template.Scale.MaxReplicas = 1;
+    });
 
 builder.Build().Run();
