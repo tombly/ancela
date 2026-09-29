@@ -51,6 +51,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IQuotaAlertStore, QuotaAlertStore>();
+        builder.Services.AddSingleton<IQuotaAlertService, QuotaAlertService>();
         builder.Services.AddSingleton<CorrelationContext>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();

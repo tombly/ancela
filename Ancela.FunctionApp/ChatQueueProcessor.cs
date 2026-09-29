@@ -9,7 +9,11 @@ namespace Ancela.FunctionApp;
 /// <summary>
 /// Processes chat messages from the queue.
 /// </summary>
-public class ChatQueueProcessor(ILogger<ChatQueueProcessor> _logger, ChatInterceptor _chatInterceptor, SmsService _smsService)
+public class ChatQueueProcessor(
+    ILogger<ChatQueueProcessor> _logger,
+    ChatInterceptor _chatInterceptor,
+    SmsService _smsService,
+    IQuotaAlertService _quotaAlert)
 {
     [Function(nameof(ChatQueueProcessor))]
     public async Task Run([ServiceBusTrigger(ChatQueueMessage.QueueName, Connection = "servicebus")] string body)
@@ -19,14 +23,25 @@ public class ChatQueueProcessor(ILogger<ChatQueueProcessor> _logger, ChatInterce
 
         _logger.LogInformation("Processing message from queue: {Message}", message.Content);
 
-        var reply = await _chatInterceptor.HandleMessage(
-            message.Content,
-            message.UserPhoneNumber,
-            message.AgentPhoneNumber,
-            message.Media);
+        try
+        {
+            var reply = await _chatInterceptor.HandleMessage(
+                message.Content,
+                message.UserPhoneNumber,
+                message.AgentPhoneNumber,
+                message.Media);
 
-        if (reply != null)
-            await _smsService.Send(message.UserPhoneNumber, reply);
+            if (reply != null)
+                await _smsService.Send(message.UserPhoneNumber, reply);
+        }
+        catch (Exception ex)
+        {
+            // An exhausted balance is silent otherwise: the reply never arrives and the message
+            // dead-letters. Tell the owner, then rethrow so retry and dead-lettering behave
+            // exactly as before.
+            await _quotaAlert.NotifyIfCreditExhaustedAsync(ex, message.AgentPhoneNumber, nameof(ChatQueueProcessor));
+            throw;
+        }
 
         _logger.LogInformation("Successfully processed message from queue");
     }

@@ -21,6 +21,7 @@ public class ScheduledTaskQueueProcessor(
     SmsService _smsService,
     IAuditLog _auditLog,
     CorrelationContext _correlation,
+    IQuotaAlertService _quotaAlert,
     Ancela.Agent.Agent _agent)
 {
     [Function(nameof(ScheduledTaskQueueProcessor))]
@@ -66,6 +67,10 @@ public class ScheduledTaskQueueProcessor(
             stopwatch.Stop();
             _logger.LogError(ex, "Scheduled task {TaskId} run failed.", task.Id);
             await WriteAuditAsync(task, result: null, success: false, error: ex.Message, stopwatch.ElapsedMilliseconds);
+            // The reschedule below keeps the chain alive through a failure, which also makes the
+            // failure invisible — the audit row is the only trace. Speak up when the cause is an
+            // exhausted OpenAI balance, which no retry will fix.
+            await _quotaAlert.NotifyIfCreditExhaustedAsync(ex, task.AgentPhoneNumber, nameof(ScheduledTaskQueueProcessor));
             // Fall through to reschedule so a transient failure doesn't kill the task.
         }
 
