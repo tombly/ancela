@@ -81,6 +81,15 @@ az cosmosdb sql container create \
   --name "audit" \
   --partition-key-path "/agentPhoneNumber"
 
+# Remembers when the owner was last alerted (e.g. OpenAI credit exhaustion), so a failure that
+# repeats on every queue message produces one text rather than one per attempt.
+az cosmosdb sql container create \
+  --account-name $cosmos_account \
+  --resource-group $resource_group \
+  --database-name "anceladb" \
+  --name "alert_state" \
+  --partition-key-path "/agentPhoneNumber"
+
 # Holds the single owner OAuth token per provider (e.g. google-health). Deliberately omitted from the
 # read-only CLI catalog so the audit viewer can't dump access/refresh tokens.
 az cosmosdb sql container create \

@@ -75,6 +75,7 @@ aspire deploy --clear-cache
 - `IncomingMessage.cs` - HTTP trigger for testing (non-Twilio); also enqueues to `chat-messages`.
 - `ChatQueueProcessor.cs` - `ServiceBusTrigger` on `chat-messages`; routes to `ChatInterceptor`.
 - `ReminderQueueProcessor.cs` / `StandingRuleQueueProcessor.cs` / `ScheduledTaskQueueProcessor.cs` - `ServiceBusTrigger` processors that run the due reminder / autonomous evaluation / scheduled task.
+- `ChatQueueProcessor` and `ScheduledTaskQueueProcessor` route failures through `IQuotaAlertService` before rethrowing / rescheduling, so an exhausted OpenAI balance is reported instead of failing silently.
 
 ### Ancela.Agent
 - `Agent.cs` - Core orchestration: builds a kernel per request via `IKernelFactory`, advertises the profile-allowed functions to the model, and runs `Chat`, `Onboard`, `EvaluateStandingRule`, and `PerformScheduledTask`.
@@ -91,6 +92,8 @@ aspire deploy --clear-cache
 - `SmsService.cs` - Twilio SMS integration.
 - `MediaService.cs` - Handling of inbound MMS media.
 - `AuditService.cs` - Cosmos-backed audit log (`IAuditLog` / `CosmosAuditLog`).
+- `QuotaAlertService.cs` - Texts the owner when OpenAI rejects calls for lack of credit (`insufficient_quota`). A backstop, not a warning: OpenAI exposes no remaining-balance endpoint to an API key, so the failure is the first usable signal. Uses only Twilio — no model call — because it must fire when model access is dead.
+- `QuotaAlertStore.cs` - Throttle state for the above (`alert_state`); claims one alert per 24h per agent via Cosmos ETag so concurrent replicas cannot both send.
 
 #### Semantic Kernel (`SemanticKernel/` folder)
 - `KernelFactory.cs` - Builds a fresh `Kernel` per request for a given `KernelProfile` (`Chat`, `Onboarding`, `StandingRule`, `ScheduledTask`), loads plugins, and attaches the invocation filters. Onboarding loads only `RegistrationPlugin`.
@@ -115,7 +118,7 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 Read-only Spectre.Console TUI for auditing the deployed Cosmos data and minting the owner TOTP secret. Commands: `ping`, `list`, `show` (browse containers), and `enroll` (generate `OWNER_TOTP_SECRET` + QR).
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests` (base class: `AgentTestBase`).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `QuotaAlertTests` (base class: `AgentTestBase`).
 
 ## Dependencies & Packages
 
@@ -158,6 +161,7 @@ instance):
 - **standing_rules** - Standing rules (per-user)
 - **scheduled_tasks** - Scheduled tasks (per-user)
 - **audit** - Audit log of function invocations and session events
+- **alert_state** - Throttle markers for owner alerts (currently OpenAI credit exhaustion)
 
 ## Important Patterns
 

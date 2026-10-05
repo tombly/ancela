@@ -22,6 +22,7 @@ public sealed class CosmosBrowser(CosmosClientProvider _provider)
         new("standing_rules", "Standing rules evaluated on a schedule"),
         new("scheduled_tasks", "Recurring scheduled tasks"),
         new("projects", "Shared project workspaces (entries embedded)"),
+        new("alert_state", "Throttle markers for owner alerts"),
     ];
 
     private Container GetContainer(string endpoint, string container) =>

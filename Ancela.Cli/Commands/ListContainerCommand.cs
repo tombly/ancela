@@ -14,7 +14,7 @@ public sealed class ListContainerCommand(CosmosBrowser _browser) : AsyncCommand<
     public sealed class Settings : ConnectionSettings
     {
         [CommandArgument(0, "<CONTAINER>")]
-        [Description("Container to list: audit, users, history, todos, knowledge, reminders, standing_rules, scheduled_tasks.")]
+        [Description("Container to list: audit, users, history, todos, knowledge, reminders, standing_rules, scheduled_tasks, projects, alert_state.")]
         public string Container { get; init; } = string.Empty;
 
         [CommandOption("-u|--user <PHONE>")]
