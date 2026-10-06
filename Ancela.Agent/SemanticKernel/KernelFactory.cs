@@ -9,6 +9,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,7 +46,8 @@ public sealed class KernelFactory(
     WebPlugin _webPlugin,
     SmsPlugin _smsPlugin,
     RemarkablePlugin _remarkablePlugin,
-    DiagnosticsPlugin _diagnosticsPlugin) : IKernelFactory
+    DiagnosticsPlugin _diagnosticsPlugin,
+    UnifiPlugin _unifiPlugin) : IKernelFactory
 {
     public Kernel Create(KernelProfile profile)
     {
@@ -74,6 +76,7 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_smsPlugin);
                 plugins.AddFromObject(_remarkablePlugin);
                 plugins.AddFromObject(_diagnosticsPlugin);
+                plugins.AddFromObject(_unifiPlugin);
                 break;
         }
 

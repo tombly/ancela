@@ -12,6 +12,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -95,6 +96,14 @@ public static class DependencyModule
             client.BaseAddress = new Uri("https://api.tavily.com");
             var apiKey = Environment.GetEnvironmentVariable("TAVILY_API_KEY") ?? string.Empty;
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        });
+        builder.Services.AddSingleton<UnifiPlugin>();
+        builder.Services.AddSingleton<IUnifiClient, UnifiClient>();
+        builder.Services.AddHttpClient(UnifiClient.HttpClientName, client =>
+        {
+            client.BaseAddress = new Uri("https://api.ui.com");
+            var apiKey = Environment.GetEnvironmentVariable("UNIFI_API_KEY") ?? string.Empty;
+            client.DefaultRequestHeaders.TryAddWithoutValidation("X-API-Key", apiKey);
         });
 
         // Twilio media URLs require HTTP Basic auth (account SID : auth token). The handler follows
