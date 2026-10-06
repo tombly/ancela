@@ -54,6 +54,9 @@ public class SecurityTests
         "create_standing_rule", "pause_standing_rule", "resume_standing_rule", "delete_standing_rule",
         "create_scheduled_task", "pause_scheduled_task", "resume_scheduled_task", "delete_scheduled_task",
         "check_services", "check_anomalies",  // self-check is owner-initiated, on-demand only
+        // Read-only, but presence data: who is home is not something a standing rule or
+        // scheduled task should be able to read and put into a message.
+        "get_network_client_count", "get_network_uptime",
     };
 
     private static IKernelFactory BuildFactory()

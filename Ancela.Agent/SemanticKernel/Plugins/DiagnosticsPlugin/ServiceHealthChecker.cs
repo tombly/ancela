@@ -3,6 +3,7 @@ using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
+using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
@@ -32,7 +33,8 @@ public class ServiceHealthChecker(
     ITavilyClient _tavilyClient,
     GoogleHealthClient _googleHealthClient,
     SmsService _smsService,
-    IRemarkableService _remarkableService) : IServiceHealthChecker
+    IRemarkableService _remarkableService,
+    IUnifiClient _unifiClient) : IServiceHealthChecker
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(8);
 
@@ -53,6 +55,7 @@ public class ServiceHealthChecker(
             ProbeAsync("tavily-web-search", ProbeTavilyAsync),
             ProbeAsync("google-health", ProbeGoogleHealthAsync),
             ProbeAsync("remarkable", ProbeRemarkableAsync),
+            ProbeAsync("unifi-network", ProbeUnifiAsync),
         };
 
         var results = await Task.WhenAll(probes);
@@ -139,6 +142,15 @@ public class ServiceHealthChecker(
     {
         await _remarkableService.VerifyAsync();
         return ("ok", "device token valid; session minted");
+    }
+
+    private async Task<(string Status, string Detail)> ProbeUnifiAsync()
+    {
+        // Cheapest call that proves the whole chain: the Site Manager key is valid, the cloud
+        // Connector still reaches the console, and the Network API answers. Asks for one client
+        // so only the total count comes back — never the client list.
+        var count = await _unifiClient.GetClientCountAsync();
+        return ("ok", $"key valid; console reachable ({count} client(s) connected)");
     }
 
     /// <summary>
