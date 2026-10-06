@@ -52,6 +52,9 @@ public static class DependencyModule
         builder.Services.AddSingleton<IHistoryService, HistoryService>();
         builder.Services.AddSingleton<IUserService, UserService>();
         builder.Services.AddSingleton<IAuditLog, CosmosAuditLog>();
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<ModelAvailability>();
+        builder.Services.AddSingleton<ICreditAlertService, CreditAlertService>();
         builder.Services.AddSingleton<CorrelationContext>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
@@ -116,10 +119,16 @@ public static class DependencyModule
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
         });
 
-        // Register a chat completion service for use by the kernels.
+        // Register a chat completion service for use by the kernels, wrapped in the out-of-credit
+        // breaker. Agent is the only consumer of IChatCompletionService, so decorating here covers
+        // chat, onboarding, standing rules and scheduled tasks in one place.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
         {
-            return new OpenAIChatCompletionService("gpt-5.4", sp.GetRequiredService<OpenAIClient>());
+            var openAI = new OpenAIChatCompletionService("gpt-5.4", sp.GetRequiredService<OpenAIClient>());
+            return new CreditAwareChatCompletionService(
+                openAI,
+                sp.GetRequiredService<ModelAvailability>(),
+                sp.GetRequiredService<ICreditAlertService>());
         });
 
         return builder;

@@ -73,7 +73,7 @@ aspire deploy --clear-cache
 - `Program.cs` - Function app startup and DI (registers the Service Bus client and the agent module).
 - `IncomingSms.cs` - HTTP trigger for Twilio webhooks; enqueues the message to the `chat-messages` Service Bus queue.
 - `IncomingMessage.cs` - HTTP trigger for testing (non-Twilio); also enqueues to `chat-messages`.
-- `ChatQueueProcessor.cs` - `ServiceBusTrigger` on `chat-messages`; routes to `ChatInterceptor`.
+- `ChatQueueProcessor.cs` - `ServiceBusTrigger` on `chat-messages`; routes to `ChatInterceptor`. On `ModelOutOfFundsException` it answers the sender and completes the message instead of retrying into the dead-letter queue.
 - `ReminderQueueProcessor.cs` / `StandingRuleQueueProcessor.cs` / `ScheduledTaskQueueProcessor.cs` - `ServiceBusTrigger` processors that run the due reminder / autonomous evaluation / scheduled task.
 
 ### Ancela.Agent
@@ -91,6 +91,9 @@ aspire deploy --clear-cache
 - `SmsService.cs` - Twilio SMS integration.
 - `MediaService.cs` - Handling of inbound MMS media.
 - `AuditService.cs` - Cosmos-backed audit log (`IAuditLog` / `CosmosAuditLog`).
+- `ModelAvailability.cs` - Out-of-credit circuit breaker (in-memory; the app runs at `maxReplicas 1`). Open, model calls short-circuit with `ModelOutOfFundsException` and one call is let through every 5 minutes to detect a top-up. Also holds `OutOfFundsMessages`, the reply copy.
+- `CreditAlertService.cs` - Texts the owner once per outage when OpenAI reports an empty balance (`insufficient_quota`). Classifies the exception; needs only Twilio, so it works when the model does not.
+- `CreditAwareChatCompletionService.cs` - `IChatCompletionService` decorator that trips and reads the breaker. The single chokepoint: `Agent` is the only consumer, so chat, onboarding, standing rules and scheduled tasks are all covered here.
 
 #### Semantic Kernel (`SemanticKernel/` folder)
 - `KernelFactory.cs` - Builds a fresh `Kernel` per request for a given `KernelProfile` (`Chat`, `Onboarding`, `StandingRule`, `ScheduledTask`), loads plugins, and attaches the invocation filters. Onboarding loads only `RegistrationPlugin`.
@@ -115,7 +118,7 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 Read-only Spectre.Console TUI for auditing the deployed Cosmos data and minting the owner TOTP secret. Commands: `ping`, `list`, `show` (browse containers), and `enroll` (generate `OWNER_TOTP_SECRET` + QR).
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests` (base class: `AgentTestBase`).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests` (base class: `AgentTestBase`).
 
 ## Dependencies & Packages
 
