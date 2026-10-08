@@ -30,6 +30,7 @@ Ancela/
 ├── Ancela.Agent/            # Core agent logic, Semantic Kernel orchestration, plugins, services
 ├── Ancela.Agent.Tests/      # xUnit unit tests
 ├── Ancela.Cli/              # Read-only Spectre.Console TUI for auditing Cosmos + TOTP enrollment
+├── Ancela.McpServer/        # Local stdio MCP server exposing read-only Ancela data to Claude Desktop
 ├── Ancela.ServiceDefaults/  # Shared service configuration (telemetry, health, resilience)
 └── Ancela.slnx              # Solution file
 ```
@@ -117,8 +118,36 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 ### Ancela.Cli
 Read-only Spectre.Console TUI for auditing the deployed Cosmos data and minting the owner TOTP secret. Commands: `ping`, `list`, `show` (browse containers), and `enroll` (generate `OWNER_TOTP_SECRET` + QR).
 
+### Ancela.McpServer
+A local stdio MCP server (`ancela-mcp`) that lets Claude Desktop read Ancela's data. Reuses
+`IMemoryClient` from `Ancela.Agent`, authenticating to Cosmos with `DefaultAzureCredential`
+(the same `az login` chain as the CLI).
+
+- `Program.cs` - Host startup. **All logging goes to stderr** — stdout is the JSON-RPC channel and
+  the default console logger would corrupt every response.
+- `MemoryTools.cs` - The tools: `get_todos` and `get_knowledge`, both read-only. Returns `TodoView`
+  / `KnowledgeView` projections that drop the soft-delete marker and, for knowledge, the
+  contributor's phone number.
+- `AncelaEnvironment.cs` - Config from environment variables (`ANCELA_COSMOS_ENDPOINT` or
+  `ANCELA_RESOURCE_PREFIX`, plus `ANCELA_AGENT_PHONE_NUMBER` — the Cosmos partition key), because
+  Claude Desktop launches the server as a bare subprocess.
+
+**This is a second door into the data.** It queries Cosmos directly, so it does *not* inherit
+`KernelProfilePolicy` or `AutonomousToolGuardFilter`, which only govern calls routed through the
+kernel. Keep the tool set narrow and justified on its own terms; `McpToolSurfaceTests` pins it.
+
+Install (re-run after changing the server):
+```bash
+dotnet publish Ancela.McpServer -c Release -o ~/.ancela/mcp
+```
+Then register it in `~/Library/Application Support/Claude/claude_desktop_config.json` under
+`mcpServers`, pointing `command` at `~/.ancela/mcp/ancela-mcp` and setting `env` with
+`ANCELA_COSMOS_ENDPOINT`, `ANCELA_AGENT_PHONE_NUMBER`, and a `PATH` that includes
+`/opt/homebrew/bin` — a GUI-launched process does not inherit the shell PATH, and
+`DefaultAzureCredential` shells out to `az`. Restart Claude Desktop to pick up changes.
+
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests` (base class: `AgentTestBase`).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests` (base class: `AgentTestBase`).
 
 ## Dependencies & Packages
 
