@@ -28,6 +28,8 @@
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.0.8" />
     <!-- OpenTelemetry packages -->
     <PackageVersion Include="Microsoft.SemanticKernel" Version="1.78.0" />
+    <!-- MCP server (Ancela.McpServer); 2.2.0 is the first stable line. -->
+    <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
@@ -49,6 +51,7 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="xunit" Version="2.9.3" />
