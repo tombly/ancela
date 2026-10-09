@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.4.6">
+<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -21,7 +21,12 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <NoWarn>$(NoWarn);ASPIRECOSMOSDB001</NoWarn>
+    <!-- ASPIRE010 (new in 13.5) fires because AspireUseCliBundle defaults to false. Opting in
+         would resolve DCP and the dashboard from the installed Aspire CLI rather than from NuGet,
+         which trades a reproducible restore for a dependency on whichever aspire is on PATH.
+         Keeping the NuGet-restored orchestration dependencies and silencing the advisory. -->
+    <AspireUseCliBundle>false</AspireUseCliBundle>
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
   </PropertyGroup>
 
 </Project>
