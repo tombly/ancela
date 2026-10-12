@@ -8,6 +8,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
+using Ancela.Agent.SemanticKernel.Plugins.WeatherPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
@@ -47,7 +48,8 @@ public sealed class KernelFactory(
     SmsPlugin _smsPlugin,
     RemarkablePlugin _remarkablePlugin,
     DiagnosticsPlugin _diagnosticsPlugin,
-    UnifiPlugin _unifiPlugin) : IKernelFactory
+    UnifiPlugin _unifiPlugin,
+    WeatherPlugin _weatherPlugin) : IKernelFactory
 {
     public Kernel Create(KernelProfile profile)
     {
@@ -77,6 +79,7 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_remarkablePlugin);
                 plugins.AddFromObject(_diagnosticsPlugin);
                 plugins.AddFromObject(_unifiPlugin);
+                plugins.AddFromObject(_weatherPlugin);
                 break;
         }
 

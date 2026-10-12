@@ -107,6 +107,7 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 - `GraphPlugin/` - Microsoft Graph: calendar, email, contacts.
 - `YnabPlugin/` - YNAB budget/account/transaction reads.
 - `WebPlugin/` - `web_search` (Tavily) and `web_fetch`.
+- `WeatherPlugin/` - `get_forecast`: today's labelled daytime high and nighttime low from the National Weather Service (api.weather.gov; free, no key, US only). Place names resolve through Open-Meteo's geocoder first because NWS takes coordinates only. Exists because reading a high out of `web_search` snippets does not work — an unlabelled "63° 37°" got reported as a 35°F high on 2026-10-11. **NWS returns 403 without an identifying `User-Agent`.** Allowed in both autonomous profiles; unlike `web_fetch` it reads one fixed API rather than a model-chosen URL.
 - `SmsPlugin/` - `send_sms` (owner-only).
 - `ReminderPlugin/` - One-time SMS reminders (store + scheduler).
 - `StandingRulePlugin/` - Recurring conditions evaluated on a timer (store + scheduler).
@@ -147,7 +148,7 @@ Then register it in `~/Library/Application Support/Claude/claude_desktop_config.
 `DefaultAzureCredential` shells out to `az`. Restart Claude Desktop to pick up changes.
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests` (base class: `AgentTestBase`).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests` (base class: `AgentTestBase`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, and `WeatherLiveTests` (the only one needing no API key).
 
 ## Dependencies & Packages
 

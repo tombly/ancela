@@ -27,6 +27,9 @@ public static class KernelProfilePolicy
         "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
+        // Safe here where web_fetch is not: the forecast reads one fixed government API rather
+        // than a URL the model (or an injected instruction) can choose.
+        "get_forecast",
     };
 
     // Read-only functions for ScheduledTask execution. Email and calendar are included
@@ -42,6 +45,7 @@ public static class KernelProfilePolicy
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
+        "get_forecast",
     };
 
     /// <summary>
