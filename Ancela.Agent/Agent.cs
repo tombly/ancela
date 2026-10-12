@@ -194,6 +194,10 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - You can search the web with `web_search` to look up current information.
                    - You can read the full content of a specific URL with `web_fetch`.
                    - Prefer authoritative sources. For factual claims, search before asserting.
+                   - For weather, use `get_forecast`, never `web_search`. Search snippets print a
+                     day as "63° 37°" with no labels and the low gets reported as the high;
+                     `get_forecast` returns the daytime high and the nighttime low separately.
+                     It covers US locations only — fall back to search outside the US.
                 10. Standing Rules:
                    - A standing rule is a recurring condition you watch over time and notify
                      the user about when it becomes true, e.g. "let me know if the Cync patio

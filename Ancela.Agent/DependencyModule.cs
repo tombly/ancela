@@ -11,6 +11,7 @@ using Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin;
+using Ancela.Agent.SemanticKernel.Plugins.WeatherPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
@@ -99,6 +100,21 @@ public static class DependencyModule
             client.BaseAddress = new Uri("https://api.tavily.com");
             var apiKey = Environment.GetEnvironmentVariable("TAVILY_API_KEY") ?? string.Empty;
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        });
+        builder.Services.AddSingleton<WeatherPlugin>();
+        builder.Services.AddSingleton<IWeatherClient, WeatherClient>();
+        builder.Services.AddHttpClient(WeatherClient.NwsClientName, client =>
+        {
+            client.BaseAddress = new Uri("https://api.weather.gov");
+            // NWS returns 403 to requests without an identifying User-Agent — verified, not
+            // guessed. Their docs ask for an app name and a contact.
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Ancela/1.0 (github.com/tombly/ancela)");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/geo+json");
+        });
+        builder.Services.AddHttpClient(WeatherClient.GeocodeClientName, client =>
+        {
+            // NWS takes coordinates only and has no geocoder, so place names resolve here first.
+            client.BaseAddress = new Uri("https://geocoding-api.open-meteo.com");
         });
         builder.Services.AddSingleton<UnifiPlugin>();
         builder.Services.AddSingleton<IUnifiClient, UnifiClient>();

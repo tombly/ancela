@@ -13,6 +13,7 @@ using Ancela.Agent.SemanticKernel.Plugins.StandingRulePlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.WeatherPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
@@ -114,6 +115,8 @@ public class SecurityTests
         services.AddSingleton<DiagnosticsPlugin>();
         services.AddSingleton<IUnifiClient>(_ => new Mock<IUnifiClient>().Object);
         services.AddSingleton<UnifiPlugin>();
+        services.AddSingleton<IWeatherClient>(_ => new Mock<IWeatherClient>().Object);
+        services.AddSingleton<WeatherPlugin>();
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);
