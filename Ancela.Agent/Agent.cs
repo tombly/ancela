@@ -493,7 +493,9 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         var isOwner = _ownerService.IsOwner(userPhoneNumber);
         kernel.Data["isOwner"] = isOwner;
 
-        var profile = kernel.Data.TryGetValue("profile", out var p) ? (KernelProfile)p : KernelProfile.Chat;
+        var profile = kernel.Data.TryGetValue("profile", out var p) && p is KernelProfile kp
+            ? kp
+            : KernelProfile.Chat;
 
         // Advertise only the functions this caller may use so denied tools never enter the
         // tool schema. Two orthogonal restrictions apply (KernelProfilePolicy is the single

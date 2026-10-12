@@ -244,6 +244,50 @@ public class SecurityTests
             because: $"AutonomousToolGuardFilter must block '{functionName}' in the {profile} profile");
     }
 
+    [Theory]
+    [InlineData(null)]          // key absent entirely
+    [InlineData("not-a-profile")]  // key present but the wrong type
+    public async Task AutonomousToolGuardFilter_WithoutValidProfile_FallsBackToDenying(object? profileValue)
+    {
+        // The fallback must not be Chat. Chat is unrestricted, so a backstop that defaults to it
+        // opens the gate in exactly the case where it has lost track of what it is guarding.
+        // KernelFactory always sets a valid profile, so this is latent-safety, not a live path.
+        var kernel = new Kernel();
+        if (profileValue is not null)
+            kernel.Data["profile"] = profileValue;
+        kernel.Data["isOwner"] = true;
+        kernel.FunctionInvocationFilters.Add(
+            new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+
+        var fn = KernelFunctionFactory.CreateFromMethod(() => "would-exfiltrate", functionName: "send_sms");
+        kernel.Plugins.AddFromFunctions("TestPlugin", [fn]);
+
+        var act = async () => await kernel.InvokeAsync(fn);
+
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            because: "an unresolvable profile must deny, even for the owner");
+    }
+
+    [Fact]
+    public async Task AutonomousToolGuardFilter_WithNullProfileValue_FallsBackToDenying()
+    {
+        // Distinct from the absent/wrong-type cases: the key exists holding null, which used to
+        // unbox straight into a NullReferenceException rather than a denial.
+        var kernel = new Kernel();
+        kernel.Data["profile"] = null;
+        kernel.Data["isOwner"] = true;
+        kernel.FunctionInvocationFilters.Add(
+            new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+
+        var fn = KernelFunctionFactory.CreateFromMethod(() => "would-exfiltrate", functionName: "send_sms");
+        kernel.Plugins.AddFromFunctions("TestPlugin", [fn]);
+
+        var act = async () => await kernel.InvokeAsync(fn);
+
+        await act.Should().ThrowAsync<InvalidOperationException>(
+            because: "a null profile value must deny rather than throw NullReferenceException");
+    }
+
     [Fact]
     public async Task AutonomousToolGuardFilter_AllowsReadFunction()
     {
