@@ -79,9 +79,31 @@ public class AuditFilter(IAuditLog _auditLog, CorrelationContext _correlation, I
     /// returned (not just a type name). Strings pass through untouched; complex objects are
     /// JSON-serialized; anything that fails to serialize falls back to ToString().
     /// </summary>
-    private static string? SerializeResult(object? result)
+    /// <remarks>
+    /// Takes the <see cref="FunctionResult"/> and unwraps it here rather than at the call site,
+    /// because handing the wrapper to the serializer is what this method used to do and it never
+    /// worked: <see cref="FunctionResult"/> holds <see cref="Kernel"/> and
+    /// <see cref="KernelFunction"/> references, so serializing it throws, and the ToString()
+    /// fallback then yields only the value's type name. That is why every tool returning an
+    /// object recorded nothing useful — web_search as <c>SearchResult[]</c>, YNAB as
+    /// <c>CategoryModel[]</c> — which is exactly the evidence needed when the agent reports
+    /// something wrong.
+    /// </remarks>
+    private static string? SerializeResult(FunctionResult? result)
     {
-        switch (result)
+        object? value;
+        try
+        {
+            value = result?.GetValue<object>();
+        }
+        catch
+        {
+            // Auditing must never throw: this runs inside a finally block, where an exception
+            // would replace the tool's own.
+            return Truncate(result?.ToString());
+        }
+
+        switch (value)
         {
             case null:
                 return null;
@@ -92,11 +114,11 @@ public class AuditFilter(IAuditLog _auditLog, CorrelationContext _correlation, I
 
         try
         {
-            return TruncateJson(JsonSerializer.Serialize(result));
+            return TruncateJson(JsonSerializer.Serialize(value));
         }
         catch
         {
-            return Truncate(result.ToString());
+            return Truncate(value.ToString());
         }
     }
 
