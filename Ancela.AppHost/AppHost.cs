@@ -42,7 +42,7 @@ var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
 var chat = openai.AddModel("chat", "gpt-5.4");
 
 var cosmosDb = builder.AddAzureCosmosDB("cosmos")
-                      .RunAsPreviewEmulator(configureContainer: container =>
+                      .RunAsEmulator(configureContainer: container =>
                       {
                           container.WithDataExplorer();
                       });
