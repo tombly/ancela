@@ -24,8 +24,8 @@
     <!-- Microsoft Application Insights -->
     <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
     <!-- Microsoft Extensions packages -->
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.8" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <!-- OpenTelemetry packages -->
     <PackageVersion Include="Microsoft.SemanticKernel" Version="1.78.0" />
     <!-- MCP server (Ancela.McpServer); 2.2.0 is the first stable line. -->
