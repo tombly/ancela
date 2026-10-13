@@ -46,7 +46,7 @@ public static class ContainerView
 
         foreach (var doc in docs)
         {
-            var cells = fields.Select(f => new Markup(FormatCell(container, f, doc[FindKey(doc, f)]))).ToArray();
+            var cells = fields.Select(f => new Markup(FormatCell(container, f, FindValue(doc, f)))).ToArray();
             table.AddRow(cells);
         }
         return table;
@@ -67,9 +67,13 @@ public static class ContainerView
         return [.. seen.OrderBy(n => n.Equals("id", StringComparison.OrdinalIgnoreCase) ? 0 : 1)];
     }
 
-    /// <summary>Case-insensitive property lookup so curated camelCase names still match odd casing.</summary>
-    private static string? FindKey(JObject doc, string field) =>
-        doc.Properties().FirstOrDefault(p => p.Name.Equals(field, StringComparison.OrdinalIgnoreCase))?.Name;
+    /// <summary>
+    /// Case-insensitive property lookup so curated camelCase names still match odd casing.
+    /// Returns the value directly: resolving the name and then re-indexing the document meant
+    /// passing a possibly-null key back into the indexer.
+    /// </summary>
+    private static JToken? FindValue(JObject doc, string field) =>
+        doc.Properties().FirstOrDefault(p => p.Name.Equals(field, StringComparison.OrdinalIgnoreCase))?.Value;
 
     private static string FormatCell(string container, string field, JToken? value)
     {

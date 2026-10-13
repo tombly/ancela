@@ -21,7 +21,14 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
 {
     public async Task OnFunctionInvocationAsync(FunctionInvocationContext context, Func<FunctionInvocationContext, Task> next)
     {
-        var profile = context.Kernel.Data.TryGetValue("profile", out var p) ? (KernelProfile)p : KernelProfile.Chat;
+        // Default-deny the profile too: a missing or non-KernelProfile value falls back to the
+        // most restrictive profile, not Chat (which is unrestricted). KernelFactory always sets
+        // this, so the fallback is unreachable today — but a backstop whose own fallback opens
+        // the gate is not a backstop. Denials still flow through the normal path below, so the
+        // audit markers AuditAnomalyScanner matches are unchanged.
+        var profile = context.Kernel.Data.TryGetValue("profile", out var p) && p is KernelProfile kp
+            ? kp
+            : KernelProfile.StandingRule;
 
         if (!KernelProfilePolicy.IsAllowed(profile, context.Function.Name))
         {

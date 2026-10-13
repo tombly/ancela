@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -226,7 +227,7 @@ public class ModelCreditBreakerTests
 
         public async IAsyncEnumerable<StreamingChatMessageContent> GetStreamingChatMessageContentsAsync(
             ChatHistory chatHistory, PromptExecutionSettings? executionSettings = null,
-            Kernel? kernel = null, CancellationToken cancellationToken = default)
+            Kernel? kernel = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             Calls++;
             if (Fails) throw FailWith();

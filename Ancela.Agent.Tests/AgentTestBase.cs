@@ -25,6 +25,12 @@ public abstract class AgentTestBase
     protected const string AgentPhoneNumber = "+15551234567";
     protected const string UserPhoneNumber = "+15559876543";
 
+    /// <summary>
+    /// The test user's timezone. A const rather than reading it back off
+    /// <c>TestUser.TimeZone</c>, which is nullable on the profile.
+    /// </summary>
+    protected const string TestUserTimeZone = "America/Los_Angeles";
+
     // Real OpenAI client
     protected readonly OpenAIClient OpenAIClient;
 
@@ -142,7 +148,7 @@ public abstract class AgentTestBase
             AgentPhoneNumber = AgentPhoneNumber,
             UserPhoneNumber = UserPhoneNumber,
             Name = "Test User",
-            TimeZone = "America/Los_Angeles",
+            TimeZone = TestUserTimeZone,
             Location = "San Francisco, CA",
             CreatedAt = DateTimeOffset.UtcNow,
             RegisteredAt = DateTimeOffset.UtcNow

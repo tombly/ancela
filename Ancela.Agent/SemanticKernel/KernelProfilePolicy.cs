@@ -54,10 +54,20 @@ public static class KernelProfilePolicy
     /// </summary>
     public static IReadOnlySet<string>? AllowedFunctions(KernelProfile profile) => profile switch
     {
+        KernelProfile.Chat or KernelProfile.Onboarding => null,
         KernelProfile.StandingRule => StandingRuleAllowed,
         KernelProfile.ScheduledTask => ScheduledTaskAllowed,
-        _ => null,
+        // Every enum member is listed above, so this arm is only reached by a value that is not
+        // a defined KernelProfile — a cast integer, or a member added without updating this
+        // switch. It denies everything rather than returning null, because null means
+        // "unrestricted" and an unrecognized profile is the last place to grant that. A boxed
+        // `(KernelProfile)999` satisfies a `is KernelProfile` type check, so callers cannot be
+        // relied on to screen these out; closing it here covers both consumers at once.
+        _ => NoneAllowed,
     };
+
+    /// <summary>Deny-all list for profiles this policy does not recognize.</summary>
+    private static readonly HashSet<string> NoneAllowed = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// True if <paramref name="functionName"/> may be invoked under <paramref name="profile"/>.

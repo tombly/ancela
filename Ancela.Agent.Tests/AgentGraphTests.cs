@@ -20,7 +20,7 @@ public class AgentGraphTests : AgentTestBase
         // the user's timezone and resolves "today" there, so comparing against UTC fails
         // near the day boundary (e.g. evening in Pacific, where UTC has already rolled over)
         // even when the model is correct.
-        var userTz = TimeZoneInfo.FindSystemTimeZoneById(TestUser.TimeZone);
+        var userTz = TimeZoneInfo.FindSystemTimeZoneById(TestUserTimeZone);
         var todayStart = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, userTz).Date;
         var todayEnd = todayStart.AddDays(1);
 
