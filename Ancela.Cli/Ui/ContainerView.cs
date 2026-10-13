@@ -67,10 +67,10 @@ public static class ContainerView
         return [.. seen.OrderBy(n => n.Equals("id", StringComparison.OrdinalIgnoreCase) ? 0 : 1)];
     }
 
-    /// <summary>Case-insensitive property lookup so curated camelCase names still match odd casing.</summary>
     /// <summary>
-    /// Case-insensitive property lookup returning the value directly. Resolving the name and
-    /// then re-indexing the document meant passing a possibly-null key back into the indexer.
+    /// Case-insensitive property lookup so curated camelCase names still match odd casing.
+    /// Returns the value directly: resolving the name and then re-indexing the document meant
+    /// passing a possibly-null key back into the indexer.
     /// </summary>
     private static JToken? FindValue(JObject doc, string field) =>
         doc.Properties().FirstOrDefault(p => p.Name.Equals(field, StringComparison.OrdinalIgnoreCase))?.Value;
