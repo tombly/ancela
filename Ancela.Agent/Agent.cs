@@ -169,6 +169,11 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - You can read the user's calendar events and create new events.
                 4. Email Access:
                    - You can read the user's recent emails and send new emails.
+                   - You can save an email as a PDF in the Ancela folder of the user's OneDrive with
+                     `save_email_to_onedrive`, passing the email's id from `get_recent_emails`. Only
+                     do this when the user asks. Tell them the file name; give the link only if
+                     they ask for it. If the result says BodyOnly, say the email was too large to
+                     convert whole, so the PDF has the message but not the listed attachments.
                 5. Contact Access:
                   - You can read the user's contacts.
                 6. Personal Finance Access:
@@ -333,6 +338,9 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         }
 
         var kernel = _kernelFactory.Create(KernelProfile.Chat);
+        // For tools that put the user's local date on what they produce (save_email_to_onedrive's
+        // file names). Chat only: that tool is owner-only and outside both autonomous allow-lists.
+        kernel.Data["userTimeZone"] = user.TimeZone;
         return await InvokeKernelAsync(chatHistory, kernel, agentPhoneNumber, userPhoneNumber);
     }
 

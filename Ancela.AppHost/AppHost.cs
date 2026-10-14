@@ -22,6 +22,10 @@ var graphUserIdParameter = builder.AddParameter("graph-user-id", true);
 var graphTenantIdParameter = builder.AddParameter("graph-tenant-id", true);
 var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
 var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
+// The one OneDrive folder the app may write to (save_email_to_onedrive). The app holds
+// Files.SelectedOperations.Selected plus a per-folder grant, so these must name that folder.
+var graphOneDriveDriveId = builder.AddParameter("graph-onedrive-drive-id", true);
+var graphOneDriveFolderId = builder.AddParameter("graph-onedrive-folder-id", true);
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
 // Site Manager API key from unifi.ui.com (Settings -> API Keys); reads the home UniFi console
@@ -93,6 +97,8 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("GRAPH_TENANT_ID", graphTenantIdParameter)
     .WithEnvironment("GRAPH_CLIENT_ID", graphClientIdParameter)
     .WithEnvironment("GRAPH_CLIENT_SECRET", graphClientSecretParameter)
+    .WithEnvironment("GRAPH_ONEDRIVE_DRIVE_ID", graphOneDriveDriveId)
+    .WithEnvironment("GRAPH_ONEDRIVE_FOLDER_ID", graphOneDriveFolderId)
     .WithEnvironment("YNAB_ACCESS_TOKEN", ynabAccessToken)
     .WithEnvironment("TAVILY_API_KEY", tavilyApiKey)
     .WithEnvironment("UNIFI_API_KEY", unifiApiKey)

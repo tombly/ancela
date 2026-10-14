@@ -2,6 +2,7 @@ using System.Globalization;
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
+using MessageItemRequestBuilder = Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
@@ -11,6 +12,8 @@ public interface IGraphClient
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
     Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int daysBack = 30);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
+    Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
+    Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
 }
@@ -184,7 +187,7 @@ public class GraphClient : IGraphClient
         var messages = await _appClient.Users[_entraUserId].MailFolders[folderId].Messages.GetAsync((config) =>
         {
             // Request specific properties.
-            config.QueryParameters.Select = ["subject", "from", "receivedDateTime", "bodyPreview", "isRead"];
+            config.QueryParameters.Select = ["id", "subject", "from", "receivedDateTime", "bodyPreview", "isRead"];
             // Only emails received within the requested time window (unquoted date literal).
             config.QueryParameters.Filter = $"receivedDateTime ge {cutoff}";
             // Safety cap: at most the most-recent results within the window.
@@ -199,6 +202,7 @@ public class GraphClient : IGraphClient
         return messages.Value
             .Select(m => new EmailModel
             {
+                Id = m.Id ?? string.Empty,
                 Subject = m.Subject ?? string.Empty,
                 From = m.From?.EmailAddress?.Address ?? string.Empty,
                 ReceivedDateTime = m.ReceivedDateTime ?? DateTimeOffset.MinValue,
@@ -236,6 +240,149 @@ public class GraphClient : IGraphClient
         });
 
         return $"Email sent successfully to {toAddress}";
+    }
+
+    #endregion
+
+    #region OneDrive
+
+    private const string GraphBaseUrl = "https://graph.microsoft.com/v1.0";
+
+    // The app holds Files.SelectedOperations.Selected with a write grant on this one folder, not
+    // tenant-wide file access: every call below is inside it, and anything else is a 403.
+    private static (string DriveId, string FolderId) OneDriveFolder()
+    {
+        var driveId = Environment.GetEnvironmentVariable("GRAPH_ONEDRIVE_DRIVE_ID");
+        var folderId = Environment.GetEnvironmentVariable("GRAPH_ONEDRIVE_FOLDER_ID");
+        if (string.IsNullOrWhiteSpace(driveId) || string.IsNullOrWhiteSpace(folderId))
+            throw new InvalidOperationException("GRAPH_ONEDRIVE_DRIVE_ID and GRAPH_ONEDRIVE_FOLDER_ID are not configured.");
+        return (driveId, folderId);
+    }
+
+    /// <summary>
+    /// Saves an email as a PDF in the OneDrive folder: the raw message goes in as a temporary .eml,
+    /// Graph converts it, the PDF is saved beside it, and the .eml is deleted. A message over the
+    /// 2 MB conversion limit is rendered from its headers and body alone.
+    /// </summary>
+    public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+        var (driveId, folderId) = OneDriveFolder();
+        var message = _appClient.Users[_entraUserId].Messages[messageId];
+
+        var summary = await message.GetAsync(config => config.QueryParameters.Select = ["subject", "receivedDateTime"])
+            ?? throw new InvalidOperationException("Graph returned no email for that id.");
+
+        // The raw MIME message is the best source: Graph renders an .eml with a From/Sent/To/Subject
+        // block and the full HTML body. Attachments are inside it and count toward the limit, so
+        // reading stops one chunk past the limit rather than downloading a large attachment.
+        byte[]? mime;
+        await using (var raw = await message.Content.GetAsync()
+            ?? throw new InvalidOperationException("Graph returned no content for the email."))
+        {
+            mime = await ReadAtMostAsync(raw, EmailPdf.ConversionLimitBytes);
+        }
+
+        var bodyOnly = mime is null;
+        var (source, omitted) = mime is not null ? (mime, []) : await RenderBodyOnlyAsync(message, timeZone);
+
+        var temporary = await UploadToFolderAsync(driveId, folderId,
+            $"ancela-{Guid.NewGuid():N}{(bodyOnly ? ".html" : ".eml")}", source);
+        var temporaryId = temporary.Id ?? throw new InvalidOperationException("Graph returned no id for the uploaded email.");
+        try
+        {
+            var pdf = await ConvertToPdfAsync(driveId, temporaryId);
+            var fileName = EmailPdf.FileName(summary.Subject, summary.ReceivedDateTime ?? DateTimeOffset.UtcNow, timeZone);
+            var saved = await UploadToFolderAsync(driveId, folderId, fileName, pdf);
+            return new SavedEmailModel
+            {
+                FileName = saved.Name ?? fileName,
+                WebUrl = saved.WebUrl ?? string.Empty,
+                BodyOnly = bodyOnly,
+                OmittedAttachments = omitted,
+            };
+        }
+        finally
+        {
+            // Best effort: a leftover "ancela-….eml" in the owner's own folder is untidy, not a
+            // leak, and throwing here would report a save that worked as a failure.
+            try { await _appClient.Drives[driveId].Items[temporaryId].DeleteAsync(); }
+            catch (Exception) { }
+        }
+    }
+
+    /// <summary>The granted folder's name. Proves the per-folder grant still exists.</summary>
+    public async Task<string> GetOneDriveFolderNameAsync()
+    {
+        var (driveId, folderId) = OneDriveFolder();
+        var folder = await _appClient.Drives[driveId].Items[folderId].GetAsync(config => config.QueryParameters.Select = ["name"]);
+        return folder?.Name ?? string.Empty;
+    }
+
+    /// <summary>The whole stream, or null once it passes <paramref name="limit"/> bytes.</summary>
+    private static async Task<byte[]?> ReadAtMostAsync(Stream stream, int limit)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk)) > 0)
+        {
+            if (buffer.Length + read > limit)
+                return null;
+            buffer.Write(chunk, 0, read);
+        }
+        return buffer.ToArray();
+    }
+
+    private static async Task<(byte[] Html, string[] Omitted)> RenderBodyOnlyAsync(MessageItemRequestBuilder message, TimeZoneInfo timeZone)
+    {
+        var full = await message.GetAsync(config =>
+        {
+            config.QueryParameters.Select = ["subject", "from", "toRecipients", "ccRecipients", "sentDateTime", "body"];
+            // Plain-text emails come back as HTML too, so there is one rendering path.
+            config.Headers.Add("Prefer", "outlook.body-content-type=\"html\"");
+        }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
+
+        // Names only: without $select, file attachments come back with their content.
+        var attachments = await message.Attachments.GetAsync(config => config.QueryParameters.Select = ["name", "isInline"]);
+        var omitted = attachments?.Value?
+            .Where(a => a.IsInline != true)
+            .Select(a => a.Name ?? "(unnamed)")
+            .ToArray() ?? [];
+
+        var html = EmailPdf.Utf8WithBom(EmailPdf.RenderBodyOnlyHtml(full, omitted, timeZone));
+        if (html.Length > EmailPdf.ConversionLimitBytes)
+            throw new InvalidOperationException("This email is over the 2 MB PDF conversion limit even without its attachments, so it can't be saved as a PDF.");
+        return (html, omitted);
+    }
+
+    private async Task<byte[]> ConvertToPdfAsync(string driveId, string itemId)
+    {
+        // Graph answers with a 302 to a short-lived pre-authenticated URL on another host. The SDK
+        // follows it, and its redirect handler drops the Authorization header on a cross-host hop
+        // (Kiota's RedirectHandlerOption.DefaultScrubSensitiveHeaders), so the token stays with
+        // Graph. OneDriveLiveTests pins that behaviour.
+        await using var stream = await _appClient.Drives[driveId].Items[itemId].Content
+            .GetAsync(config => config.QueryParameters.Format = "pdf")
+            ?? throw new InvalidOperationException("Graph returned no PDF.");
+        using var pdf = new MemoryStream();
+        await stream.CopyToAsync(pdf);
+
+        var bytes = pdf.ToArray();
+        if (!bytes.AsSpan().StartsWith("%PDF-"u8))
+            throw new InvalidOperationException("Graph's PDF conversion did not return a PDF.");
+        return bytes;
+    }
+
+    private async Task<DriveItem> UploadToFolderAsync(string driveId, string folderId, string fileName, byte[] content)
+    {
+        // Addressed by path under the folder, escaped here: the SDK's ItemWithPath doesn't
+        // percent-encode, and fileName carries an email subject. An existing name is replaced.
+        var url = $"{GraphBaseUrl}/drives/{Uri.EscapeDataString(driveId)}/items/{Uri.EscapeDataString(folderId)}"
+            + $":/{Uri.EscapeDataString(fileName)}:/content";
+        using var stream = new MemoryStream(content);
+        return await _appClient.Drives[driveId].Items[folderId].Content.WithUrl(url).PutAsync(stream)
+            ?? throw new InvalidOperationException("Graph returned no item for the upload.");
     }
 
     #endregion
