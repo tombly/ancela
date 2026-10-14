@@ -65,6 +65,21 @@ public class GraphPlugin(IGraphClient graphClient)
         return await graphClient.SendEmailAsync(toAddress, subject, body);
     }
 
+    [KernelFunction("save_email_to_onedrive")]
+    [Description("Saves one of the user's emails as a PDF in the Ancela folder of their OneDrive and returns the file's name and link. Only when the user asks.")]
+    public async Task<SavedEmailModel> SaveEmailToOneDriveAsync(
+         Kernel kernel,
+         [Description("The email's id, exactly as returned by get_recent_emails.")]
+         string emailId)
+    {
+        // The file name leads with the received date, which should be the user's date, not UTC's.
+        var timeZone = kernel.Data.TryGetValue("userTimeZone", out var id) && id is string tz
+            && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found)
+            ? found
+            : TimeZoneInfo.Utc;
+        return await graphClient.SaveEmailAsPdfAsync(emailId, timeZone);
+    }
+
     #endregion
 
     #region Contacts

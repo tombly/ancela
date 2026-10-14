@@ -84,9 +84,10 @@ public static class KernelProfilePolicy
     // operational/security posture — and home network status, which is presence data).
     // Non-owner users are denied access even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
+    // save_email_to_onedrive writes into the owner's OneDrive and is in neither allow-list.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "send_sms", "send_email", "create_calendar_event", "send_to_remarkable",
+        "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
         "check_services", "check_anomalies",
         "get_network_client_count", "get_network_uptime",

@@ -98,13 +98,13 @@ aspire deploy --clear-cache
 
 #### Semantic Kernel (`SemanticKernel/` folder)
 - `KernelFactory.cs` - Builds a fresh `Kernel` per request for a given `KernelProfile` (`Chat`, `Onboarding`, `StandingRule`, `ScheduledTask`), loads plugins, and attaches the invocation filters. Onboarding loads only `RegistrationPlugin`.
-- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`, the Google Health reads, and the diagnostics self-check `check_services`/`check_anomalies`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`.
+- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`, `save_email_to_onedrive`, the Google Health reads, and the diagnostics self-check `check_services`/`check_anomalies`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`.
 
 #### Plugins (`SemanticKernel/Plugins/` folder)
 Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/service for I/O.
 - `MemoryPlugin/` - To-dos and knowledge (shared memory) in Cosmos.
 - `ProjectsPlugin/` - Projects: longer-lived workspaces with notes and categorized entries.
-- `GraphPlugin/` - Microsoft Graph: calendar, email, contacts.
+- `GraphPlugin/` - Microsoft Graph: calendar, email, contacts, and `save_email_to_onedrive` (owner-only). That tool puts the raw message (.eml) in one OneDrive folder, has Graph convert it (`?format=pdf`), saves the PDF beside it and deletes the .eml; over Graph's 2 MB conversion limit it renders the headers and body alone (`EmailPdf`). **The app holds `Files.SelectedOperations.Selected` plus a write grant on that one folder, not tenant-wide file access** — `GRAPH_ONEDRIVE_DRIVE_ID` / `GRAPH_ONEDRIVE_FOLDER_ID` must name the granted folder, and anywhere else is a 403. File names come from email subjects, which the sender controls: `GraphClient` escapes the upload path itself because the SDK's `ItemWithPath` doesn't.
 - `YnabPlugin/` - YNAB budget/account/transaction reads.
 - `WebPlugin/` - `web_search` (Tavily) and `web_fetch`.
 - `WeatherPlugin/` - `get_forecast`: today's labelled daytime high and nighttime low from the National Weather Service (api.weather.gov; free, no key, US only). Place names resolve through Open-Meteo's geocoder first because NWS takes coordinates only. Exists because reading a high out of `web_search` snippets does not work — an unlabelled "63° 37°" got reported as a 35°F high on 2026-10-11. **NWS returns 403 without an identifying `User-Agent`.** Allowed in both autonomous profiles; unlike `web_fetch` it reads one fixed API rather than a model-chosen URL.
@@ -114,7 +114,7 @@ Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/servi
 - `ScheduledTaskPlugin/` - Recurring actions on a clock schedule (store + scheduler).
 - `RegistrationPlugin/` - User onboarding (`register_user`).
 - `RemarkablePlugin/` - `send_to_remarkable` (owner-only); renders text to PDF with QuestPDF and uploads via `Remarkable.Api.Client`. Requires `REMARKABLE_DEVICE_TOKEN` (obtained one-time via `rmpair`).
-- `DiagnosticsPlugin/` - Owner-only, on-demand self-check ("how are you?"): `check_services` probes every external dependency (Cosmos, Service Bus dead-letter queues, Twilio, Graph, YNAB, Tavily, Google Health, reMarkable); `check_anomalies` scans the audit container and applies deterministic thresholds (`AnomalyEvaluator`) for unknown senders, failed TOTP step-ups, guard denials, high search/SMS/email volume, and tool errors.
+- `DiagnosticsPlugin/` - Owner-only, on-demand self-check ("how are you?"): `check_services` probes every external dependency (Cosmos, Service Bus dead-letter queues, Twilio, Graph, the OneDrive folder grant, YNAB, Tavily, Google Health, reMarkable); `check_anomalies` scans the audit container and applies deterministic thresholds (`AnomalyEvaluator`) for unknown senders, failed TOTP step-ups, guard denials, high search/SMS/email volume, and tool errors.
 
 ### Ancela.Cli
 Read-only Spectre.Console TUI for auditing the deployed Cosmos data and minting the owner TOTP secret. Commands: `ping`, `list`, `show` (browse containers), and `enroll` (generate `OWNER_TOTP_SECRET` + QR).
@@ -148,7 +148,7 @@ Then register it in `~/Library/Application Support/Claude/claude_desktop_config.
 `DefaultAzureCredential` shells out to `az`. Restart Claude Desktop to pick up changes.
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests` (base class: `AgentTestBase`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, and `WeatherLiveTests` (the only one needing no API key).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests`, `EmailPdfTests` (base class: `AgentTestBase`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, `OneDriveLiveTests` (Graph secrets plus the folder IDs; also pins that the folder is the only place the app can write and that the SDK drops the token on the conversion redirect), and `WeatherLiveTests` (the only one needing no API key).
 
 ## Dependencies & Packages
 

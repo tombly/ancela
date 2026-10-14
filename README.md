@@ -13,7 +13,7 @@ across the real-world services it's connected to.
 
 You interact entirely over SMS. Under the hood the assistant has a set of capabilities:
 
-- **Calendar & email** — read your calendar, create events, read your inbox, and send mail (via Microsoft Graph).
+- **Calendar & email** — read your calendar, create events, read your inbox, and send mail (via Microsoft Graph). The owner can also save an email as a PDF to one OneDrive folder.
 - **Contacts** — look up people's details from your address book.
 - **Money** — check account balances and recent transactions (via YNAB).
 - **Memory** — remember facts about you and keep a shared list of to-dos.
@@ -164,6 +164,28 @@ In your organization's [Entra admin center](https://aad.portal.azure.com/), crea
 `Calendars.ReadWrite`, `Contacts.Read`, `Mail.Read`, `Mail.Send`. Then create a
 **client secret** under **Certificates & secrets** and copy its value.
 
+To save emails as PDFs (`save_email_to_onedrive`), also add the *Application* permission
+`Files.SelectedOperations.Selected` and grant admin consent. On its own it grants nothing;
+you then give the app write access to **one folder**. Don't use `Files.ReadWrite.All`
+instead: it would let the app write to every OneDrive in the tenant.
+
+1. Create the folder in the owner's OneDrive for work or school. App-only credentials can't
+   reach a personal Microsoft account's OneDrive.
+2. In [Graph Explorer](https://aka.ms/ge), signed in as the owner (check with `GET /me`; a
+   different account gets `itemNotFound`), run `GET /me/drive/root:/<folder>` and note `id`
+   and `parentReference.driveId`.
+3. Grant the app that folder:
+   ```http
+   POST https://graph.microsoft.com/v1.0/drives/{driveId}/items/{folderId}/permissions
+
+   { "grantedToV2": { "application": { "id": "<client ID>" } }, "roles": ["write"] }
+   ```
+   Expect `201`. If Graph Explorer gets `403`, consent `Sites.FullControl.All` for your own
+   Graph Explorer session (not the app) and retry.
+
+To revoke, delete that permission from the folder. The self-check (`check_services`) reports
+the grant as `onedrive-folder`.
+
 ### 2. Set user secrets
 
 From the AppHost project:
@@ -178,6 +200,8 @@ dotnet user-secrets set Parameters:graph-user-id       "..."   # the owner's Ent
 dotnet user-secrets set Parameters:graph-tenant-id     "..."
 dotnet user-secrets set Parameters:graph-client-id     "..."
 dotnet user-secrets set Parameters:graph-client-secret "..."
+dotnet user-secrets set Parameters:graph-onedrive-drive-id  "..."   # the granted folder's driveId
+dotnet user-secrets set Parameters:graph-onedrive-folder-id "..."   # the granted folder's id
 dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
 ```
 

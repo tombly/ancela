@@ -51,6 +51,7 @@ public class ServiceHealthChecker(
             ProbeAsync("service-bus", ProbeServiceBusAsync),
             ProbeAsync("twilio", ProbeTwilioAsync),
             ProbeAsync("microsoft-graph", ProbeGraphAsync),
+            ProbeAsync("onedrive-folder", ProbeOneDriveAsync),
             ProbeAsync("ynab", ProbeYnabAsync),
             ProbeAsync("tavily-web-search", ProbeTavilyAsync),
             ProbeAsync("google-health", ProbeGoogleHealthAsync),
@@ -115,6 +116,14 @@ public class ServiceHealthChecker(
     {
         await _graphClient.GetUserContactsAsync(maxResults: 1);
         return ("ok", "token valid; contacts reachable");
+    }
+
+    private async Task<(string Status, string Detail)> ProbeOneDriveAsync()
+    {
+        // Separate from the Graph probe: the app reaches OneDrive only through a per-folder grant,
+        // which can be removed while the tenant-wide mail/calendar permissions stay intact.
+        var name = await _graphClient.GetOneDriveFolderNameAsync();
+        return ("ok", $"folder grant present ('{name}')");
     }
 
     private async Task<(string Status, string Detail)> ProbeYnabAsync()

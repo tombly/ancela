@@ -239,8 +239,10 @@ public class SecurityTests
     [InlineData(KernelProfile.StandingRule, "send_email")]
     [InlineData(KernelProfile.StandingRule, "create_calendar_event")]
     [InlineData(KernelProfile.StandingRule, "list_reminders")]  // not write/send, but still not allow-listed → default-deny
+    [InlineData(KernelProfile.StandingRule, "save_email_to_onedrive")]
     [InlineData(KernelProfile.ScheduledTask, "send_sms")]
     [InlineData(KernelProfile.ScheduledTask, "register_user")]
+    [InlineData(KernelProfile.ScheduledTask, "save_email_to_onedrive")]  // may read email, not copy it out
     public async Task AutonomousToolGuardFilter_BlocksNonAllowedFunction(KernelProfile profile, string functionName)
     {
         // The filter throws InvalidOperationException, which Semantic Kernel propagates unwrapped.
@@ -343,6 +345,7 @@ public class SecurityTests
     [InlineData("check_anomalies")]
     [InlineData("get_network_client_count")]
     [InlineData("get_network_uptime")]
+    [InlineData("save_email_to_onedrive")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -377,6 +380,8 @@ public class SecurityTests
             because: "who is connected at home is presence data");
         KernelProfilePolicy.IsOwnerOnly("get_network_uptime").Should().BeTrue(
             because: "home network status is owner-private");
+        KernelProfilePolicy.IsOwnerOnly("save_email_to_onedrive").Should().BeTrue(
+            because: "it writes the owner's email into the owner's OneDrive");
 
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
