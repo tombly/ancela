@@ -10,7 +10,7 @@ public interface IGraphClient
 {
     Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
-    Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int daysBack = 30);
+    Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int? daysBack = null, string? search = null);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
     Task<string> GetOneDriveFolderNameAsync();
@@ -166,7 +166,10 @@ public class GraphClient : IGraphClient
     /// </summary>
     private const int EmailResultCap = 50;
 
-    public async Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int daysBack = 30)
+    /// <summary>The window an unsearched listing covers when the model doesn't give one.</summary>
+    private const int DefaultEmailDaysBack = 30;
+
+    public async Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, int? daysBack = null, string? search = null)
     {
         // Map our restricted folder set to Graph's well-known folder names.
         var folderId = folder switch
@@ -177,29 +180,45 @@ public class GraphClient : IGraphClient
             _ => "inbox"
         };
 
-        // Clamp the window to a sane range: at least one day (so a zero/negative value
-        // can't yield a future cutoff that returns nothing) and at most ~10 years (so a
-        // huge value can't underflow DateTimeOffset in AddDays). The result is capped at
-        // EmailResultCap regardless, so a wide window just means "most recent".
-        var days = Math.Clamp(daysBack, 1, 3650);
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-days).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        // A search covers the whole folder unless a window is asked for: it is how the model
+        // reaches mail older than the newest EmailResultCap, which in a busy inbox is a day or
+        // two. Otherwise the window defaults to DefaultEmailDaysBack. Either way it is clamped:
+        // at least one day (so a zero/negative value can't yield a future cutoff that returns
+        // nothing) and at most ~10 years (so a huge value can't underflow DateTimeOffset in
+        // AddDays). The result is capped at EmailResultCap regardless, so a wide window just
+        // means "most recent".
+        var searching = !string.IsNullOrWhiteSpace(search);
+        DateTimeOffset? cutoff = searching && daysBack is null
+            ? null
+            : DateTimeOffset.UtcNow.AddDays(-Math.Clamp(daysBack ?? DefaultEmailDaysBack, 1, 3650));
 
         var messages = await _appClient.Users[_entraUserId].MailFolders[folderId].Messages.GetAsync((config) =>
         {
             // Request specific properties.
             config.QueryParameters.Select = ["id", "subject", "from", "receivedDateTime", "bodyPreview", "isRead"];
-            // Only emails received within the requested time window (unquoted date literal).
-            config.QueryParameters.Filter = $"receivedDateTime ge {cutoff}";
             // Safety cap: at most the most-recent results within the window.
             config.QueryParameters.Top = EmailResultCap;
-            // Sort by received date, most recent first.
-            config.QueryParameters.Orderby = ["receivedDateTime desc"];
+            if (searching)
+            {
+                // Graph rejects $filter and $orderby alongside $search (400 SearchWithFilter /
+                // SearchWithOrderBy) and returns matches newest first, so the window is
+                // applied to the results below instead.
+                config.QueryParameters.Search = SearchClause(search!);
+            }
+            else
+            {
+                // Only emails received within the requested time window (unquoted date literal).
+                config.QueryParameters.Filter = $"receivedDateTime ge {cutoff!.Value.ToString("yyyy-MM-ddTHH:mm:ssZ")}";
+                // Sort by received date, most recent first.
+                config.QueryParameters.Orderby = ["receivedDateTime desc"];
+            }
         });
 
         if (messages?.Value == null)
             return [];
 
         return messages.Value
+            .Where(m => cutoff is null || m.ReceivedDateTime >= cutoff)
             .Select(m => new EmailModel
             {
                 Id = m.Id ?? string.Empty,
@@ -209,6 +228,18 @@ public class GraphClient : IGraphClient
                 BodyPreview = m.BodyPreview ?? string.Empty,
                 IsRead = m.IsRead ?? false
             }).ToArray();
+    }
+
+    /// <summary>
+    /// Wraps the model's search text for Graph's <c>$search</c>, which takes one double-quoted KQL
+    /// string (<c>from:someone@example.com</c>, <c>invoice AND march</c>); quotes and backslashes
+    /// inside it are escaped. KQL can only widen or narrow the matches within the one folder being
+    /// read, so the text needs no other screening.
+    /// </summary>
+    public static string SearchClause(string search)
+    {
+        var escaped = search.Trim().Replace(@"\", @"\\").Replace("\"", "\\\"");
+        return $"\"{escaped}\"";
     }
 
     public async Task<string> SendEmailAsync(string toAddress, string subject, string body)

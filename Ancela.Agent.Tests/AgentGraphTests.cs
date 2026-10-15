@@ -5,7 +5,7 @@ using Moq;
 namespace Ancela.Agent.Tests;
 
 /// <summary>
-/// Integration tests verifying that calendar-related prompts trigger the correct
+/// Integration tests verifying that calendar and email prompts trigger the correct
 /// IGraphClient function calls via the AI's function calling capability. These hit a live
 /// model, so they are gated under the "Integration" category and retried (via
 /// <see cref="AgentTestBase.SendUntilAsync"/>) to absorb non-deterministic tool selection.
@@ -52,6 +52,36 @@ public class AgentGraphTests : AgentTestBase
         Assert.NotNull(response);
     }
 
+    [Fact]
+    public async Task SaveEmail_WhenTheNamedEmailIsOlderThanTheNewest50_FindsItBySearch()
+    {
+        // The production bug: the email the owner named was older than the 50 newest, which is all
+        // a plain listing returns, and the model saved the newest email in its place.
+        var named = CreateEmail("named", "noreply@newsletter.example", "An update to your account number", hoursAgo: 28 * 24);
+        SetupEmails(search => search?.Contains("newsletter", StringComparison.OrdinalIgnoreCase) == true ? [named] : NewestFifty());
+        SetupSave();
+
+        await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
+            MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce));
+
+        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>()),
+            Times.Never, "no other email may be saved in its place");
+    }
+
+    [Fact]
+    public async Task SaveEmail_WhenTheNamedEmailIsNowhere_SavesNothing()
+    {
+        SetupEmails(search => search is null ? NewestFifty() : []);
+        SetupSave();
+
+        await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
+            MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsNotNull<string>()),
+                Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
+
+        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()),
+            Times.Never, "when the named email can't be found, nothing may be saved in its place");
+    }
+
     /// <summary>
     /// Configures the mock to return specific calendar events when GetUserEventsAsync is called.
     /// </summary>
@@ -72,6 +102,56 @@ public class AgentGraphTests : AgentTestBase
             Description = description,
             Start = start,
             End = end
+        };
+    }
+
+    /// <summary>
+    /// Configures GetUserEmailsAsync to answer by the model's search text (null for a plain listing).
+    /// </summary>
+    protected void SetupEmails(Func<string?, EmailModel[]> bySearch)
+    {
+        MockGraphClient
+            .Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsAny<string?>()))
+            .ReturnsAsync((MailFolder _, int? _, string? search) => bySearch(search));
+    }
+
+    /// <summary>
+    /// Configures SaveEmailAsPdfAsync to succeed for any email.
+    /// </summary>
+    protected void SetupSave()
+    {
+        MockGraphClient
+            .Setup(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()))
+            .ReturnsAsync((string id, TimeZoneInfo _) => new SavedEmailModel
+            {
+                FileName = $"{id}.pdf",
+                WebUrl = "https://example.com/onedrive/file",
+                BodyOnly = false,
+                OmittedAttachments = [],
+            });
+    }
+
+    /// <summary>
+    /// A full plain listing: 50 emails from the last day, none from the sender the tests ask about.
+    /// </summary>
+    protected static EmailModel[] NewestFifty() =>
+        Enumerable.Range(1, 50)
+            .Select(i => CreateEmail($"recent-{i}", $"sender{i}@example.com", $"Weekly update {i}", hoursAgo: i / 2.0))
+            .ToArray();
+
+    /// <summary>
+    /// Creates an EmailModel for testing.
+    /// </summary>
+    protected static EmailModel CreateEmail(string id, string from, string subject, double hoursAgo)
+    {
+        return new EmailModel
+        {
+            Id = id,
+            Subject = subject,
+            From = from,
+            ReceivedDateTime = DateTimeOffset.UtcNow.AddHours(-hoursAgo),
+            BodyPreview = subject,
+            IsRead = false,
         };
     }
 }
