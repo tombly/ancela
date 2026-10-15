@@ -42,14 +42,16 @@ public class GraphPlugin(IGraphClient graphClient)
     #region Email
 
     [KernelFunction("get_recent_emails")]
-    [Description("Retrieves recent emails from one of the user's mail folders. Reads the inbox unless the user explicitly asks for sent or deleted mail.")]
+    [Description("Retrieves emails from one of the user's mail folders, newest first, at most 50. Reads the inbox unless the user explicitly asks for sent or deleted mail. Without a search the 50 newest may cover only the last day or two, so to find a particular email, pass search.")]
     public async Task<EmailModel[]> GetRecentEmailsAsync(
          [Description("Which mail folder to read: Inbox, Sent, or Deleted. Defaults to Inbox.")]
          MailFolder folder = MailFolder.Inbox,
-         [Description("How many days back to retrieve emails from. Defaults to 30.")]
-         int daysBack = 30)
+         [Description("How many days back to look. Defaults to 30 without a search, and to the whole folder with one.")]
+         int? daysBack = null,
+         [Description("Finds particular emails anywhere in the folder: a sender's address or name, or words from the subject or body, e.g. 'from:someone@example.com' or 'invoice march'.")]
+         string? search = null)
     {
-        return await graphClient.GetUserEmailsAsync(folder, daysBack);
+        return await graphClient.GetUserEmailsAsync(folder, daysBack, search);
     }
 
     [KernelFunction("send_email")]
