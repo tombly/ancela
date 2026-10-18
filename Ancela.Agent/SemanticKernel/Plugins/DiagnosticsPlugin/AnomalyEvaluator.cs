@@ -44,7 +44,9 @@ public static class AnomalyEvaluator
                 Severity = "alert",
                 Title = "Blocked tool calls",
                 Detail = $"{activity.GuardDenialCount} invocation(s) were hard-denied by the tool guard " +
-                         "(an autonomous run or non-owner attempted a function outside its allow-list).",
+                         "(an autonomous run or non-owner attempted a function outside its allow-list, or a " +
+                         "message tried to send after reading email, calendar or the web — expected if you asked " +
+                         "for a reply to an email in that same message).",
             });
 
         // --- Volume signals: warn when above the (window-scaled) per-24h threshold. ---

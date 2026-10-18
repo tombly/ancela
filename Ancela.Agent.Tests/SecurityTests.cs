@@ -1,6 +1,7 @@
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -55,6 +56,8 @@ public class SecurityTests
         "create_standing_rule", "pause_standing_rule", "resume_standing_rule", "delete_standing_rule",
         "create_scheduled_task", "pause_scheduled_task", "resume_scheduled_task", "delete_scheduled_task",
         "check_services", "check_anomalies",  // self-check is owner-initiated, on-demand only
+        // An instruction goes into every later Chat prompt; a background run must not set one.
+        "remember_instruction", "forget_instruction",
         // Read-only, but presence data: who is home is not something a standing rule or
         // scheduled task should be able to read and put into a message.
         "get_network_client_count", "get_network_uptime",
@@ -117,6 +120,7 @@ public class SecurityTests
         services.AddSingleton<UnifiPlugin>();
         services.AddSingleton<IWeatherClient>(_ => new Mock<IWeatherClient>().Object);
         services.AddSingleton<WeatherPlugin>();
+        services.AddSingleton<InstructionsPlugin>(_ => new InstructionsPlugin(new Mock<IUserService>().Object));
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);
@@ -388,6 +392,112 @@ public class SecurityTests
         KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();
     }
+
+    // --- Untrusted content within one message ---
+
+    [Theory]
+    [InlineData("get_recent_emails", "send_email")]
+    [InlineData("get_recent_emails", "send_sms")]
+    [InlineData("get_recent_emails", "web_fetch")]  // a URL the model picks can carry the inbox out
+    [InlineData("get_recent_emails", "remember_instruction")]
+    [InlineData("get_recent_emails", "forget_instruction")]
+    [InlineData("get_calendar_events", "send_email")]
+    [InlineData("get_calendar_events", "web_fetch")]
+    [InlineData("web_search", "send_email")]
+    [InlineData("web_search", "send_sms")]
+    [InlineData("web_search", "remember_instruction")]
+    [InlineData("web_fetch", "send_email")]
+    public async Task UntrustedRead_SwitchesOffForTheRestOfTheMessage(string read, string then)
+    {
+        // Chat, owner: the most permissive caller there is, so only this rule can deny.
+        var kernel = GuardedChatKernel();
+        await InvokeAsync(kernel, read);
+
+        var act = async () => await InvokeAsync(kernel, then);
+
+        await act.Should().ThrowAsync<InvalidOperationException>(
+                because: $"once {read} has put text other people wrote in front of the model, {then} could be acting on it")
+            .WithMessage($"*{AutonomousToolGuardFilter.UntrustedContentDenialMarker}*",
+                because: "check_anomalies counts guard denials by this text");
+    }
+
+    [Theory]
+    [InlineData("get_recent_emails", "save_email_to_onedrive")]  // writes only into the owner's folder
+    [InlineData("get_recent_emails", "create_calendar_event")]   // no attendees, so no invitation goes out
+    [InlineData("get_recent_emails", "get_recent_emails")]
+    [InlineData("web_search", "web_fetch")]                      // opening a result is what search is for
+    [InlineData("web_fetch", "web_fetch")]
+    [InlineData("get_contacts", "send_email")]                   // the user's own address book is not outside text
+    public async Task UntrustedRead_LeavesOtherFunctionsOn(string read, string then)
+    {
+        var kernel = GuardedChatKernel();
+        await InvokeAsync(kernel, read);
+
+        var result = await InvokeAsync(kernel, then);
+
+        result.GetValue<string>().Should().Be("ok", because: $"{read} does not switch {then} off");
+    }
+
+    [Fact]
+    public async Task UntrustedRead_CountsEvenWhenTheReadFails()
+    {
+        // A read can fail after part of its text has reached the model (or an error message can
+        // quote it), so the mark goes on before the read runs.
+        var kernel = GuardedChatKernel();
+        var failingRead = KernelFunctionFactory.CreateFromMethod(
+            string () => throw new HttpRequestException("Graph timed out"), functionName: "get_recent_emails");
+        await ((Func<Task>)(async () => await kernel.InvokeAsync(failingRead))).Should().ThrowAsync<HttpRequestException>();
+
+        var act = async () => await InvokeAsync(kernel, "send_email");
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task UntrustedRead_DoesNotCarryIntoTheNextMessage()
+    {
+        // Each message gets its own kernel, so the user confirming in a new message is what
+        // switches sending back on.
+        var factory = BuildFactory();
+        var first = factory.Create(KernelProfile.Chat);
+        first.Data["isOwner"] = true;
+        await InvokeAsync(first, "get_recent_emails");
+        await ((Func<Task>)(async () => await InvokeAsync(first, "send_email"))).Should().ThrowAsync<InvalidOperationException>();
+
+        var next = factory.Create(KernelProfile.Chat);
+        next.Data["isOwner"] = true;
+        var result = await InvokeAsync(next, "send_email");
+
+        result.GetValue<string>().Should().Be("ok", because: "the next message has read nothing yet");
+    }
+
+    [Fact]
+    public void UntrustedContentFunctionNames_AllMapToRealFunctions()
+    {
+        // A misspelt name here would quietly switch nothing off.
+        var factory = BuildFactory();
+        var loaded = factory.Create(KernelProfile.Chat).Plugins
+            .SelectMany(p => p)
+            .Select(f => f.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var unknown = KernelProfilePolicy.UntrustedContentFunctionNames.Where(n => !loaded.Contains(n)).ToList();
+        unknown.Should().BeEmpty(
+            because: $"every name in the untrusted-content rules must map to a real function, but these don't: {string.Join(", ", unknown)}");
+    }
+
+    private static Kernel GuardedChatKernel()
+    {
+        var kernel = new Kernel();
+        kernel.Data["profile"] = KernelProfile.Chat;
+        kernel.Data["isOwner"] = true;
+        kernel.FunctionInvocationFilters.Add(
+            new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+        return kernel;
+    }
+
+    private static Task<FunctionResult> InvokeAsync(Kernel kernel, string functionName) =>
+        kernel.InvokeAsync(KernelFunctionFactory.CreateFromMethod(() => "ok", functionName: functionName));
 
     // --- Finding B: per-request kernel isolation ---
 
