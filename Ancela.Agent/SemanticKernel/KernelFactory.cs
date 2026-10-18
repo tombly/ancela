@@ -1,5 +1,6 @@
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -49,7 +50,8 @@ public sealed class KernelFactory(
     RemarkablePlugin _remarkablePlugin,
     DiagnosticsPlugin _diagnosticsPlugin,
     UnifiPlugin _unifiPlugin,
-    WeatherPlugin _weatherPlugin) : IKernelFactory
+    WeatherPlugin _weatherPlugin,
+    InstructionsPlugin _instructionsPlugin) : IKernelFactory
 {
     public Kernel Create(KernelProfile profile)
     {
@@ -80,11 +82,16 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_diagnosticsPlugin);
                 plugins.AddFromObject(_unifiPlugin);
                 plugins.AddFromObject(_weatherPlugin);
+                plugins.AddFromObject(_instructionsPlugin);
                 break;
         }
 
         var kernel = new Kernel(_sp, plugins);
         kernel.Data["profile"] = profile;
+        // What this message has read that other people write; AutonomousToolGuardFilter switches
+        // sending and instructions off once it holds anything. One kernel per message, so it
+        // starts empty each time.
+        kernel.Data["untrustedContent"] = new UntrustedContentLog();
 
         foreach (var filter in _sp.GetServices<IFunctionInvocationFilter>())
             kernel.FunctionInvocationFilters.Add(filter);

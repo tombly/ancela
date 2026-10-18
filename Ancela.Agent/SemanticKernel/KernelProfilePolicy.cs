@@ -11,7 +11,9 @@ namespace Ancela.Agent.SemanticKernel;
 /// </list>
 /// The autonomous profiles use a <b>default-deny</b> allow-list: anything not explicitly
 /// listed (including any tool added later) is denied automatically. Chat and Onboarding are
-/// unrestricted (<c>null</c>), because a human is in the loop.
+/// unrestricted (<c>null</c>), because a human is in the loop — except that within one message,
+/// reading email, calendar or the web switches sending and instructions off
+/// (<see cref="SwitchedOffBy"/>), which only the guard enforces.
 /// </summary>
 public static class KernelProfilePolicy
 {
@@ -100,4 +102,64 @@ public static class KernelProfilePolicy
     /// <see cref="AutonomousToolGuardFilter"/> hard-denies them as a backstop.
     /// </summary>
     public static bool IsOwnerOnly(string functionName) => OwnerOnlyFunctions.Contains(functionName);
+
+    // Reads whose results carry text that people other than the user write: anyone can email
+    // the user or put text in a meeting invite, and anyone can publish a web page. Once one of
+    // these has run, the model may be acting on instructions planted in that text, so for the
+    // rest of the message the functions below are switched off. This is the one restriction
+    // that applies in Chat. A kernel serves one message, so the next message starts clean: the
+    // user confirming is what switches them back on.
+    private static readonly Dictionary<string, UntrustedSource> UntrustedReads = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["get_recent_emails"] = UntrustedSource.MailOrCalendar,
+        ["get_calendar_events"] = UntrustedSource.MailOrCalendar,
+        ["web_search"] = UntrustedSource.Web,
+        ["web_fetch"] = UntrustedSource.Web,
+    };
+
+    // What each source switches off. Sending is off after either, because a planted
+    // instruction pays off by getting something sent (forward the inbox, text this number).
+    // Instructions are off after either because remember_instruction's text goes into every
+    // later Chat prompt, which would carry an injection into messages that never read it;
+    // forget_instruction is off so one can't remove a rule the user set. web_fetch is off after
+    // mail and calendar because a URL the model picks is itself a way out (?q=<the inbox>), but
+    // stays on after a search, since opening a result is what searching is for. Left on:
+    // save_email_to_onedrive and create_calendar_event, which write only into the owner's own
+    // folder and calendar (there is no attendees parameter, so no invitation goes out).
+    // Not covered: text a read put into Ancela's reply carries over in history, and knowledge
+    // or to-dos saved after a read are not marked when read back later.
+    private static readonly Dictionary<string, UntrustedSource> SwitchedOffAfter = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["send_email"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
+        ["send_sms"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
+        ["remember_instruction"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
+        ["forget_instruction"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
+        ["web_fetch"] = UntrustedSource.MailOrCalendar,
+    };
+
+    /// <summary>
+    /// The kind of untrusted text <paramref name="functionName"/> returns, or
+    /// <see cref="UntrustedSource.None"/> if it returns none.
+    /// </summary>
+    public static UntrustedSource UntrustedSourceOf(string functionName) =>
+        UntrustedReads.TryGetValue(functionName, out var source) ? source : UntrustedSource.None;
+
+    /// <summary>
+    /// The sources in <paramref name="seen"/> that switch <paramref name="functionName"/> off, or
+    /// <see cref="UntrustedSource.None"/> if it may still run.
+    /// </summary>
+    public static UntrustedSource SwitchedOffBy(string functionName, UntrustedSource seen) =>
+        SwitchedOffAfter.TryGetValue(functionName, out var sources) ? sources & seen : UntrustedSource.None;
+
+    /// <summary>Every function named by the untrusted-content rules, so tests can check each one exists.</summary>
+    public static IEnumerable<string> UntrustedContentFunctionNames => UntrustedReads.Keys.Concat(SwitchedOffAfter.Keys);
+}
+
+/// <summary>Where a read's untrusted text comes from (see <see cref="KernelProfilePolicy.UntrustedSourceOf"/>).</summary>
+[Flags]
+public enum UntrustedSource
+{
+    None = 0,
+    MailOrCalendar = 1,
+    Web = 2,
 }

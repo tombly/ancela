@@ -81,7 +81,7 @@ aspire deploy --clear-cache
 - `Agent.cs` - Core orchestration: builds a kernel per request via `IKernelFactory`, advertises the profile-allowed functions to the model, and runs `Chat`, `Onboard`, `EvaluateStandingRule`, and `PerformScheduledTask`.
 - `ChatInterceptor.cs` - Handles session/access commands before the model sees them: `hello ancela`, `goodbye ancela`, and owner-only `invite`/`revoke` (with required TOTP step-up). Invite-only registration.
 - `AuditFilter.cs` - `IFunctionInvocationFilter` that audit-logs every kernel function invocation.
-- `AutonomousToolGuardFilter.cs` - `IFunctionInvocationFilter` that hard-denies any function call outside the profile's allow-list (and owner-only functions for non-owners), as defense-in-depth.
+- `AutonomousToolGuardFilter.cs` - `IFunctionInvocationFilter` that hard-denies any function call outside the profile's allow-list (and owner-only functions for non-owners), as defense-in-depth. It also enforces the one restriction that applies in Chat: once a message has read email, calendar or the web (`UntrustedContentLog` in `kernel.Data["untrustedContent"]`), sending and instructions are switched off for the rest of that message. The denial tells the model to ask the user to confirm, and `Agent` adds a note to that reply in history so the confirming message sends without reading again — without the note it re-reads the email to check, and the send is switched off again.
 - `DependencyModule.cs` - Service registration for the agent module.
 
 #### Services (`Services/` folder)
@@ -98,13 +98,14 @@ aspire deploy --clear-cache
 
 #### Semantic Kernel (`SemanticKernel/` folder)
 - `KernelFactory.cs` - Builds a fresh `Kernel` per request for a given `KernelProfile` (`Chat`, `Onboarding`, `StandingRule`, `ScheduledTask`), loads plugins, and attaches the invocation filters. Onboarding loads only `RegistrationPlugin`.
-- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`, `save_email_to_onedrive`, the Google Health reads, and the diagnostics self-check `check_services`/`check_anomalies`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`.
+- `KernelProfilePolicy.cs` - **Single source of truth** for which functions each profile may use. Autonomous profiles (`StandingRule`, `ScheduledTask`) are default-deny allow-lists; `Chat`/`Onboarding` are unrestricted. Also defines owner-only functions (`send_sms`, `send_email`, `create_calendar_event`, `send_to_remarkable`, `save_email_to_onedrive`, the Google Health reads, and the diagnostics self-check `check_services`/`check_anomalies`). Consumed both when advertising functions to the model and by `AutonomousToolGuardFilter`. Also holds the untrusted-content rules: which reads carry outside text (`get_recent_emails`, `get_calendar_events`, `web_search`, `web_fetch`) and what each switches off (`send_email`, `send_sms`, `remember_instruction`, `forget_instruction`; plus `web_fetch` after mail or calendar, but not after a search).
 
 #### Plugins (`SemanticKernel/Plugins/` folder)
 Each plugin pairs a `*Plugin` class (kernel functions) with a client/store/service for I/O.
 - `MemoryPlugin/` - To-dos and knowledge (shared memory) in Cosmos.
 - `ProjectsPlugin/` - Projects: longer-lived workspaces with notes and categorized entries.
 - `GraphPlugin/` - Microsoft Graph: calendar, email, contacts, and `save_email_to_onedrive` (owner-only). `get_recent_emails` returns at most the 50 newest emails — in a busy inbox only a day or two — so its optional `search` (Graph `$search`: sender, subject, body) is how the model finds a particular email; it covers the whole folder unless `daysBack` is given. Graph rejects `$filter`/`$orderby` alongside `$search` (400), so with a search the window is applied to the results instead. That tool puts the raw message (.eml) in one OneDrive folder, has Graph convert it (`?format=pdf`), saves the PDF beside it and deletes the .eml; over Graph's 2 MB conversion limit it renders the headers and body alone (`EmailPdf`). **The app holds `Files.SelectedOperations.Selected` plus a write grant on that one folder, not tenant-wide file access** — `GRAPH_ONEDRIVE_DRIVE_ID` / `GRAPH_ONEDRIVE_FOLDER_ID` must name the granted folder, and anywhere else is a 403. File names come from email subjects, which the sender controls: `GraphClient` escapes the upload path itself because the SDK's `ItemWithPath` doesn't.
+- `InstructionsPlugin/` - `remember_instruction` / `forget_instruction`: per-user instructions for how Ancela behaves with that user (a persona, what to call them, a lasting preference). Saved on the user's profile in `users` and listed in the Chat prompt's Current context on every message (`Agent.BuildInstructionsContext`), after history so the cached prefix is unchanged. Capped at 10 × 300 characters; line breaks are collapsed so one can't start a bullet that reads like a rule. Chat only: not in either autonomous allow-list, and switched off after an untrusted read, because a planted instruction would outlive the message that read it.
 - `YnabPlugin/` - YNAB budget/account/transaction reads.
 - `WebPlugin/` - `web_search` (Tavily) and `web_fetch`.
 - `WeatherPlugin/` - `get_forecast`: today's labelled daytime high and nighttime low from the National Weather Service (api.weather.gov; free, no key, US only). Place names resolve through Open-Meteo's geocoder first because NWS takes coordinates only. Exists because reading a high out of `web_search` snippets does not work — an unlabelled "63° 37°" got reported as a 35°F high on 2026-10-11. **NWS returns 403 without an identifying `User-Agent`.** Allowed in both autonomous profiles; unlike `web_fetch` it reads one fixed API rather than a model-chosen URL.
@@ -148,7 +149,7 @@ Then register it in `~/Library/Application Support/Claude/claude_desktop_config.
 `DefaultAzureCredential` shells out to `az`. Restart Claude Desktop to pick up changes.
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests`, `EmailPdfTests`, `EmailSearchTests` (base class: `AgentTestBase`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, `OneDriveLiveTests` (Graph secrets plus the folder IDs; also pins that the folder is the only place the app can write and that the SDK drops the token on the conversion redirect), `MailSearchLiveTests` (an email older than the 50 newest is found by search), and `WeatherLiveTests` (the only one needing no API key).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests`, `EmailPdfTests`, `EmailSearchTests`, `InstructionsPluginTests`, `AgentInstructionsTests` (base class: `AgentTestBase`, whose kernels run the real `AutonomousToolGuardFilter`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, `OneDriveLiveTests` (Graph secrets plus the folder IDs; also pins that the folder is the only place the app can write and that the SDK drops the token on the conversion redirect), `MailSearchLiveTests` (an email older than the 50 newest is found by search), and `WeatherLiveTests` (the only one needing no API key).
 
 ## Dependencies & Packages
 
@@ -182,7 +183,7 @@ Owner step-up uses `OWNER_TOTP_SECRET` (from `ancela enroll`); resource naming u
 
 Single database (`anceladb`). All containers partition on `/agentPhoneNumber` (one value per
 instance):
-- **users** - User profiles and access state
+- **users** - User profiles, access state, and saved instructions
 - **todos** - To-do items (shared)
 - **knowledge** - Knowledge entries (shared)
 - **projects** - Projects and their entries (shared)

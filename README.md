@@ -16,7 +16,7 @@ You interact entirely over SMS. Under the hood the assistant has a set of capabi
 - **Calendar & email** — read your calendar, create events, read your inbox, and send mail (via Microsoft Graph). The owner can also save an email as a PDF to one OneDrive folder.
 - **Contacts** — look up people's details from your address book.
 - **Money** — check account balances and recent transactions (via YNAB).
-- **Memory** — remember facts about you and keep a shared list of to-dos.
+- **Memory** — remember facts about you and keep a shared list of to-dos. It also keeps instructions for how to behave with you from now on (a persona, what to call you, a preference).
 - **Projects** — longer-lived workspaces for bigger efforts, with freeform notes and trackable, categorized entries (a trip, a list to work through over time, ideas to collect).
 - **Reminders** — schedule a one-time SMS reminder for a specific time.
 - **Standing rules** — watch a recurring condition on a timer and notify you when it's met.
@@ -39,6 +39,7 @@ Remind me to call the dentist at 9am Monday
 Every morning at 7, text me my calendar for the day
 Let me know if I get an email from the landlord
 Start a project for our backpacking trip and add a packing list
+From now on, answer like HAL 9000
 ```
 
 ## Architecture
@@ -136,6 +137,18 @@ exfiltration channel) by removing the channel structurally. The residual risk is
 injection could shape the *content* of a message delivered to the owner's own number —
 lower impact, since there is no third-party destination and the owner can sanity-check
 it.
+
+**Chat after untrusted content.** In chat a person is in the loop, but the model can still
+act on text an outsider wrote before that person sees anything. So once a message has read
+email or calendar content, sending (SMS and email), `web_fetch` (a URL can carry data out)
+and saving or removing instructions are switched off for the rest of that message. After a
+web search or fetch, sending and instructions are switched off. The same guard filter
+enforces this in code. Ancela says what it was about to do, and the user confirms in their
+next message, which starts with nothing read, so replying to an email takes two texts.
+Saving an email to OneDrive and creating a calendar event stay on, since they write only
+into the owner's own folder and calendar. This doesn't cover everything: text from a read
+can carry over in Ancela's reply, which is kept in history, and knowledge or to-dos saved
+after a read aren't marked when they're read back later.
 
 **Shared memory and memory laundering.** Ancela's memory is shared across the
 instance, so a malicious user could try to smuggle instructions into later runs by

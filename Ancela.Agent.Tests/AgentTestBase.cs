@@ -1,5 +1,6 @@
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
@@ -8,6 +9,7 @@ using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Moq;
@@ -40,6 +42,7 @@ public abstract class AgentTestBase
     protected readonly Mock<IGraphClient> MockGraphClient;
     protected readonly Mock<IProjectStore> MockProjectStore;
     protected readonly Mock<IMediaService> MockMediaService;
+    protected readonly Mock<IUserService> MockUserService;
 
     // System under test
     protected readonly Agent Agent;
@@ -70,6 +73,12 @@ public abstract class AgentTestBase
         MockGraphClient = new Mock<IGraphClient>();
         MockProjectStore = new Mock<IProjectStore>();
         MockMediaService = new Mock<IMediaService>();
+        MockUserService = new Mock<IUserService>();
+
+        // The profile the instruction tools read is the one the agent was handed.
+        MockUserService
+            .Setup(u => u.GetAsync(AgentPhoneNumber, UserPhoneNumber))
+            .ReturnsAsync(() => TestUser);
 
         // Default: return empty history (fresh conversation)
         MockHistoryService
@@ -106,6 +115,7 @@ public abstract class AgentTestBase
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
         var graphPlugin = new GraphPlugin(MockGraphClient.Object);
         var projectsPlugin = new ProjectsPlugin(MockProjectStore.Object);
+        var instructionsPlugin = new InstructionsPlugin(MockUserService.Object);
 
         // YnabPlugin requires YnabClient. For tests, set a dummy token to avoid exceptions
         // The actual YNAB tests would need to mock the YnabClient or use integration testing
@@ -116,11 +126,12 @@ public abstract class AgentTestBase
         // Create kernel with real OpenAI and plugins with mocked clients
         var chatCompletionService = new OpenAIChatCompletionService("gpt-5.4", OpenAIClient);
 
-        // Build a factory that hands out a fresh kernel (with the test plugins) per call
+        // Build a factory that hands out a fresh kernel (with the test plugins) per call. The
+        // real guard runs on it, as in production, so the model meets the same denials.
         var kernelFactory = new Mock<IKernelFactory>();
         kernelFactory
             .Setup(f => f.Create(It.IsAny<KernelProfile>()))
-            .Returns(() =>
+            .Returns((KernelProfile profile) =>
             {
                 var pluginCollection = new KernelPluginCollection();
                 pluginCollection.AddFromObject(graphPlugin);
@@ -128,7 +139,12 @@ public abstract class AgentTestBase
                 pluginCollection.AddFromObject(projectsPlugin);
                 pluginCollection.AddFromObject(ynabPlugin);
                 pluginCollection.AddFromObject(smsPlugin);
-                return new Kernel(plugins: pluginCollection);
+                pluginCollection.AddFromObject(instructionsPlugin);
+                var kernel = new Kernel(plugins: pluginCollection);
+                kernel.Data["profile"] = profile;
+                kernel.FunctionInvocationFilters.Add(
+                    new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+                return kernel;
             });
 
         // Create agent with real OpenAI and mocked data services
@@ -174,7 +190,14 @@ public abstract class AgentTestBase
     /// <paramref name="reset"/> runs before each attempt — use it to clear any per-attempt state
     /// (e.g. a captured-arguments list) so a retry isn't polluted by a previous attempt.
     /// </summary>
-    protected async Task<string> SendUntilAsync(string message, Action verify, int attempts = 3, Action? reset = null)
+    protected Task<string> SendUntilAsync(string message, Action verify, int attempts = 3, Action? reset = null) =>
+        SendUntilAsync(message, _ => verify(), attempts, reset);
+
+    /// <summary>
+    /// As above, but <paramref name="verify"/> is handed the reply, for checks on what the agent
+    /// said rather than on the tools it called.
+    /// </summary>
+    protected async Task<string> SendUntilAsync(string message, Action<string> verify, int attempts = 3, Action? reset = null)
     {
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < attempts; attempt++)
@@ -183,7 +206,7 @@ public abstract class AgentTestBase
             {
                 reset?.Invoke();
                 var response = await SendMessageAsync(message);
-                verify();
+                verify(response);
                 return response;
             }
             catch (Exception ex)

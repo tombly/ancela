@@ -15,6 +15,18 @@ public class UserProfile
     public string? Location { get; set; }   // human-readable home location, e.g. "Seattle, WA"; null = not captured
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? RegisteredAt { get; set; }
+
+    // How this user wants Ancela to behave in every conversation with them (remember_instruction).
+    // Profiles saved before this existed have no such field and read back as empty.
+    public List<UserInstruction> Instructions { get; set; } = [];
+}
+
+[JsonObject(NamingStrategyType = typeof(CamelCaseNamingStrategy))]
+public class UserInstruction
+{
+    public Guid Id { get; set; }
+    public required string Text { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public interface IUserService
@@ -22,6 +34,7 @@ public interface IUserService
     Task<UserProfile> CreatePendingAsync(string agentPhoneNumber, string userPhoneNumber);
     Task<UserProfile?> GetAsync(string agentPhoneNumber, string userPhoneNumber);
     Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone, string location);
+    Task SetInstructionsAsync(string agentPhoneNumber, string userPhoneNumber, List<UserInstruction> instructions);
     Task DeleteAsync(string agentPhoneNumber, string userPhoneNumber);
 }
 
@@ -79,6 +92,15 @@ public class UserService(CosmosClient _cosmosClient) : IUserService
         profile.TimeZone = timeZone;
         profile.Location = location;
         profile.RegisteredAt = DateTimeOffset.UtcNow;
+        await container.ReplaceItemAsync(profile, profile.Id.ToString(), new PartitionKey(agentPhoneNumber));
+    }
+
+    public async Task SetInstructionsAsync(string agentPhoneNumber, string userPhoneNumber, List<UserInstruction> instructions)
+    {
+        var container = await GetContainerAsync();
+        var profile = await GetAsync(agentPhoneNumber, userPhoneNumber)
+            ?? throw new InvalidOperationException($"No profile for {userPhoneNumber}");
+        profile.Instructions = instructions;
         await container.ReplaceItemAsync(profile, profile.Id.ToString(), new PartitionKey(agentPhoneNumber));
     }
 

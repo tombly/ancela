@@ -82,6 +82,47 @@ public class AgentGraphTests : AgentTestBase
             Times.Never, "when the named email can't be found, nothing may be saved in its place");
     }
 
+    [Fact]
+    public async Task ReplyToAnEmail_ConfirmsFirst_ThenSendsInTheNextMessage()
+    {
+        // Reading the email switches send_email off for the rest of that message, because the
+        // email could be what asked for the send. So a reply takes two messages: Ancela says what
+        // it would send, the user confirms, and the confirming message, having read nothing, sends.
+        var history = new List<HistoryEntry>();
+        MockHistoryService
+            .Setup(h => h.CreateHistoryEntryAsync(AgentPhoneNumber, UserPhoneNumber, It.IsAny<string>(), It.IsAny<MessageType>()))
+            .Callback<string, string, string, MessageType>((_, _, content, type) => history.Add(new HistoryEntry
+            {
+                Id = Guid.NewGuid(),
+                UserPhoneNumber = UserPhoneNumber,
+                Content = content,
+                MessageType = type,
+                Timestamp = DateTimeOffset.UtcNow,
+            }))
+            .Returns(Task.CompletedTask);
+        MockHistoryService
+            .Setup(h => h.GetHistoryAsync(AgentPhoneNumber, UserPhoneNumber))
+            .ReturnsAsync(() => history.ToArray());
+        SetupEmails(_ => [CreateEmail("thursday", "bob@example.com", "Can you make Thursday at 3pm?", hoursAgo: 2)]);
+        MockGraphClient
+            .Setup(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync("Email sent.");
+
+        await SendUntilAsync("Reply to Bob's email saying yes, Thursday at 3 works for me.", () =>
+            MockGraphClient.Verify(
+                g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsAny<string?>()),
+                Times.AtLeastOnce),
+            reset: history.Clear);
+        MockGraphClient.Verify(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never, "nothing may be sent in the message that read the email");
+
+        var afterFirst = history.ToList();
+        await SendUntilAsync("Yes, send it.", () =>
+            MockGraphClient.Verify(g => g.SendEmailAsync("bob@example.com", It.IsAny<string>(), It.IsAny<string>()),
+                Times.AtLeastOnce, "the confirming message sends the reply it was shown"),
+            reset: () => { history.Clear(); history.AddRange(afterFirst); });
+    }
+
     /// <summary>
     /// Configures the mock to return specific calendar events when GetUserEventsAsync is called.
     /// </summary>

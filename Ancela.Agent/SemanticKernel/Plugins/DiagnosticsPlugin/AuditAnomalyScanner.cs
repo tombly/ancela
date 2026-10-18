@@ -28,6 +28,7 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
     // invocation is distinguished from an ordinary tool error in the audit log.
     private const string ProfileDenialMarker = "is not permitted in the";
     private const string OwnerOnlyDenialMarker = "may only be invoked by the owner";
+    private const string UntrustedContentDenialMarker = AutonomousToolGuardFilter.UntrustedContentDenialMarker;
 
     public async Task<AuditActivitySummary> ScanAsync(string agentPhoneNumber, int windowHours)
     {
@@ -131,7 +132,8 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
             SELECT VALUE COUNT(1) FROM c
             WHERE c.agentPhoneNumber = @agent AND c.timestamp >= @cutoff
               AND c.success = false
-              AND (CONTAINS(c.error, '{ProfileDenialMarker}') OR CONTAINS(c.error, '{OwnerOnlyDenialMarker}'))
+              AND (CONTAINS(c.error, '{ProfileDenialMarker}') OR CONTAINS(c.error, '{OwnerOnlyDenialMarker}')
+                   OR CONTAINS(c.error, '{UntrustedContentDenialMarker}'))
             """)
             .WithParameter("@agent", agentPhoneNumber)
             .WithParameter("@cutoff", cutoff);
