@@ -241,25 +241,45 @@ The Aspire dashboard launches and shows every service and its endpoints.
 
 ### Deploy to Azure
 
-Aspire generates Bicep templates into `Ancela.AppHost/aspire-output/`.
+The container image is built on your machine, so Docker must be running. Resource names
+come from `ANCELA_RESOURCE_PREFIX` (step 3) at deploy time; if it isn't set, the deploy
+stops with an error.
+
+**The first deploy** asks for the Azure subscription, resource group and location, and
+for each secret:
 
 ```bash
-ANCELA_RESOURCE_PREFIX=your-unique-prefix aspire publish   # bake the prefix into resource names
-aspire deploy --clear-cache                                # prompts for resource group + secrets
+aspire deploy
 ```
 
-You can pull secret values from user secrets to paste during deploy:
+You can pull secret values from user secrets to paste in:
 
 ```bash
 cd Ancela.AppHost && dotnet user-secrets list | grep Parameters
 ```
 
-After the first deploy, grant your Entra principal the Contributor role on Cosmos DB,
-then create the database and containers:
+Then grant your Entra principal the Contributor role on Cosmos DB, and create the database
+and containers:
 
 ```bash
 ANCELA_RESOURCE_PREFIX=your-unique-prefix ANCELA_RESOURCE_GROUP=your-resource-group ./configure_cosmos.sh
 ```
+
+**Every deploy after that** reuses those answers, which Aspire caches under
+`~/.aspire/deployments/`, so nothing is asked:
+
+```bash
+aspire deploy --non-interactive --project Ancela.AppHost/Ancela.AppHost.csproj
+```
+
+Don't add `--clear-cache` to a routine deploy. It throws away the cached resource group,
+location and subscription along with the secrets, so the next deploy asks for all of them
+again, and answering differently from the first time points it at something other than
+your live deployment. If you add a new secret parameter, set it in user secrets first; if a
+deploy still needs a value it doesn't have, run it without `--non-interactive` so it can ask.
+
+`aspire publish` writes the generated Bicep to `Ancela.AppHost/aspire-output/` for review;
+deploying doesn't need it.
 
 ## License
 
