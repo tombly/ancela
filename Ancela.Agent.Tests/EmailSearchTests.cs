@@ -24,15 +24,25 @@ public class EmailSearchTests
     }
 
     [Fact]
-    public async Task GetRecentEmails_WithASearch_LeavesTheWindowOpen()
+    public async Task GetRecentEmails_PassesTheSearchThrough()
     {
         var (kernel, graph) = Build();
 
         await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"],
             new() { ["search"] = "from:someone@example.com" });
 
-        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, null, "from:someone@example.com"),
-            "a search must reach the whole folder unless the model asks for a window");
+        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, "from:someone@example.com"));
+    }
+
+    [Fact]
+    public void GetRecentEmails_HasNoDateWindow()
+    {
+        // Removed: the 50-result cap is always the tighter limit, so a window could only hide
+        // emails, and the model passed one unasked. A model that still sends one is ignored.
+        var (kernel, _) = Build();
+
+        kernel.Plugins["GraphPlugin"]["get_recent_emails"].Metadata.Parameters.Select(p => p.Name)
+            .Should().Equal("folder", "search");
     }
 
     [Fact]
@@ -42,25 +52,25 @@ public class EmailSearchTests
 
         await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"]);
 
-        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, null, null));
+        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, null));
     }
 
     [Fact]
     public async Task GetRecentEmails_BindsTheModelsStringArguments()
     {
-        // Tool-call arguments arrive as strings; the nullable int and the enum still have to bind.
+        // Tool-call arguments arrive as strings; the enum still has to bind.
         var (kernel, graph) = Build();
 
         await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"],
-            new() { ["folder"] = "Sent", ["daysBack"] = "7", ["search"] = "invoice" });
+            new() { ["folder"] = "Sent", ["search"] = "invoice" });
 
-        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, 7, "invoice"));
+        graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, "invoice"));
     }
 
     private static (Kernel Kernel, Mock<IGraphClient> Graph) Build()
     {
         var graph = new Mock<IGraphClient>();
-        graph.Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsAny<string?>()))
+        graph.Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
             .ReturnsAsync([]);
         var plugins = new KernelPluginCollection();
         plugins.AddFromObject(new GraphPlugin(graph.Object));
