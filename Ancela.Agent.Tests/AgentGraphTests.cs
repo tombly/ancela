@@ -75,7 +75,7 @@ public class AgentGraphTests : AgentTestBase
         SetupSave();
 
         await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
-            MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsNotNull<string>()),
+            MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
                 Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
 
         MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()),
@@ -110,7 +110,7 @@ public class AgentGraphTests : AgentTestBase
 
         await SendUntilAsync("Reply to Bob's email saying yes, Thursday at 3 works for me.", () =>
             MockGraphClient.Verify(
-                g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsAny<string?>()),
+                g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()),
                 Times.AtLeastOnce),
             reset: history.Clear);
         MockGraphClient.Verify(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
@@ -152,8 +152,8 @@ public class AgentGraphTests : AgentTestBase
     protected void SetupEmails(Func<string?, EmailModel[]> bySearch)
     {
         MockGraphClient
-            .Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<int?>(), It.IsAny<string?>()))
-            .ReturnsAsync((MailFolder _, int? _, string? search) => bySearch(search));
+            .Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
+            .ReturnsAsync((MailFolder _, string? search) => bySearch(search));
     }
 
     /// <summary>

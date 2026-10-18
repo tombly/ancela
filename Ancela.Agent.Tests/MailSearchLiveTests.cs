@@ -45,13 +45,29 @@ public class MailSearchLiveTests(ITestOutputHelper _output)
         found.Should().Contain(e => e.Id == target, because: "a search reaches the whole folder");
         found.Select(e => e.ReceivedDateTime).Should().BeInDescendingOrder(because: "the newest match comes first");
 
-        var lastDay = await graph.GetUserEmailsAsync(MailFolder.Inbox, daysBack: 1, search: $"from:{sender}");
-        lastDay.Should().OnlyContain(e => e.ReceivedDateTime >= DateTimeOffset.UtcNow.AddDays(-1).AddMinutes(-5),
-            because: "a window given with a search still applies");
-        lastDay.Select(e => e.Id).Should().BeSubsetOf(found.Select(e => e.Id));
-
         _output.WriteLine($"60th newest email: absent from the plain listing of {listed.Length}, "
-            + $"found among {found.Length} sender matches ({lastDay.Length} in the last day)");
+            + $"found among {found.Length} sender matches");
+    }
+
+    [Fact]
+    public async Task PlainListing_IsTheNewest50_WithNoDateCutoff()
+    {
+        // Runs on any inbox, unlike the test above. There is no date window, so the listing must be
+        // exactly the folder's newest 50, however old the oldest of them is.
+        if (Load() is not { } config) { _output.WriteLine("Skipped: Graph settings not found."); return; }
+        var newest = await RawClient(config).Users[config.UserId].MailFolders["inbox"].Messages.GetAsync(c =>
+        {
+            c.QueryParameters.Select = ["id"];
+            c.QueryParameters.Orderby = ["receivedDateTime desc"];
+            c.QueryParameters.Top = 50;
+        });
+        config.ExportForGraphClient();
+
+        var listed = await new GraphClient().GetUserEmailsAsync(MailFolder.Inbox);
+
+        listed.Select(e => e.Id).Should().Equal(newest!.Value!.Select(m => m.Id));
+        var oldestDays = listed.Length == 0 ? 0 : (int)(DateTimeOffset.UtcNow - listed[^1].ReceivedDateTime).TotalDays;
+        _output.WriteLine($"{listed.Length} listed; the oldest is {oldestDays} days old");
     }
 
     [Fact]

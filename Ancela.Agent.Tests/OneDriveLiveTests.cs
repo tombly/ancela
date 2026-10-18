@@ -133,8 +133,8 @@ public class OneDriveLiveTests(ITestOutputHelper _output)
         config.ExportForGraphClient();
         var graph = new GraphClient();
 
-        var email = (await graph.GetUserEmailsAsync(MailFolder.Inbox, daysBack: 30)).FirstOrDefault();
-        if (email is null) { _output.WriteLine("Skipped: inbox has no email from the last 30 days."); return; }
+        var email = (await graph.GetUserEmailsAsync(MailFolder.Inbox)).FirstOrDefault();
+        if (email is null) { _output.WriteLine("Skipped: the inbox is empty."); return; }
 
         // Never replace, then delete, a PDF the owner saved for real.
         var expectedName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, Pacific);
