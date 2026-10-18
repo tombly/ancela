@@ -47,9 +47,9 @@ dotnet run --project Ancela.AppHost
 # Run tests
 dotnet test
 
-# Deploy to Azure (see README for full flow)
-ANCELA_RESOURCE_PREFIX=your-prefix aspire publish
-aspire deploy --clear-cache
+# Deploy to Azure (see README for the first deploy). Docker must be running, and
+# ANCELA_RESOURCE_PREFIX set. Never add --clear-cache to a routine deploy: see below.
+aspire deploy --non-interactive --project Ancela.AppHost/Ancela.AppHost.csproj
 ```
 
 ## Code Style & Conventions
@@ -175,7 +175,12 @@ Owner step-up uses `OWNER_TOTP_SECRET` (from `ancela enroll`); resource naming u
 `ANCELA_RESOURCE_PREFIX` / `ANCELA_RESOURCE_GROUP` environment variables.
 
 ### Azure Deployment
-- Secrets are prompted during `aspire deploy`.
+- The first `aspire deploy` asks for the subscription, resource group, location and secrets,
+  and caches the answers in `~/.aspire/deployments/`; later deploys reuse them, so use
+  `--non-interactive`. `--clear-cache` throws the cached resource group away too, and a
+  different answer to that prompt targets something other than the live deployment.
+- The image is built locally: a deploy that fails within seconds with "Docker is not
+  running" has sent nothing to Azure. Start Docker and rerun.
 - Cosmos DB uses role-based access; run `./configure_cosmos.sh` post-deployment to grant the
   role and create the database + containers.
 
