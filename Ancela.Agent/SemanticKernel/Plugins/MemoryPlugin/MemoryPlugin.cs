@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
 using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
@@ -27,13 +28,30 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("get_todos")]
-    [Description("Retrieves to-dos from the database for the current agent")]
-    public async Task<ToDoModel[]> GetToDosAsync(Kernel kernel)
+    [Description("Retrieves to-dos from the database for the current agent. Links in them come back as (link) unless includeLinks is true.")]
+    public async Task<ToDoModel[]> GetToDosAsync(Kernel kernel,
+        [Description("True only when the user wants a link from a to-do. Leave it false to list to-dos, so a long link doesn't fill the text.")]
+        bool includeLinks = false)
     {
         EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
-        return await _memoryService.GetToDosAsync(agentPhoneNumber);
+        var todos = await _memoryService.GetToDosAsync(agentPhoneNumber);
+        if (includeLinks)
+            return todos;
+
+        // The to-do keeps the whole link; only the listing shortens it. One ~600-character
+        // event link made every "what's on my list?" several texts longer, and SmsService cuts
+        // a reply off at 1600 characters.
+        return [.. todos.Select(t => new ToDoModel
+        {
+            Id = t.Id,
+            Content = Link.Replace(t.Content, "(link)"),
+            Created = t.Created,
+            Deleted = t.Deleted,
+        })];
     }
+
+    private static readonly Regex Link = new(@"https?://\S+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     [KernelFunction("delete_todo")]
     [Description("Deletes a to-do from the database given its ID which is a GUID. Use the get_todos function to retrieve todo IDs.")]

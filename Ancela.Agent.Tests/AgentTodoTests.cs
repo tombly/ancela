@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Moq;
 
 namespace Ancela.Agent.Tests;
@@ -59,6 +60,29 @@ public class AgentTodoTests : AgentTestBase
             MockMemoryClient.Verify(
                 m => m.DeleteToDoAsync(todoId, AgentPhoneNumber),
                 Times.AtLeastOnce));
+    }
+
+    private const string LongLink = "https://events.example.com/join/Xq7Lm2Rt9Vb4Kp8Wn3Hs6Jd1Fg5Zc0Ya~Te4Uo7Ii2Pr9Ee6Ww3Qq8-Ss1Dd5Ff0Gg-Hh4Jj7Kk";
+
+    [Fact]
+    public async Task ListTodos_LeavesTheLinkOut()
+    {
+        SetupExistingTodos(CreateTodo($"Watch the school talk: {LongLink}"), CreateTodo("Buy milk"));
+
+        await SendUntilAsync("what's on my to-do list?", reply =>
+        {
+            reply.Should().Contain("school talk");
+            reply.Should().NotContain("events.example.com");
+        });
+    }
+
+    [Fact]
+    public async Task AskForTheLink_SendsItInFull()
+    {
+        SetupExistingTodos(CreateTodo($"Watch the school talk: {LongLink}"), CreateTodo("Buy milk"));
+
+        await SendUntilAsync("send me the link for the school talk on my to-do list", reply =>
+            reply.Should().Contain(LongLink));
     }
 
     [Fact]

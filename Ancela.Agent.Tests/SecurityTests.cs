@@ -195,6 +195,22 @@ public class SecurityTests
     }
 
     [Theory]
+    [InlineData(KernelProfile.Chat)]
+    [InlineData(KernelProfile.Onboarding)]
+    [InlineData(KernelProfile.StandingRule)]
+    [InlineData(KernelProfile.ScheduledTask)]
+    public void KernelFactory_AttachesEachFilterOnce(KernelProfile profile)
+    {
+        // new Kernel(services, ...) adds the filters registered in services itself. KernelFactory
+        // used to add them again, so each ran twice and every audit entry was written twice,
+        // doubling the counts check_anomalies compares against its thresholds.
+        var filters = BuildFactory().Create(profile).FunctionInvocationFilters;
+
+        filters.OfType<AuditFilter>().Should().ContainSingle();
+        filters.OfType<AutonomousToolGuardFilter>().Should().ContainSingle();
+    }
+
+    [Theory]
     [InlineData(KernelProfile.StandingRule)]
     [InlineData(KernelProfile.ScheduledTask)]
     public void AllowedFunctionNames_AllMapToRealFunctions(KernelProfile profile)
