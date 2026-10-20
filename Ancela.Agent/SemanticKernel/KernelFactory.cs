@@ -14,11 +14,7 @@ using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
-
-// Needed for IFunctionInvocationFilter
-#pragma warning disable SKEXP0001
 
 namespace Ancela.Agent.SemanticKernel;
 
@@ -86,15 +82,15 @@ public sealed class KernelFactory(
                 break;
         }
 
+        // The constructor attaches the IFunctionInvocationFilters registered in _sp (AuditFilter,
+        // AutonomousToolGuardFilter). Adding them again ran each twice, so every tool call was
+        // audited twice.
         var kernel = new Kernel(_sp, plugins);
         kernel.Data["profile"] = profile;
         // What this message has read that other people write; AutonomousToolGuardFilter switches
         // sending and instructions off once it holds anything. One kernel per message, so it
         // starts empty each time.
         kernel.Data["untrustedContent"] = new UntrustedContentLog();
-
-        foreach (var filter in _sp.GetServices<IFunctionInvocationFilter>())
-            kernel.FunctionInvocationFilters.Add(filter);
 
         return kernel;
     }

@@ -203,7 +203,7 @@ instance):
 ### Semantic Kernel Integration
 - `IKernelFactory.Create(profile)` builds a fresh `Kernel` per request with its own `Kernel.Data` (per-request `agentPhoneNumber` / `userPhoneNumber`), so identity is never shared across concurrent invocations.
 - The model only ever sees the functions allowed by `KernelProfilePolicy` for the active profile (and, for non-owners, with owner-only functions removed) — advertised via `FunctionChoiceBehavior.Auto(functions:)`.
-- Two `IFunctionInvocationFilter`s run on every kernel: `AuditFilter` (logging) and `AutonomousToolGuardFilter` (hard-deny backstop matching the same policy).
+- Two `IFunctionInvocationFilter`s run on every kernel: `AuditFilter` (logging) and `AutonomousToolGuardFilter` (hard-deny backstop matching the same policy). They are registered in DI, and `new Kernel(_sp, plugins)` attaches them itself; adding them to `FunctionInvocationFilters` as well runs each twice (until 2026-10, every audit entry was written twice).
 - Context is passed via `kernel.Data[]`.
 
 ### Session & Message Flow
