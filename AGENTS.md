@@ -74,7 +74,7 @@ aspire deploy --non-interactive --project Ancela.AppHost/Ancela.AppHost.csproj
 - `Program.cs` - Function app startup and DI (registers the Service Bus client and the agent module).
 - `IncomingSms.cs` - HTTP trigger for Twilio webhooks; enqueues the message to the `chat-messages` Service Bus queue.
 - `IncomingMessage.cs` - HTTP trigger for testing (non-Twilio); also enqueues to `chat-messages`.
-- `ChatQueueProcessor.cs` - `ServiceBusTrigger` on `chat-messages`; routes to `ChatInterceptor`. On `ModelOutOfFundsException` it answers the sender and completes the message instead of retrying into the dead-letter queue.
+- `ChatQueueProcessor.cs` - `ServiceBusTrigger` on `chat-messages`; routes to `ChatInterceptor`. Messages are handled one at a time (`maxConcurrentCalls: 1` in `host.json`, with `MaxReplicas = 1`): a message is saved to history only after it is answered, so one handled alongside another can't see it — a phone that sent a link as its own text got two blind replies. `MessageOrderingTests` pins the setting. On `ModelOutOfFundsException` it answers the sender and completes the message instead of retrying into the dead-letter queue.
 - `ReminderQueueProcessor.cs` / `StandingRuleQueueProcessor.cs` / `ScheduledTaskQueueProcessor.cs` - `ServiceBusTrigger` processors that run the due reminder / autonomous evaluation / scheduled task.
 
 ### Ancela.Agent
@@ -149,7 +149,7 @@ Then register it in `~/Library/Application Support/Claude/claude_desktop_config.
 `DefaultAzureCredential` shells out to `az`. Restart Claude Desktop to pick up changes.
 
 ### Ancela.Agent.Tests
-xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests`, `EmailPdfTests`, `EmailSearchTests`, `InstructionsPluginTests`, `AgentInstructionsTests` (base class: `AgentTestBase`, whose kernels run the real `AutonomousToolGuardFilter`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, `OneDriveLiveTests` (Graph secrets plus the folder IDs; also pins that the folder is the only place the app can write and that the SDK drops the token on the conversion redirect), `MailSearchLiveTests` (an email older than the 50 newest is found by search), and `WeatherLiveTests` (the only one needing no API key).
+xUnit tests covering agent capabilities and security: `AgentTodoTests`, `AgentKnowledgeTests`, `AgentGraphTests`, `AgentProjectsTests`, `AgentMediaTests`, `ChatInterceptorTests`, `SecurityTests`, `TotpServiceTests`, `MediaServiceTests`, `ScheduleCalculatorTests`, `UnifiClientTests`, `ModelCreditBreakerTests`, `McpToolSurfaceTests`, `AuditFilterTests`, `WeatherClientTests`, `EmailPdfTests`, `EmailSearchTests`, `InstructionsPluginTests`, `AgentInstructionsTests`, `MessageOrderingTests` (base class: `AgentTestBase`, whose kernels run the real `AutonomousToolGuardFilter`). Integration-trait live diagnostics: `UnifiLiveTests`, `GoogleHealthLiveTests`, `OneDriveLiveTests` (Graph secrets plus the folder IDs; also pins that the folder is the only place the app can write and that the SDK drops the token on the conversion redirect), `MailSearchLiveTests` (an email older than the 50 newest is found by search), and `WeatherLiveTests` (the only one needing no API key).
 
 ## Dependencies & Packages
 

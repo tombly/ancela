@@ -112,6 +112,9 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     {
         // Cap scale-out at one replica so queue bursts can't bill extra replicas. Aspire
         // already sets minReplicas to 1, keeping a live host for the Service Bus triggers.
+        // One replica is also what makes host.json's maxConcurrentCalls: 1 mean one message at
+        // a time overall (a second replica would take messages alongside the first), and the
+        // out-of-credit breaker in ModelAvailability is in-memory on the same assumption.
         app.Template.Scale.MaxReplicas = 1;
     });
 
