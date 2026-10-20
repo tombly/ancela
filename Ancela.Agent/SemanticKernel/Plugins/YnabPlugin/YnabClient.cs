@@ -21,8 +21,7 @@ public class YnabClient
 
     public async Task<AccountsSummaryModel> GetAccountsAsync()
     {
-        var planDetail = await _client.GetPlanDetailAsync();
-        var accounts = (await _client.GetAccountsAsync(planDetail.Id.ToString())).Accounts;
+        var accounts = (await _client.GetAccountsAsync(await GetPlanIdAsync())).Accounts;
 
         var models = accounts
                 .Where(a => !a.Deleted && !a.Closed)
@@ -55,8 +54,7 @@ public class YnabClient
     /// </param>
     public async Task<CategoryModel[]> GetCategoriesAsync(DateTimeOffset? month = null)
     {
-        var planDetail = await _client.GetPlanDetailAsync();
-        var planId = planDetail.Id.ToString();
+        var planId = await GetPlanIdAsync();
 
         var categories = month is null
             ? (await _client.GetCategoriesAsync(planId)).CategoryGroups.SelectMany(g => g.Categories)
@@ -80,8 +78,7 @@ public class YnabClient
 
     public async Task<MonthSummaryModel[]> GetMonthSummariesAsync()
     {
-        var planDetail = await _client.GetPlanDetailAsync();
-        var monthSummaries = await _client.GetPlanMonthsAsync(planDetail.Id.ToString());
+        var monthSummaries = await _client.GetPlanMonthsAsync(await GetPlanIdAsync());
         return monthSummaries.Months
                 .Select(m => new MonthSummaryModel
                 {
@@ -105,8 +102,7 @@ public class YnabClient
         string? categoryName = null,
         string? payeeName = null)
     {
-        var planDetail = await _client.GetPlanDetailAsync();
-        var planId = planDetail.Id.ToString();
+        var planId = await GetPlanIdAsync();
 
         // Default to the last 30 days so an unfiltered query can't pull the entire history.
         sinceDate ??= DateTimeOffset.Now.AddDays(-30);
@@ -118,19 +114,19 @@ public class YnabClient
         if (categoryName is not null)
         {
             serverFilter = "category";
-            var response = await _client.GetTransactionsByCategoryAsync(planId, ResolveCategoryId(planDetail, categoryName), sinceDateOnly);
+            var response = await _client.GetTransactionsByCategoryAsync(planId, ResolveCategoryId((await _client.GetCategoriesAsync(planId)).CategoryGroups.SelectMany(g => g.Categories), categoryName), sinceDateOnly);
             transactions = response.Transactions.Where(t => !t.Deleted).Select(t => Map(t));
         }
         else if (payeeName is not null)
         {
             serverFilter = "payee";
-            var response = await _client.GetTransactionsByPayeeAsync(planId, ResolvePayeeId(planDetail, payeeName), sinceDateOnly);
+            var response = await _client.GetTransactionsByPayeeAsync(planId, ResolvePayeeId((await _client.GetPayeesAsync(planId)).Payees, payeeName), sinceDateOnly);
             transactions = response.Transactions.Where(t => !t.Deleted).Select(t => Map(t));
         }
         else if (accountName is not null)
         {
             serverFilter = "account";
-            var response = await _client.GetTransactionsByAccountAsync(planId, ResolveAccountId(planDetail, accountName), sinceDateOnly);
+            var response = await _client.GetTransactionsByAccountAsync(planId, ResolveAccountId((await _client.GetAccountsAsync(planId)).Accounts, accountName), sinceDateOnly);
             transactions = response.Transactions.Where(t => !t.Deleted).Select(t => Map(t));
         }
         else
@@ -153,8 +149,7 @@ public class YnabClient
 
     public async Task<ScheduledTransactionModel[]> GetScheduledTransactionsAsync()
     {
-        var planDetail = await _client.GetPlanDetailAsync();
-        var scheduled = await _client.GetScheduledTransactionsAsync(planDetail.Id.ToString());
+        var scheduled = await _client.GetScheduledTransactionsAsync(await GetPlanIdAsync());
         return scheduled.ScheduledTransactions
                 .Where(s => !s.Deleted)
                 .Select(s => new ScheduledTransactionModel
@@ -195,32 +190,39 @@ public class YnabClient
         Approved = t.Approved,
     };
 
-    private static string ResolveAccountId(PlanDetail plan, string name)
+    private static string ResolveAccountId(IEnumerable<Account> all, string name)
     {
-        var accounts = plan.Accounts!.Where(a => !a.Deleted).ToList();
+        var accounts = all.Where(a => !a.Deleted).ToList();
         var match = accounts.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.InvariantCultureIgnoreCase))
                     ?? accounts.FirstOrDefault(a => Matches(a.Name, name))
                     ?? throw new Exception($"No account found matching '{name}'.");
         return match.Id.ToString();
     }
 
-    private static string ResolveCategoryId(PlanDetail plan, string name)
+    private static string ResolveCategoryId(IEnumerable<Category> all, string name)
     {
-        var categories = plan.Categories!.Where(c => !c.Deleted && !c.Hidden).ToList();
+        var categories = all.Where(c => !c.Deleted && !c.Hidden).ToList();
         var match = categories.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.InvariantCultureIgnoreCase))
                     ?? categories.FirstOrDefault(c => Matches(c.Name, name))
                     ?? throw new Exception($"No category found matching '{name}'.");
         return match.Id.ToString();
     }
 
-    private static string ResolvePayeeId(PlanDetail plan, string name)
+    private static string ResolvePayeeId(IEnumerable<Payee> all, string name)
     {
-        var payees = plan.Payees!.Where(p => !p.Deleted).ToList();
+        var payees = all.Where(p => !p.Deleted).ToList();
         var match = payees.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.InvariantCultureIgnoreCase))
                     ?? payees.FirstOrDefault(p => Matches(p.Name, name))
                     ?? throw new Exception($"No payee found matching '{name}'.");
         return match.Id.ToString();
     }
+
+    // The plan GetPlanDetailAsync picks (the first one listed), without fetching the plan itself:
+    // that is a full export (10.5 MB on 2026-10-19) and was fetched before every YNAB call just to
+    // read its ID. A cold call took 11-12 s, so the self-check's 8 s YNAB probe always timed out.
+    private async Task<string> GetPlanIdAsync() =>
+        (await _client.GetPlansAsync(false)).Plans.FirstOrDefault()?.Id.ToString()
+            ?? throw new InvalidOperationException("No YNAB plan found.");
 
     private static bool Matches(string? value, string query) =>
         value is not null && value.Contains(query, StringComparison.InvariantCultureIgnoreCase);
