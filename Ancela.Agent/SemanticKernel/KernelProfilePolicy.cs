@@ -43,7 +43,7 @@ public static class KernelProfilePolicy
     {
         "web_search",
         "get_todos", "get_knowledge",
-        "get_calendar_events", "get_recent_emails", "get_contacts", "get_contact_by_name",
+        "get_calendar_events", "get_recent_emails", "read_email", "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
@@ -114,6 +114,7 @@ public static class KernelProfilePolicy
     private static readonly Dictionary<string, UntrustedSource> UntrustedReads = new(StringComparer.OrdinalIgnoreCase)
     {
         ["get_recent_emails"] = UntrustedSource.MailOrCalendar,
+        ["read_email"] = UntrustedSource.MailOrCalendar,
         ["get_calendar_events"] = UntrustedSource.MailOrCalendar,
         ["web_search"] = UntrustedSource.Web,
         ["web_fetch"] = UntrustedSource.Web,

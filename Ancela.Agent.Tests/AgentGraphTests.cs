@@ -1,6 +1,7 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.Services;
+using FluentAssertions;
 using Moq;
 
 namespace Ancela.Agent.Tests;
@@ -118,6 +119,34 @@ public class AgentGraphTests : AgentTestBase
 
         remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never, "an email sent as text is whatever the model wrote from a 255-character preview");
+    }
+
+    [Fact]
+    public async Task AskingWhatAnEmailSays_ReadsItInFull()
+    {
+        // get_recent_emails has only the first 255 characters of each email. A question about a step
+        // past them can only be answered by reading the email.
+        var steps = string.Join("\n", Enumerable.Range(1, 6).Select(i => $"Step {i}: complete part {i} of the setup form in the app.")) +
+            "\nStep 7: turn on two-factor authentication under Security, then call us to confirm.";
+        var setup = new EmailModel
+        {
+            Id = "setup", From = "support@bank.example", Subject = "Finish setting up your account",
+            ReceivedDateTime = DateTimeOffset.UtcNow.AddHours(-4), BodyPreview = steps[..255], IsRead = false,
+        };
+        SetupEmails(_ => [setup]);
+        MockGraphClient
+            .Setup(g => g.GetEmailAsync("setup"))
+            .ReturnsAsync(new EmailContentModel
+            {
+                Id = "setup", Subject = setup.Subject, From = setup.From, To = [], Cc = [],
+                ReceivedDateTime = setup.ReceivedDateTime, Body = steps, Truncated = false, HasAttachments = false,
+            });
+
+        await SendUntilAsync("what's the last step in the account setup email from my bank?", reply =>
+        {
+            MockGraphClient.Verify(g => g.GetEmailAsync("setup"), Times.AtLeastOnce);
+            reply.Should().ContainEquivalentOf("two-factor", because: $"step 7 is only in the full email; the reply was: {reply}");
+        });
     }
 
     [Fact]

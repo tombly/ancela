@@ -83,6 +83,38 @@ public class MailSearchLiveTests(ITestOutputHelper _output)
         none.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task ReadEmail_ReturnsTheWholeBody_FromTheFoldersAncelaReads()
+    {
+        // read_email exists because get_recent_emails has only the first 255 characters. Also checks
+        // that the folder ids it compares parentFolderId with match Graph's, for Inbox and Sent.
+        if (Load() is not { } config) { _output.WriteLine("Skipped: Graph settings not found."); return; }
+        config.ExportForGraphClient();
+        var graph = new GraphClient();
+
+        var inbox = await graph.GetUserEmailsAsync(MailFolder.Inbox);
+        if (inbox.FirstOrDefault(e => e.BodyPreview.Length >= 255) is not { } longEmail)
+        {
+            _output.WriteLine("Skipped: none of the 50 newest emails is longer than its preview.");
+            return;
+        }
+
+        var email = await graph.GetEmailAsync(longEmail.Id);
+
+        email.Id.Should().Be(longEmail.Id);
+        email.Body.Length.Should().BeGreaterThan(longEmail.BodyPreview.Length, because: "the preview is cut at 255 characters");
+        static string Words(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var opening = Words(longEmail.BodyPreview)[..30];
+        Words(email.Body).Should().Contain(opening, because: "the preview is the start of the same body");
+
+        var sent = await graph.GetUserEmailsAsync(MailFolder.Sent);
+        if (sent.Length > 0)
+            (await graph.GetEmailAsync(sent[0].Id)).Id.Should().Be(sent[0].Id);
+
+        _output.WriteLine($"Inbox email: preview {longEmail.BodyPreview.Length} characters, body {email.Body.Length} "
+            + $"(truncated: {email.Truncated}); Sent email read: {sent.Length > 0}");
+    }
+
     private sealed record Config(string TenantId, string ClientId, string ClientSecret, string UserId)
     {
         /// <summary>GraphClient reads its settings from the environment, as it does in the function app.</summary>

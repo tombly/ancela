@@ -178,6 +178,8 @@ public class SecurityTests
 
         allowed.Should().NotContain("get_recent_emails",
             because: "email bodies are attacker-controlled input and standing rules don't need them");
+        allowed.Should().NotContain("read_email",
+            because: "email bodies are attacker-controlled input and standing rules don't need them");
         allowed.Should().NotContain("get_calendar_events",
             because: "calendar event descriptions are attacker-controlled input and standing rules don't need them");
     }
@@ -191,6 +193,8 @@ public class SecurityTests
 
         allowed.Should().Contain("get_recent_emails",
             because: "scheduled tasks like 'email digest' legitimately need email access");
+        allowed.Should().Contain("read_email",
+            because: "a digest can't say what an email says from its first 255 characters");
         allowed.Should().Contain("get_calendar_events",
             because: "scheduled tasks like 'calendar summary' legitimately need calendar access");
     }
@@ -413,6 +417,7 @@ public class SecurityTests
             because: "it sends the owner's email to the owner's tablet");
 
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
+        KernelProfilePolicy.IsOwnerOnly("read_email").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();
@@ -426,6 +431,10 @@ public class SecurityTests
     [InlineData("get_recent_emails", "web_fetch")]  // a URL the model picks can carry the inbox out
     [InlineData("get_recent_emails", "remember_instruction")]
     [InlineData("get_recent_emails", "forget_instruction")]
+    [InlineData("read_email", "send_email")]
+    [InlineData("read_email", "send_sms")]
+    [InlineData("read_email", "web_fetch")]
+    [InlineData("read_email", "remember_instruction")]
     [InlineData("get_calendar_events", "send_email")]
     [InlineData("get_calendar_events", "web_fetch")]
     [InlineData("web_search", "send_email")]
@@ -451,6 +460,8 @@ public class SecurityTests
     [InlineData("get_recent_emails", "send_email_to_remarkable")]  // sends only to the owner's tablet
     [InlineData("get_recent_emails", "create_calendar_event")]   // no attendees, so no invitation goes out
     [InlineData("get_recent_emails", "get_recent_emails")]
+    [InlineData("get_recent_emails", "read_email")]
+    [InlineData("read_email", "save_email_to_onedrive")]
     [InlineData("web_search", "web_fetch")]                      // opening a result is what search is for
     [InlineData("web_fetch", "web_fetch")]
     [InlineData("get_contacts", "send_email")]                   // the user's own address book is not outside text
