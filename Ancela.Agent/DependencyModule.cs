@@ -60,6 +60,8 @@ public static class DependencyModule
         builder.Services.AddSingleton<CorrelationContext>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
+        // Last, so it runs innermost and the audit records the result as the model sees it.
+        builder.Services.AddSingleton<IFunctionInvocationFilter, EmptyResultFilter>();
 
         // Register Semantic Kernel plugins. The plugins are registered as singletons so
         // that they can be re-used by multiple kernels. 

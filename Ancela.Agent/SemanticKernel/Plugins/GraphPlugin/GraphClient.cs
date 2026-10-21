@@ -55,38 +55,38 @@ public class GraphClient : IGraphClient
         var startDate = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
         var endDate = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
-        // Get all calendars in the user's default calendar group.
+        // Get all calendars in the user's default calendar group. A missing response is a failure,
+        // not an empty calendar: skipping it would report "no events" for a calendar never read.
         var calendars = await _appClient.Users[_entraUserId].Calendars.GetAsync();
+        if (calendars?.Value == null)
+            throw new InvalidOperationException("Graph returned no response for the calendar list.");
 
         var allEvents = new List<Event>();
 
-        if (calendars?.Value != null)
+        // Pull each calendar's events with CalendarView, which expands recurring series
+        // into their individual occurrences within the window. A plain /events query
+        // returns only single events and series *masters* (whose start/end are the first
+        // occurrence), so recurring meetings on a given day are silently missed.
+        foreach (var calendar in calendars.Value)
         {
-            // Pull each calendar's events with CalendarView, which expands recurring series
-            // into their individual occurrences within the window. A plain /events query
-            // returns only single events and series *masters* (whose start/end are the first
-            // occurrence), so recurring meetings on a given day are silently missed.
-            foreach (var calendar in calendars.Value)
+            var events = await _appClient.Users[_entraUserId].Calendars[calendar.Id].CalendarView.GetAsync((config) =>
             {
-                var events = await _appClient.Users[_entraUserId].Calendars[calendar.Id].CalendarView.GetAsync((config) =>
-                {
-                    // CalendarView takes the range as query parameters (not a $filter) and
-                    // returns every occurrence overlapping it, including multi-day events.
-                    config.QueryParameters.StartDateTime = startDate;
-                    config.QueryParameters.EndDateTime = endDate;
-                    // Request specific properties.
-                    config.QueryParameters.Select = ["subject", "start", "end", "organizer"];
-                    // Get at most 50 results per calendar.
-                    config.QueryParameters.Top = 50;
-                    // Sort by start time.
-                    config.QueryParameters.Orderby = ["start/dateTime"];
-                    // Return start/end in UTC so they parse unambiguously below.
-                    config.Headers.Add("Prefer", "outlook.timezone=\"UTC\"");
-                });
+                // CalendarView takes the range as query parameters (not a $filter) and
+                // returns every occurrence overlapping it, including multi-day events.
+                config.QueryParameters.StartDateTime = startDate;
+                config.QueryParameters.EndDateTime = endDate;
+                // Request specific properties.
+                config.QueryParameters.Select = ["subject", "start", "end", "organizer"];
+                // Get at most 50 results per calendar.
+                config.QueryParameters.Top = 50;
+                // Sort by start time.
+                config.QueryParameters.Orderby = ["start/dateTime"];
+                // Return start/end in UTC so they parse unambiguously below.
+                config.Headers.Add("Prefer", "outlook.timezone=\"UTC\"");
+            });
 
-                if (events?.Value != null)
-                    allEvents.AddRange(events.Value);
-            }
+            allEvents.AddRange(events?.Value
+                ?? throw new InvalidOperationException($"Graph returned no response for the calendar '{calendar.Name}'."));
         }
 
         // Map to model and sort by absolute start instant across all calendars.
@@ -202,8 +202,9 @@ public class GraphClient : IGraphClient
             }
         });
 
+        // A missing response is a failure; an empty folder comes back as an empty list.
         if (messages?.Value == null)
-            return [];
+            throw new InvalidOperationException("Graph returned no response for the email list.");
 
         return messages.Value
             .Select(m => new EmailModel
@@ -420,7 +421,7 @@ public class GraphClient : IGraphClient
         });
 
         if (contacts?.Value == null)
-            return [];
+            throw new InvalidOperationException("Graph returned no response for the contact list.");
 
         return contacts.Value
             .Select(c => new ContactModel
@@ -451,7 +452,10 @@ public class GraphClient : IGraphClient
             config.QueryParameters.Top = 10;
         });
 
-        if (contacts?.Value == null || contacts.Value.Count == 0)
+        // No response is a failure; null is kept for "no contact by that name".
+        if (contacts?.Value == null)
+            throw new InvalidOperationException("Graph returned no response for the contact search.");
+        if (contacts.Value.Count == 0)
             return null;
 
         // Return the first match, or the best match if display name contains the exact search term.

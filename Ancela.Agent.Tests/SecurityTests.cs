@@ -123,6 +123,7 @@ public class SecurityTests
         services.AddSingleton<InstructionsPlugin>(_ => new InstructionsPlugin(new Mock<IUserService>().Object));
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
+        services.AddSingleton<IFunctionInvocationFilter, EmptyResultFilter>();
         services.AddSingleton<IAuditLog>(_ => new Mock<IAuditLog>().Object);
         services.AddSingleton<CorrelationContext>();
         services.AddSingleton<IKernelFactory, KernelFactory>();
@@ -208,6 +209,9 @@ public class SecurityTests
 
         filters.OfType<AuditFilter>().Should().ContainSingle();
         filters.OfType<AutonomousToolGuardFilter>().Should().ContainSingle();
+        filters.OfType<EmptyResultFilter>().Should().ContainSingle();
+        // Innermost, so AuditFilter records the "found nothing" message the model is shown.
+        filters.Last().Should().BeOfType<EmptyResultFilter>();
     }
 
     [Theory]

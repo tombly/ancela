@@ -197,7 +197,8 @@ public class GoogleHealthClientTests
 
         var result = await client.GetDailyActivityAsync("2026-06-06");
 
-        result.Steps.Should().Be(8421);
+        result.Should().NotBeNull();
+        result!.Steps.Should().Be(8421);
         result.DistanceKm.Should().Be(6.43);
         result.CaloriesOut.Should().Be(2310);
         result.LightActiveMinutes.Should().Be(180);
@@ -222,7 +223,8 @@ public class GoogleHealthClientTests
 
         var result = await client.GetSleepSummaryAsync("2026-06-06");
 
-        result.Stages.Should().NotBeNull();
+        result.Should().NotBeNull();
+        result!.Stages.Should().NotBeNull();
         result.Stages!.DeepMinutes.Should().Be(78);   // first occurrence, not summed
         result.Stages.LightMinutes.Should().Be(230);
         result.Stages.RemMinutes.Should().Be(90);
@@ -243,10 +245,60 @@ public class GoogleHealthClientTests
 
         var result = await client.GetSleepSummaryAsync("2026-06-06");
 
-        result.Stages.Should().BeNull();
+        result.Should().NotBeNull();
+        result!.Stages.Should().BeNull();
         result.AsleepMinutes.Should().Be(300);
         result.InBedMinutes.Should().Be(330);
         result.Efficiency.Should().Be(91);            // round(300 / 330 * 100)
+    }
+
+    // ---- Nothing recorded ----------------------------------------------------
+
+    [Fact]
+    public async Task Activity_DayWithNothingRecorded_IsNull_NotZeroSteps()
+    {
+        // The live API returns no roll-up point for a day with nothing recorded; the fake's
+        // default "{}" is that response for all four types.
+        var client = CreateClient(new FakeHandler(), FreshStore());
+
+        var result = await client.GetDailyActivityAsync("2026-06-06");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Activity_TypeWithNothingRecorded_IsNull_WhileAPointWithoutAValueIsZero()
+    {
+        // Google leaves zero values out, so a point with an empty value is a real zero.
+        var handler = new FakeHandler
+        {
+            RollupJsonByType =
+            {
+                ["steps"] = Rollup("steps", "\"countSum\":8421"),
+                ["total-calories"] = Rollup("totalCalories", ""),
+            },
+        };
+        var client = CreateClient(handler, FreshStore());
+
+        var result = await client.GetDailyActivityAsync("2026-06-06");
+
+        result.Should().NotBeNull();
+        result!.Steps.Should().Be(8421);
+        result.CaloriesOut.Should().Be(0);
+        result.DistanceKm.Should().BeNull();
+        result.LightActiveMinutes.Should().BeNull();
+        result.VigorousActiveMinutes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Sleep_NightWithNothingRecorded_IsNull()
+    {
+        // Was a record of nulls, which was read as "Google Health still appears disconnected".
+        var client = CreateClient(new FakeHandler { ReconcileJson = "{}" }, FreshStore());
+
+        var result = await client.GetSleepSummaryAsync("2026-06-06");
+
+        result.Should().BeNull();
     }
 
     [Fact]

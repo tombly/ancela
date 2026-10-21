@@ -13,7 +13,7 @@ public class GoogleHealthPlugin(GoogleHealthClient _googleHealthClient)
 {
     [KernelFunction("get_daily_activity")]
     [Description("Gets step count, distance, calories burned, and active minutes (light/moderate/vigorous) for a date. Defaults to today.")]
-    public async Task<DailyActivityModel> GetDailyActivityAsync(
+    public async Task<DailyActivityModel?> GetDailyActivityAsync(
         [Description("Date in YYYY-MM-DD format, or 'today'. Defaults to today.")] string? date = null)
     {
         return await _googleHealthClient.GetDailyActivityAsync(date ?? "today");
@@ -21,7 +21,7 @@ public class GoogleHealthPlugin(GoogleHealthClient _googleHealthClient)
 
     [KernelFunction("get_sleep_summary")]
     [Description("Gets sleep duration, efficiency, and stage breakdown (deep/light/rem/awake) for a date. Defaults to today.")]
-    public async Task<SleepSummaryModel> GetSleepSummaryAsync(
+    public async Task<SleepSummaryModel?> GetSleepSummaryAsync(
         [Description("Date in YYYY-MM-DD format, or 'today'. Defaults to today.")] string? date = null)
     {
         return await _googleHealthClient.GetSleepSummaryAsync(date ?? "today");

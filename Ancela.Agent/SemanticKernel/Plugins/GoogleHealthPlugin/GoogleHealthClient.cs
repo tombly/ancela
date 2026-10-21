@@ -49,7 +49,8 @@ public class GoogleHealthClient(
 
     // ---- Data surface ------------------------------------------------------
 
-    public async Task<DailyActivityModel> GetDailyActivityAsync(string date)
+    /// <returns>Null when nothing was recorded for the day.</returns>
+    public async Task<DailyActivityModel?> GetDailyActivityAsync(string date)
     {
         var day = ResolveDate(date);
         var range = (day, day.AddDays(1));
@@ -61,24 +62,35 @@ public class GoogleHealthClient(
         var activeTask = DailyRollUpAsync("active-minutes", range);
         await Task.WhenAll(stepsTask, distanceTask, caloriesTask, activeTask);
 
-        var byLevel = FirstPoint(activeTask.Result)?.ActiveMinutes?.ByLevel ?? [];
-        int LevelMinutes(string level) => (int)(byLevel
+        // A day with nothing of a type recorded has no roll-up point for it at all (checked against
+        // the live API on 2026-10-20), while a point that omits its value means zero. Reading a
+        // missing point as zero reported a day with nothing recorded as 0 steps.
+        var steps = FirstPoint(stepsTask.Result);
+        var distance = FirstPoint(distanceTask.Result);
+        var calories = FirstPoint(caloriesTask.Result);
+        var active = FirstPoint(activeTask.Result);
+        if (steps is null && distance is null && calories is null && active is null)
+            return null;
+
+        var byLevel = active?.ActiveMinutes?.ByLevel ?? [];
+        int? LevelMinutes(string level) => active is null ? null : (int)(byLevel
             .FirstOrDefault(b => string.Equals(b.ActivityLevel, level, StringComparison.OrdinalIgnoreCase))?
             .ActiveMinutesSum ?? 0);
 
         return new DailyActivityModel
         {
             Date = day.ToString("yyyy-MM-dd"),
-            Steps = (int)(FirstPoint(stepsTask.Result)?.Steps?.CountSum ?? 0),
-            DistanceKm = (FirstPoint(distanceTask.Result)?.Distance?.MillimetersSum ?? 0) / 1_000_000.0,
-            CaloriesOut = (int)Math.Round(FirstPoint(caloriesTask.Result)?.TotalCalories?.KcalSum ?? 0),
+            Steps = steps is null ? null : (int)(steps.Steps?.CountSum ?? 0),
+            DistanceKm = distance is null ? null : (distance.Distance?.MillimetersSum ?? 0) / 1_000_000.0,
+            CaloriesOut = calories is null ? null : (int)Math.Round(calories.TotalCalories?.KcalSum ?? 0),
             LightActiveMinutes = LevelMinutes("LIGHT"),
             ModerateActiveMinutes = LevelMinutes("MODERATE"),
             VigorousActiveMinutes = LevelMinutes("VIGOROUS"),
         };
     }
 
-    public async Task<SleepSummaryModel> GetSleepSummaryAsync(string date)
+    /// <returns>Null when no sleep was recorded with that wake date.</returns>
+    public async Task<SleepSummaryModel?> GetSleepSummaryAsync(string date)
     {
         var day = ResolveDate(date);
         // Sleep is filed under its wake (end) date; filter the reconciled stream by civil end time.
@@ -94,9 +106,12 @@ public class GoogleHealthClient(
             .OrderByDescending(s => s!.Summary!.MinutesInSleepPeriod)
             .FirstOrDefault();
 
-        var result = new SleepSummaryModel { Date = day.ToString("yyyy-MM-dd") };
+        // Not a record of nulls: that read as a failure, and a night with no sleep recorded was
+        // reported as "Google Health still appears disconnected".
         if (session?.Summary is not { } summary)
-            return result;
+            return null;
+
+        var result = new SleepSummaryModel { Date = day.ToString("yyyy-MM-dd") };
 
         var stages = summary.StagesSummary ?? [];
         if (string.Equals(session.Type, "STAGES", StringComparison.OrdinalIgnoreCase) && stages.Length > 0)
