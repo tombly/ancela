@@ -38,6 +38,9 @@ public abstract class AgentTestBase
 
     // Mocked data services
     protected readonly Mock<IHistoryService> MockHistoryService;
+
+    /// <summary>Plugins a test adds to the kernel, e.g. a stand-in for one that has no client mock here.</summary>
+    protected List<object> ExtraPlugins { get; } = [];
     protected readonly Mock<IMemoryClient> MockMemoryClient;
     protected readonly Mock<IGraphClient> MockGraphClient;
     protected readonly Mock<IProjectStore> MockProjectStore;
@@ -140,10 +143,13 @@ public abstract class AgentTestBase
                 pluginCollection.AddFromObject(ynabPlugin);
                 pluginCollection.AddFromObject(smsPlugin);
                 pluginCollection.AddFromObject(instructionsPlugin);
+                foreach (var extra in ExtraPlugins)
+                    pluginCollection.AddFromObject(extra);
                 var kernel = new Kernel(plugins: pluginCollection);
                 kernel.Data["profile"] = profile;
                 kernel.FunctionInvocationFilters.Add(
                     new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
+                kernel.FunctionInvocationFilters.Add(new EmptyResultFilter());
                 return kernel;
             });
 
@@ -218,6 +224,17 @@ public abstract class AgentTestBase
         }
 
         throw lastFailure!;
+    }
+
+    /// <summary>
+    /// For something a reply must never say: sends <paramref name="message"/> <paramref name="times"/>
+    /// times and checks every reply, where <see cref="SendUntilAsync(string, Action{string}, int, Action?)"/>
+    /// stops at the first that passes. A misreport made one time in three gets past that almost always.
+    /// </summary>
+    protected async Task SendEveryTimeAsync(string message, Action<string> verify, int times = 3)
+    {
+        for (var i = 0; i < times; i++)
+            verify(await SendMessageAsync(message));
     }
 
     /// <summary>
