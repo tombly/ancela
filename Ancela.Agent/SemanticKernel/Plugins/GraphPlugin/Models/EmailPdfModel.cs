@@ -7,12 +7,12 @@ public class EmailPdfModel
     public required DateTimeOffset ReceivedDateTime { get; init; }
     public required byte[] Pdf { get; init; }
 
-    /// <summary>
-    /// True when the whole message was over Graph's 2 MB conversion limit, so the PDF was rendered
-    /// from the headers and body alone.
-    /// </summary>
-    public required bool BodyOnly { get; init; }
+    /// <summary>Images the email links to on other servers, whether or not they were downloaded.</summary>
+    public required int LinkedImages { get; init; }
 
-    /// <summary>In body-only mode, the attachments that are not in the PDF. Empty otherwise.</summary>
-    public required string[] OmittedAttachments { get; init; }
+    /// <summary>
+    /// Images that should be in the PDF and aren't: embedded ones, or linked ones the owner said yes
+    /// to, that couldn't be downloaded or didn't fit Graph's 2 MB conversion limit.
+    /// </summary>
+    public required int ImagesMissing { get; init; }
 }

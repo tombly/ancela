@@ -79,10 +79,15 @@ public class GraphPlugin(IGraphClient graphClient)
     public async Task<SavedEmailModel> SaveEmailToOneDriveAsync(
          Kernel kernel,
          [Description("The email's id, exactly as returned by get_recent_emails.")]
-         string emailId)
+         string emailId,
+         [Description(EmailPdf.IncludeLinkedImagesDescription)]
+         bool? includeLinkedImages = null)
     {
+        if (includeLinkedImages is null && await graphClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
+            return new SavedEmailModel { Saved = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was saved yet.") };
+
         // The file name leads with the received date, which should be the user's date, not UTC's.
-        return await graphClient.SaveEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel));
+        return await graphClient.SaveEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel), includeLinkedImages == true);
     }
 
     #endregion

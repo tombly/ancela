@@ -64,9 +64,9 @@ public class AgentGraphTests : AgentTestBase
         SetupSave();
 
         await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
-            MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce));
+            MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
 
-        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>()),
+        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "no other email may be saved in its place");
     }
 
@@ -80,7 +80,7 @@ public class AgentGraphTests : AgentTestBase
             MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
                 Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
 
-        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()),
+        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "when the named email can't be found, nothing may be saved in its place");
     }
 
@@ -101,24 +101,63 @@ public class AgentGraphTests : AgentTestBase
         ];
         SetupEmails(search => search is null ? [.. fromTheOffice, .. NewestFifty()[..48]] : fromTheOffice);
         MockGraphClient
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()))
-            .ReturnsAsync((string id, TimeZoneInfo _) => new EmailPdfModel
+            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailPdfModel
             {
                 Subject = id,
                 ReceivedDateTime = DateTimeOffset.UtcNow,
                 Pdf = "%PDF-1.7"u8.ToArray(),
-                BodyOnly = false,
-                OmittedAttachments = [],
+                LinkedImages = 0,
+                ImagesMissing = 0,
             });
 
         await SendUntilAsync("send the two emails from the school office to my reMarkable", () =>
         {
-            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("trip", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
-            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("lunch", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("trip", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("lunch", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
         });
 
         remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never, "an email sent as text is whatever the model wrote from a 255-character preview");
+    }
+
+    [Fact]
+    public async Task SendEmailWithLinkedImages_AsksFirst_ThenSendsWithTheAnswer()
+    {
+        // Downloading the images an email links to tells the sender it was opened, so nothing is
+        // downloaded until the user says yes, which comes in their next message.
+        var remarkable = new Mock<IRemarkableService>();
+        remarkable
+            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("doc-id");
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
+        var history = UseRecordedHistory();
+        SetupEmails(_ => [CreateEmail("catalog", "news@shop.example", "Fall catalog", hoursAgo: 2)]);
+        MockGraphClient.Setup(g => g.GetLinkedImageCountAsync("catalog")).ReturnsAsync(12);
+        var renders = new List<bool>();
+        MockGraphClient
+            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .Callback<string, TimeZoneInfo, bool>((_, _, include) => renders.Add(include))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool include) => new EmailPdfModel
+            {
+                Subject = "Fall catalog",
+                ReceivedDateTime = DateTimeOffset.UtcNow,
+                Pdf = "%PDF-1.7"u8.ToArray(),
+                LinkedImages = 12,
+                ImagesMissing = 0,
+            });
+
+        await SendUntilAsync("send the fall catalog email from the shop to my reMarkable", reply =>
+        {
+            MockGraphClient.Verify(g => g.GetLinkedImageCountAsync("catalog"), Times.AtLeastOnce);
+            renders.Should().BeEmpty(because: $"nothing is sent before the user answers; the reply was: {reply}");
+            reply.Should().ContainEquivalentOf("image");
+        }, reset: () => { history.Clear(); renders.Clear(); });
+
+        var afterFirst = history.ToList();
+        await SendUntilAsync("Yes, include the images.", () =>
+            renders.Should().Equal([true], because: "the yes downloads the images, and the email is sent once"),
+            reset: () => { history.Clear(); history.AddRange(afterFirst); renders.Clear(); });
     }
 
     [Fact]
@@ -155,21 +194,7 @@ public class AgentGraphTests : AgentTestBase
         // Reading the email switches send_email off for the rest of that message, because the
         // email could be what asked for the send. So a reply takes two messages: Ancela says what
         // it would send, the user confirms, and the confirming message, having read nothing, sends.
-        var history = new List<HistoryEntry>();
-        MockHistoryService
-            .Setup(h => h.CreateHistoryEntryAsync(AgentPhoneNumber, UserPhoneNumber, It.IsAny<string>(), It.IsAny<MessageType>()))
-            .Callback<string, string, string, MessageType>((_, _, content, type) => history.Add(new HistoryEntry
-            {
-                Id = Guid.NewGuid(),
-                UserPhoneNumber = UserPhoneNumber,
-                Content = content,
-                MessageType = type,
-                Timestamp = DateTimeOffset.UtcNow,
-            }))
-            .Returns(Task.CompletedTask);
-        MockHistoryService
-            .Setup(h => h.GetHistoryAsync(AgentPhoneNumber, UserPhoneNumber))
-            .ReturnsAsync(() => history.ToArray());
+        var history = UseRecordedHistory();
         SetupEmails(_ => [CreateEmail("thursday", "bob@example.com", "Can you make Thursday at 3pm?", hoursAgo: 2)]);
         MockGraphClient
             .Setup(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -188,6 +213,29 @@ public class AgentGraphTests : AgentTestBase
             MockGraphClient.Verify(g => g.SendEmailAsync("bob@example.com", It.IsAny<string>(), It.IsAny<string>()),
                 Times.AtLeastOnce, "the confirming message sends the reply it was shown"),
             reset: () => { history.Clear(); history.AddRange(afterFirst); });
+    }
+
+    /// <summary>
+    /// Keeps the conversation in a list, so a second message sees the first and its reply.
+    /// </summary>
+    protected List<HistoryEntry> UseRecordedHistory()
+    {
+        var history = new List<HistoryEntry>();
+        MockHistoryService
+            .Setup(h => h.CreateHistoryEntryAsync(AgentPhoneNumber, UserPhoneNumber, It.IsAny<string>(), It.IsAny<MessageType>()))
+            .Callback<string, string, string, MessageType>((_, _, content, type) => history.Add(new HistoryEntry
+            {
+                Id = Guid.NewGuid(),
+                UserPhoneNumber = UserPhoneNumber,
+                Content = content,
+                MessageType = type,
+                Timestamp = DateTimeOffset.UtcNow,
+            }))
+            .Returns(Task.CompletedTask);
+        MockHistoryService
+            .Setup(h => h.GetHistoryAsync(AgentPhoneNumber, UserPhoneNumber))
+            .ReturnsAsync(() => history.ToArray());
+        return history;
     }
 
     /// <summary>
@@ -229,13 +277,13 @@ public class AgentGraphTests : AgentTestBase
     protected void SetupSave()
     {
         MockGraphClient
-            .Setup(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()))
-            .ReturnsAsync((string id, TimeZoneInfo _) => new SavedEmailModel
+            .Setup(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new SavedEmailModel
             {
                 FileName = $"{id}.pdf",
+                Saved = true,
                 WebUrl = "https://example.com/onedrive/file",
-                BodyOnly = false,
-                OmittedAttachments = [],
+                LinkedImages = 0,
             });
     }
 

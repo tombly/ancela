@@ -36,7 +36,7 @@ public class OneDriveLiveTests(ITestOutputHelper _output)
         var sources = new (string Extension, byte[] Content)[]
         {
             (".eml", SyntheticEml()),
-            (".html", EmailPdf.Utf8WithBom(EmailPdf.RenderBodyOnlyHtml(SyntheticMessage(), ["big.zip"], Pacific))),
+            (".html", EmailPdf.Utf8WithBom(EmailPdf.RenderHtml(SyntheticMessage(), ["big.zip"], Pacific))),
         };
         foreach (var (extension, content) in sources)
         {
@@ -147,15 +147,16 @@ public class OneDriveLiveTests(ITestOutputHelper _output)
         SavedEmailModel? saved = null;
         try
         {
-            saved = await graph.SaveEmailAsPdfAsync(email.Id, Pacific);
+            // Never the linked images: downloading them would tell a real sender the email was opened.
+            saved = await graph.SaveEmailAsPdfAsync(email.Id, Pacific, includeLinkedImages: false);
 
             saved.FileName.Should().Be(expectedName);
             saved.WebUrl.Should().StartWith("https://");
             var names = await FolderNamesAsync(client, config);
             names.Should().Contain(expectedName);
-            names.Should().NotContain(n => n.StartsWith("ancela-") && (n.EndsWith(".eml") || n.EndsWith(".html")),
+            names.Should().NotContain(n => n.StartsWith("ancela-") && n.EndsWith(".html"),
                 because: "the temporary source file is deleted after conversion");
-            _output.WriteLine($"saved (bodyOnly={saved.BodyOnly}, omitted attachments={saved.OmittedAttachments.Length}); temporary file removed");
+            _output.WriteLine($"saved ({saved.LinkedImages} linked images left out, {saved.ImagesMissing} missing); temporary file removed");
         }
         finally
         {

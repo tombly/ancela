@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Ancela.Agent.Services;
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
-using MessageItemRequestBuilder = Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
@@ -14,8 +14,9 @@ public interface IGraphClient
     Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null);
     Task<EmailContentModel> GetEmailAsync(string messageId);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
-    Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
-    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
+    Task<int> GetLinkedImageCountAsync(string messageId);
+    Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
+    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
     Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
@@ -36,8 +37,12 @@ public class GraphClient : IGraphClient
     /// </summary>
     private readonly string _entraUserId;
 
-    public GraphClient()
+    private readonly ILinkedImageFetcher _imageFetcher;
+
+    public GraphClient(ILinkedImageFetcher? imageFetcher = null)
     {
+        _imageFetcher = imageFetcher ?? new LinkedImageFetcher();
+
         _entraUserId = Environment.GetEnvironmentVariable("GRAPH_USER_ID") ?? throw new Exception("GRAPH_USER_ID not set");
 
         var tenantId = Environment.GetEnvironmentVariable("GRAPH_TENANT_ID") ?? throw new Exception("GRAPH_TENANT_ID not set");
@@ -362,65 +367,104 @@ public class GraphClient : IGraphClient
     /// Saves an email as a PDF in the OneDrive folder, named for its local received time and
     /// subject. See <see cref="RenderEmailAsPdfAsync"/>.
     /// </summary>
-    public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
+    public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
     {
-        var email = await RenderEmailAsPdfAsync(messageId, timeZone);
+        var email = await RenderEmailAsPdfAsync(messageId, timeZone, includeLinkedImages);
         var (driveId, folderId) = OneDriveFolder();
         var fileName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, timeZone);
         var saved = await UploadToFolderAsync(driveId, folderId, fileName, email.Pdf);
         return new SavedEmailModel
         {
+            Saved = true,
             FileName = saved.Name ?? fileName,
             WebUrl = saved.WebUrl ?? string.Empty,
-            BodyOnly = email.BodyOnly,
-            OmittedAttachments = email.OmittedAttachments,
+            LinkedImages = email.LinkedImages,
+            ImagesMissing = email.ImagesMissing,
         };
     }
 
     /// <summary>
-    /// Renders a whole email as a PDF: the raw message goes into the OneDrive folder as a temporary
-    /// .eml, Graph converts it, and the .eml is deleted. A message over the 2 MB conversion limit is
-    /// rendered from its headers and body alone.
+    /// How many images the email links to on other servers (tracking pixels aside). Downloading
+    /// them tells the sender the email was opened, so the owner is asked first.
     /// </summary>
-    public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
+    public async Task<int> GetLinkedImageCountAsync(string messageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+        var message = await _appClient.Users[_entraUserId].Messages[messageId].GetAsync(config =>
+        {
+            config.QueryParameters.Select = ["body"];
+            config.Headers.Add("Prefer", "outlook.body-content-type=\"html\"");
+        }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
+        return EmailPdf.ImageSources(message.Body?.Content ?? string.Empty).Count(EmailPdf.IsLinked);
+    }
+
+    /// <summary>
+    /// Renders an email as a PDF: <see cref="EmailPdf.RenderHtml"/> writes it as one HTML page with
+    /// its images inside it, the page goes into the OneDrive folder as a temporary file, Graph
+    /// converts it, and the file is deleted. Graph's converter shows neither an .eml's embedded
+    /// images nor any linked ones (tried 2026-10-22), so embedded images are always written in, and
+    /// linked ones only with <paramref name="includeLinkedImages"/>, the owner's yes.
+    /// </summary>
+    public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         var (driveId, folderId) = OneDriveFolder();
         var message = _appClient.Users[_entraUserId].Messages[messageId];
 
-        var summary = await message.GetAsync(config => config.QueryParameters.Select = ["subject", "receivedDateTime"])
-            ?? throw new InvalidOperationException("Graph returned no email for that id.");
-
-        // The raw MIME message is the best source: Graph renders an .eml with a From/Sent/To/Subject
-        // block and the full HTML body. Attachments are inside it and count toward the limit, so
-        // reading stops one chunk past the limit rather than downloading a large attachment.
-        byte[]? mime;
-        await using (var raw = await message.Content.GetAsync()
-            ?? throw new InvalidOperationException("Graph returned no content for the email."))
+        var email = await message.GetAsync(config =>
         {
-            mime = await ReadAtMostAsync(raw, EmailPdf.ConversionLimitBytes);
+            config.QueryParameters.Select = ["subject", "from", "toRecipients", "ccRecipients", "sentDateTime", "receivedDateTime", "body"];
+            // Plain-text emails come back as HTML too, so there is one rendering path.
+            config.Headers.Add("Prefer", "outlook.body-content-type=\"html\"");
+        }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
+
+        // No content: without $select, file attachments come back with it.
+        var attachments = (await message.Attachments.GetAsync(config =>
+            config.QueryParameters.Select = ["id", "name", "isInline", "contentType", "size"]))?.Value
+            ?? throw new InvalidOperationException("Graph returned no attachment list for the email.");
+
+        var html = EmailPdf.RenderHtml(email,
+            attachments.Where(a => a.IsInline != true).Select(a => a.Name ?? "(unnamed)").ToArray(), timeZone);
+        if (EmailPdf.Utf8WithBom(html).Length > EmailPdf.ConversionLimitBytes)
+            throw new InvalidOperationException("This email is over the 2 MB PDF conversion limit even without its images and attachments, so it can't be made into a PDF.");
+
+        var sources = EmailPdf.ImageSources(html);
+        var images = new Dictionary<string, MediaItem>();
+        if (sources.Any(EmailPdf.IsEmbedded))
+        {
+            foreach (var inline in attachments.Where(a => a.IsInline == true && a.Id is not null
+                && a.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true
+                && a.Size <= EmailPdf.ConversionLimitBytes))
+            {
+                if (await message.Attachments[inline.Id].GetAsync() is FileAttachment { ContentId: { } contentId, ContentBytes: { } bytes })
+                    images[EmailPdf.EmbeddedSource(contentId)] = new MediaItem(bytes, inline.ContentType!.ToLowerInvariant());
+            }
+        }
+        if (includeLinkedImages)
+        {
+            foreach (var (url, image) in await _imageFetcher.FetchAsync(sources.Where(EmailPdf.IsLinked)))
+                images[url] = image;
         }
 
-        var bodyOnly = mime is null;
-        var (source, omitted) = mime is not null ? (mime, []) : await RenderBodyOnlyAsync(message, timeZone);
+        var (page, written) = EmailPdf.EmbedImages(html, images, EmailPdf.ConversionLimitBytes);
+        var wanted = sources.Count(s => EmailPdf.IsEmbedded(s) || (includeLinkedImages && EmailPdf.IsLinked(s)));
 
-        var temporary = await UploadToFolderAsync(driveId, folderId,
-            $"ancela-{Guid.NewGuid():N}{(bodyOnly ? ".html" : ".eml")}", source);
+        var temporary = await UploadToFolderAsync(driveId, folderId, $"ancela-{Guid.NewGuid():N}.html", EmailPdf.Utf8WithBom(page));
         var temporaryId = temporary.Id ?? throw new InvalidOperationException("Graph returned no id for the uploaded email.");
         try
         {
             return new EmailPdfModel
             {
-                Subject = summary.Subject,
-                ReceivedDateTime = summary.ReceivedDateTime ?? DateTimeOffset.UtcNow,
+                Subject = email.Subject,
+                ReceivedDateTime = email.ReceivedDateTime ?? DateTimeOffset.UtcNow,
                 Pdf = await ConvertToPdfAsync(driveId, temporaryId),
-                BodyOnly = bodyOnly,
-                OmittedAttachments = omitted,
+                LinkedImages = sources.Count(EmailPdf.IsLinked),
+                ImagesMissing = wanted - written,
             };
         }
         finally
         {
-            // Best effort: a leftover "ancela-….eml" in the owner's own folder is untidy, not a
+            // Best effort: a leftover "ancela-….html" in the owner's own folder is untidy, not a
             // leak, and throwing here would report a conversion that worked as a failure.
             try { await _appClient.Drives[driveId].Items[temporaryId].DeleteAsync(); }
             catch (Exception) { }
@@ -433,43 +477,6 @@ public class GraphClient : IGraphClient
         var (driveId, folderId) = OneDriveFolder();
         var folder = await _appClient.Drives[driveId].Items[folderId].GetAsync(config => config.QueryParameters.Select = ["name"]);
         return folder?.Name ?? string.Empty;
-    }
-
-    /// <summary>The whole stream, or null once it passes <paramref name="limit"/> bytes.</summary>
-    private static async Task<byte[]?> ReadAtMostAsync(Stream stream, int limit)
-    {
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        int read;
-        while ((read = await stream.ReadAsync(chunk)) > 0)
-        {
-            if (buffer.Length + read > limit)
-                return null;
-            buffer.Write(chunk, 0, read);
-        }
-        return buffer.ToArray();
-    }
-
-    private static async Task<(byte[] Html, string[] Omitted)> RenderBodyOnlyAsync(MessageItemRequestBuilder message, TimeZoneInfo timeZone)
-    {
-        var full = await message.GetAsync(config =>
-        {
-            config.QueryParameters.Select = ["subject", "from", "toRecipients", "ccRecipients", "sentDateTime", "body"];
-            // Plain-text emails come back as HTML too, so there is one rendering path.
-            config.Headers.Add("Prefer", "outlook.body-content-type=\"html\"");
-        }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
-
-        // Names only: without $select, file attachments come back with their content.
-        var attachments = await message.Attachments.GetAsync(config => config.QueryParameters.Select = ["name", "isInline"]);
-        var omitted = attachments?.Value?
-            .Where(a => a.IsInline != true)
-            .Select(a => a.Name ?? "(unnamed)")
-            .ToArray() ?? [];
-
-        var html = EmailPdf.Utf8WithBom(EmailPdf.RenderBodyOnlyHtml(full, omitted, timeZone));
-        if (html.Length > EmailPdf.ConversionLimitBytes)
-            throw new InvalidOperationException("This email is over the 2 MB PDF conversion limit even without its attachments, so it can't be saved as a PDF.");
-        return (html, omitted);
     }
 
     private async Task<byte[]> ConvertToPdfAsync(string driveId, string itemId)

@@ -200,8 +200,8 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - You can save an email as a PDF in the Ancela folder of the user's OneDrive with
                      `save_email_to_onedrive`, passing the email's id from `get_recent_emails`. Only
                      do this when the user asks. Tell them the file name; give the link only if
-                     they ask for it. If the result says BodyOnly, say the email was too large to
-                     convert whole, so the PDF has the message but not the listed attachments.
+                     they ask for it. If the result counts ImagesMissing, say how many images
+                     couldn't be included.
                 5. Contact Access:
                   - You can read the user's contacts.
                 6. Personal Finance Access:
@@ -250,8 +250,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                      shown on the device, and the body text becomes the PDF content.
                    - To send an email, use `send_email_to_remarkable` with the email's id from
                      `get_recent_emails`, once per email: it sends the whole email. If the
-                     result says BodyOnly, say the email was too large to convert whole, so the
-                     PDF has the message but not the listed attachments.
+                     result counts ImagesMissing, say how many images couldn't be included.
                    - Use this when the user explicitly asks to "send to my reMarkable",
                      "put on my reMarkable", or similar. Don't push content there unprompted.
                 12. Scheduled Tasks:
