@@ -9,6 +9,9 @@ public interface IRemarkableService
 {
     Task<string> SendTextAsync(string visibleName, string text, CancellationToken cancellationToken = default);
 
+    /// <summary>Uploads a PDF that is already rendered, such as a whole email.</summary>
+    Task<string> SendPdfAsync(string visibleName, Stream pdf, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Verifies the device token by minting (or reusing) a session token, without uploading
     /// anything — the self-check's reMarkable probe. Throws when not configured or rejected.
@@ -35,10 +38,17 @@ public sealed class RemarkableService(IHttpClientFactory _httpClientFactory) : I
         ArgumentException.ThrowIfNullOrWhiteSpace(visibleName);
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
 
+        using var pdf = RenderPdf(visibleName, text);
+        return await SendPdfAsync(visibleName, pdf, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<string> SendPdfAsync(string visibleName, Stream pdf, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(visibleName);
+
         var client = new RemarkableClient(_httpClientFactory.CreateClient("remarkable"));
         var sessionToken = await GetSessionTokenAsync(client, cancellationToken).ConfigureAwait(false);
 
-        using var pdf = RenderPdf(visibleName, text);
         var result = await client.UploadPdfAsync(sessionToken, visibleName, pdf, cancellationToken).ConfigureAwait(false);
         return result.DocumentId;
     }

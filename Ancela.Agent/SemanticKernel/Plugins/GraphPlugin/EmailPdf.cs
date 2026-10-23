@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Graph.Models;
+using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
@@ -26,6 +27,16 @@ public static class EmailPdf
 
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex BodyTag = new(@"<body\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The time zone <see cref="Agent"/> puts in the Chat kernel's data (<c>userTimeZone</c>), or UTC
+    /// when it is missing or unknown.
+    /// </summary>
+    public static TimeZoneInfo UserTimeZone(Kernel kernel) =>
+        kernel.Data.TryGetValue("userTimeZone", out var id) && id is string tz
+            && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found)
+            ? found
+            : TimeZoneInfo.Utc;
 
     /// <summary>
     /// "2026-10-13 0915 Subject.pdf". The local received time leads so the folder sorts by date, and

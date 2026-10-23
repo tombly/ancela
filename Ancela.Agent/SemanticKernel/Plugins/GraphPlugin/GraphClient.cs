@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
@@ -11,8 +12,10 @@ public interface IGraphClient
     Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
     Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null);
+    Task<EmailContentModel> GetEmailAsync(string messageId);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
+    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
     Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
@@ -170,14 +173,7 @@ public class GraphClient : IGraphClient
     // days). Every result carries its received date, so the model narrows by date itself.
     public async Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null)
     {
-        // Map our restricted folder set to Graph's well-known folder names.
-        var folderId = folder switch
-        {
-            MailFolder.Inbox => "inbox",
-            MailFolder.Sent => "sentitems",
-            MailFolder.Deleted => "deleteditems",
-            _ => "inbox"
-        };
+        var folderId = WellKnownName(folder);
 
         // A search covers the whole folder: it is how the model reaches mail older than the
         // newest EmailResultCap, which in a busy inbox is a day or two.
@@ -217,6 +213,90 @@ public class GraphClient : IGraphClient
                 IsRead = m.IsRead ?? false
             }).ToArray();
     }
+
+    /// <summary>Graph's well-known name for one of the folders the agent may read.</summary>
+    private static string WellKnownName(MailFolder folder) => folder switch
+    {
+        MailFolder.Inbox => "inbox",
+        MailFolder.Sent => "sentitems",
+        MailFolder.Deleted => "deleteditems",
+        _ => "inbox"
+    };
+
+    /// <summary>
+    /// The most body text returned for one email (about 5,000 tokens). A newsletter can run to far
+    /// more, and the model is told when it was cut.
+    /// </summary>
+    public const int EmailBodyCap = 20_000;
+
+    private static readonly Regex TrailingSpaces = new(@"[ \t]+\n", RegexOptions.Compiled);
+    private static readonly Regex BlankLines = new(@"\n{3,}", RegexOptions.Compiled);
+
+    // Ids of the folders in MailFolder, looked up once: they don't change.
+    private string[]? _readableFolderIds;
+
+    /// <summary>
+    /// One email in full, with its body as text. get_recent_emails returns only Graph's bodyPreview,
+    /// the first 255 characters, which is too little to answer what an email says.
+    /// </summary>
+    public async Task<EmailContentModel> GetEmailAsync(string messageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+
+        var message = await _appClient.Users[_entraUserId].Messages[messageId].GetAsync(config =>
+        {
+            config.QueryParameters.Select = ["id", "subject", "from", "toRecipients", "ccRecipients", "receivedDateTime", "body", "hasAttachments", "parentFolderId"];
+            // Graph converts an HTML body to text, which is all the model needs and far shorter.
+            config.Headers.Add("Prefer", "outlook.body-content-type=\"text\"");
+        }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
+
+        // The same folders get_recent_emails reads. Its results are where ids come from, but an id
+        // can also come from anywhere else the model has read, such as another email's text.
+        if (!(await ReadableFolderIdsAsync()).Contains(message.ParentFolderId))
+            throw new InvalidOperationException("That email is not in the Inbox, Sent or Deleted folder, the only ones Ancela reads.");
+
+        return ToEmailContent(message);
+    }
+
+    private async Task<string[]> ReadableFolderIdsAsync() =>
+        _readableFolderIds ??= await Task.WhenAll(Enum.GetValues<MailFolder>().Select(async folder =>
+            (await _appClient.Users[_entraUserId].MailFolders[WellKnownName(folder)].GetAsync(config => config.QueryParameters.Select = ["id"]))?.Id
+            ?? throw new InvalidOperationException($"Graph returned no id for the {folder} folder.")));
+
+    /// <summary>
+    /// Maps a message fetched with a text body, tidied and cut to <see cref="EmailBodyCap"/>. Text
+    /// converted from HTML carries runs of blank lines and trailing spaces that cost tokens.
+    /// </summary>
+    public static EmailContentModel ToEmailContent(Message message)
+    {
+        var body = (message.Body?.Content ?? string.Empty).Replace("\r\n", "\n");
+        body = BlankLines.Replace(TrailingSpaces.Replace(body, "\n"), "\n\n").Trim();
+
+        var truncated = body.Length > EmailBodyCap;
+        if (truncated)
+        {
+            var cut = EmailBodyCap;
+            if (char.IsHighSurrogate(body[cut - 1]))
+                cut--; // don't split an emoji's surrogate pair
+            body = body[..cut];
+        }
+
+        return new EmailContentModel
+        {
+            Id = message.Id ?? string.Empty,
+            Subject = message.Subject ?? string.Empty,
+            From = message.From?.EmailAddress?.Address ?? string.Empty,
+            To = Addresses(message.ToRecipients),
+            Cc = Addresses(message.CcRecipients),
+            ReceivedDateTime = message.ReceivedDateTime ?? DateTimeOffset.MinValue,
+            Body = body,
+            Truncated = truncated,
+            HasAttachments = message.HasAttachments ?? false,
+        };
+    }
+
+    private static string[] Addresses(List<Recipient>? recipients) =>
+        (recipients ?? []).Select(r => r.EmailAddress?.Address).OfType<string>().ToArray();
 
     /// <summary>
     /// Wraps the model's search text for Graph's <c>$search</c>, which takes one double-quoted KQL
@@ -279,11 +359,30 @@ public class GraphClient : IGraphClient
     }
 
     /// <summary>
-    /// Saves an email as a PDF in the OneDrive folder: the raw message goes in as a temporary .eml,
-    /// Graph converts it, the PDF is saved beside it, and the .eml is deleted. A message over the
-    /// 2 MB conversion limit is rendered from its headers and body alone.
+    /// Saves an email as a PDF in the OneDrive folder, named for its local received time and
+    /// subject. See <see cref="RenderEmailAsPdfAsync"/>.
     /// </summary>
     public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
+    {
+        var email = await RenderEmailAsPdfAsync(messageId, timeZone);
+        var (driveId, folderId) = OneDriveFolder();
+        var fileName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, timeZone);
+        var saved = await UploadToFolderAsync(driveId, folderId, fileName, email.Pdf);
+        return new SavedEmailModel
+        {
+            FileName = saved.Name ?? fileName,
+            WebUrl = saved.WebUrl ?? string.Empty,
+            BodyOnly = email.BodyOnly,
+            OmittedAttachments = email.OmittedAttachments,
+        };
+    }
+
+    /// <summary>
+    /// Renders a whole email as a PDF: the raw message goes into the OneDrive folder as a temporary
+    /// .eml, Graph converts it, and the .eml is deleted. A message over the 2 MB conversion limit is
+    /// rendered from its headers and body alone.
+    /// </summary>
+    public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         var (driveId, folderId) = OneDriveFolder();
@@ -310,13 +409,11 @@ public class GraphClient : IGraphClient
         var temporaryId = temporary.Id ?? throw new InvalidOperationException("Graph returned no id for the uploaded email.");
         try
         {
-            var pdf = await ConvertToPdfAsync(driveId, temporaryId);
-            var fileName = EmailPdf.FileName(summary.Subject, summary.ReceivedDateTime ?? DateTimeOffset.UtcNow, timeZone);
-            var saved = await UploadToFolderAsync(driveId, folderId, fileName, pdf);
-            return new SavedEmailModel
+            return new EmailPdfModel
             {
-                FileName = saved.Name ?? fileName,
-                WebUrl = saved.WebUrl ?? string.Empty,
+                Subject = summary.Subject,
+                ReceivedDateTime = summary.ReceivedDateTime ?? DateTimeOffset.UtcNow,
+                Pdf = await ConvertToPdfAsync(driveId, temporaryId),
                 BodyOnly = bodyOnly,
                 OmittedAttachments = omitted,
             };
@@ -324,7 +421,7 @@ public class GraphClient : IGraphClient
         finally
         {
             // Best effort: a leftover "ancela-….eml" in the owner's own folder is untidy, not a
-            // leak, and throwing here would report a save that worked as a failure.
+            // leak, and throwing here would report a conversion that worked as a failure.
             try { await _appClient.Drives[driveId].Items[temporaryId].DeleteAsync(); }
             catch (Exception) { }
         }

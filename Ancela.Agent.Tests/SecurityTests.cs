@@ -178,6 +178,8 @@ public class SecurityTests
 
         allowed.Should().NotContain("get_recent_emails",
             because: "email bodies are attacker-controlled input and standing rules don't need them");
+        allowed.Should().NotContain("read_email",
+            because: "email bodies are attacker-controlled input and standing rules don't need them");
         allowed.Should().NotContain("get_calendar_events",
             because: "calendar event descriptions are attacker-controlled input and standing rules don't need them");
     }
@@ -191,6 +193,8 @@ public class SecurityTests
 
         allowed.Should().Contain("get_recent_emails",
             because: "scheduled tasks like 'email digest' legitimately need email access");
+        allowed.Should().Contain("read_email",
+            because: "a digest can't say what an email says from its first 255 characters");
         allowed.Should().Contain("get_calendar_events",
             because: "scheduled tasks like 'calendar summary' legitimately need calendar access");
     }
@@ -267,6 +271,8 @@ public class SecurityTests
     [InlineData(KernelProfile.ScheduledTask, "send_sms")]
     [InlineData(KernelProfile.ScheduledTask, "register_user")]
     [InlineData(KernelProfile.ScheduledTask, "save_email_to_onedrive")]  // may read email, not copy it out
+    [InlineData(KernelProfile.StandingRule, "send_email_to_remarkable")]
+    [InlineData(KernelProfile.ScheduledTask, "send_email_to_remarkable")]
     public async Task AutonomousToolGuardFilter_BlocksNonAllowedFunction(KernelProfile profile, string functionName)
     {
         // The filter throws InvalidOperationException, which Semantic Kernel propagates unwrapped.
@@ -370,6 +376,9 @@ public class SecurityTests
     [InlineData("get_network_client_count")]
     [InlineData("get_network_uptime")]
     [InlineData("save_email_to_onedrive")]
+    [InlineData("send_email_to_remarkable")]
+    [InlineData("get_recent_emails")]
+    [InlineData("read_email")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -392,7 +401,8 @@ public class SecurityTests
     [Fact]
     public void OwnerOnlyFunctions_AreReadDeniedToNonOwners_ButReadsAreNot()
     {
-        // The owner-only axis covers send/write actions; read functions stay open to all users.
+        // The owner-only axis covers send/write actions and owner-private reads; other reads stay
+        // open to all users.
         KernelProfilePolicy.IsOwnerOnly("send_sms").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("send_email").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("create_calendar_event").Should().BeTrue();
@@ -406,8 +416,13 @@ public class SecurityTests
             because: "home network status is owner-private");
         KernelProfilePolicy.IsOwnerOnly("save_email_to_onedrive").Should().BeTrue(
             because: "it writes the owner's email into the owner's OneDrive");
+        KernelProfilePolicy.IsOwnerOnly("send_email_to_remarkable").Should().BeTrue(
+            because: "it sends the owner's email to the owner's tablet");
+        KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeTrue(
+            because: "other users may not see any of the owner's email, previews included");
+        KernelProfilePolicy.IsOwnerOnly("read_email").Should().BeTrue(
+            because: "other users may not see any of the owner's email");
 
-        KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();
@@ -421,6 +436,10 @@ public class SecurityTests
     [InlineData("get_recent_emails", "web_fetch")]  // a URL the model picks can carry the inbox out
     [InlineData("get_recent_emails", "remember_instruction")]
     [InlineData("get_recent_emails", "forget_instruction")]
+    [InlineData("read_email", "send_email")]
+    [InlineData("read_email", "send_sms")]
+    [InlineData("read_email", "web_fetch")]
+    [InlineData("read_email", "remember_instruction")]
     [InlineData("get_calendar_events", "send_email")]
     [InlineData("get_calendar_events", "web_fetch")]
     [InlineData("web_search", "send_email")]
@@ -443,8 +462,11 @@ public class SecurityTests
 
     [Theory]
     [InlineData("get_recent_emails", "save_email_to_onedrive")]  // writes only into the owner's folder
+    [InlineData("get_recent_emails", "send_email_to_remarkable")]  // sends only to the owner's tablet
     [InlineData("get_recent_emails", "create_calendar_event")]   // no attendees, so no invitation goes out
     [InlineData("get_recent_emails", "get_recent_emails")]
+    [InlineData("get_recent_emails", "read_email")]
+    [InlineData("read_email", "save_email_to_onedrive")]
     [InlineData("web_search", "web_fetch")]                      // opening a result is what search is for
     [InlineData("web_fetch", "web_fetch")]
     [InlineData("get_contacts", "send_email")]                   // the user's own address book is not outside text

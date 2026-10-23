@@ -43,7 +43,7 @@ public static class KernelProfilePolicy
     {
         "web_search",
         "get_todos", "get_knowledge",
-        "get_calendar_events", "get_recent_emails", "get_contacts", "get_contact_by_name",
+        "get_calendar_events", "get_recent_emails", "read_email", "get_contacts", "get_contact_by_name",
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
@@ -82,14 +82,17 @@ public static class KernelProfilePolicy
     }
 
     // Functions that act on the owner's shared resources, send on the agent's behalf, or
-    // read owner-private data (Google Health data, the diagnostics self-check — which reveals
-    // operational/security posture — and home network status, which is presence data).
+    // read owner-private data (email, Google Health data, the diagnostics self-check — which
+    // reveals operational/security posture — and home network status, which is presence data).
+    // Other users can't see any email content: not a preview, a whole email, or a copy of one.
     // Non-owner users are denied access even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
-    // save_email_to_onedrive writes into the owner's OneDrive and is in neither allow-list.
+    // save_email_to_onedrive writes into the owner's OneDrive and send_email_to_remarkable onto
+    // the owner's tablet; both are in neither allow-list.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
+        "send_email_to_remarkable", "get_recent_emails", "read_email",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
         "check_services", "check_anomalies",
         "get_network_client_count", "get_network_uptime",
@@ -112,6 +115,7 @@ public static class KernelProfilePolicy
     private static readonly Dictionary<string, UntrustedSource> UntrustedReads = new(StringComparer.OrdinalIgnoreCase)
     {
         ["get_recent_emails"] = UntrustedSource.MailOrCalendar,
+        ["read_email"] = UntrustedSource.MailOrCalendar,
         ["get_calendar_events"] = UntrustedSource.MailOrCalendar,
         ["web_search"] = UntrustedSource.Web,
         ["web_fetch"] = UntrustedSource.Web,
@@ -124,8 +128,9 @@ public static class KernelProfilePolicy
     // forget_instruction is off so one can't remove a rule the user set. web_fetch is off after
     // mail and calendar because a URL the model picks is itself a way out (?q=<the inbox>), but
     // stays on after a search, since opening a result is what searching is for. Left on:
-    // save_email_to_onedrive and create_calendar_event, which write only into the owner's own
-    // folder and calendar (there is no attendees parameter, so no invitation goes out).
+    // save_email_to_onedrive, send_email_to_remarkable and create_calendar_event, which write only
+    // into the owner's own folder, tablet and calendar (there is no attendees parameter, so no
+    // invitation goes out).
     // Not covered: text a read put into Ancela's reply carries over in history, and knowledge
     // or to-dos saved after a read are not marked when read back later.
     private static readonly Dictionary<string, UntrustedSource> SwitchedOffAfter = new(StringComparer.OrdinalIgnoreCase)

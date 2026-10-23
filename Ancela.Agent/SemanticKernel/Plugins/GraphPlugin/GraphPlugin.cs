@@ -52,6 +52,15 @@ public class GraphPlugin(IGraphClient graphClient)
         return await graphClient.GetUserEmailsAsync(folder, search);
     }
 
+    [KernelFunction("read_email")]
+    [Description("Reads one email in full: sender, recipients, date and the whole body as text. get_recent_emails shows only the first few lines of each email, so use this to find out what an email says.")]
+    public async Task<EmailContentModel> ReadEmailAsync(
+         [Description("The email's id, exactly as returned by get_recent_emails.")]
+         string emailId)
+    {
+        return await graphClient.GetEmailAsync(emailId);
+    }
+
     [KernelFunction("send_email")]
     [Description("Sends an email to the specified recipient.")]
     public async Task<string> SendEmailAsync(
@@ -73,11 +82,7 @@ public class GraphPlugin(IGraphClient graphClient)
          string emailId)
     {
         // The file name leads with the received date, which should be the user's date, not UTC's.
-        var timeZone = kernel.Data.TryGetValue("userTimeZone", out var id) && id is string tz
-            && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found)
-            ? found
-            : TimeZoneInfo.Utc;
-        return await graphClient.SaveEmailAsPdfAsync(emailId, timeZone);
+        return await graphClient.SaveEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel));
     }
 
     #endregion
