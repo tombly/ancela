@@ -127,7 +127,7 @@ public abstract class AgentTestBase
         var ynabPlugin = new YnabPlugin(ynabClient);
 
         // Create kernel with real OpenAI and plugins with mocked clients
-        var chatCompletionService = new OpenAIChatCompletionService("gpt-5.4", OpenAIClient);
+        var chatCompletionService = new OpenAIChatCompletionService("gpt-6-luna", OpenAIClient);
 
         // Build a factory that hands out a fresh kernel (with the test plugins) per call. The
         // real guard runs on it, as in production, so the model meets the same denials.

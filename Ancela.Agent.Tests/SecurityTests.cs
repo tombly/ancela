@@ -462,6 +462,27 @@ public class SecurityTests
                 because: "check_anomalies counts guard denials by this text");
     }
 
+    [Fact]
+    public async Task UntrustedRead_DenialRepeatsTheCall_SoTheReplyCanShowIt()
+    {
+        // The confirming message sees only the reply. A reply that said "reply to Bob" without his
+        // address got "Bob" sent as the address.
+        var kernel = GuardedChatKernel();
+        await InvokeAsync(kernel, "read_email");
+        var send = KernelFunctionFactory.CreateFromMethod(
+            (string toAddress, string subject, string body) => "ok", functionName: "send_email");
+
+        var act = async () => await kernel.InvokeAsync(send, new KernelArguments
+        {
+            ["toAddress"] = "bob@example.com",
+            ["subject"] = "Re: Thursday",
+            ["body"] = "Yes, Thursday at 3 works.",
+        });
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*send_email(toAddress: bob@example.com; subject: Re: Thursday; body: Yes, Thursday at 3 works.)*");
+    }
+
     [Theory]
     [InlineData("get_recent_emails", "save_email_to_onedrive")]  // writes only into the owner's folder
     [InlineData("get_recent_emails", "send_email_to_remarkable")]  // sends only to the owner's tablet

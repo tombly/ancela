@@ -7,8 +7,9 @@ using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI.Chat;
 
-#pragma warning disable SKEXP0001
+#pragma warning disable SKEXP0001, OPENAI001
 
 namespace Ancela.Agent;
 
@@ -585,8 +586,13 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
             .ToList();
         var functionChoiceBehavior = FunctionChoiceBehavior.Auto(functions: advertised);
 
+        // gpt-6-luna reasons by default, and OpenAI rejects function tools with reasoning on
+        // /v1/chat/completions, which Semantic Kernel's connector uses. "none" is what gpt-5.4
+        // defaulted to, so nothing is given up; reasoning with tools would need /v1/responses.
+        // Semantic Kernel refuses the string "none" (it knows low to high and minimal), so it
+        // goes as the SDK's own value, which Semantic Kernel passes through.
         var openAIPromptExecutionSettings = new OpenAIPromptExecutionSettings
-        { FunctionChoiceBehavior = functionChoiceBehavior };
+        { FunctionChoiceBehavior = functionChoiceBehavior, ReasoningEffort = new ChatReasoningEffortLevel("none") };
 
         var modelResponse = await _chatCompletionService.GetChatMessageContentAsync(
             chatHistory,

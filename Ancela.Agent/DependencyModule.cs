@@ -145,7 +145,7 @@ public static class DependencyModule
         // chat, onboarding, standing rules and scheduled tasks in one place.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
         {
-            var openAI = new OpenAIChatCompletionService("gpt-5.4", sp.GetRequiredService<OpenAIClient>());
+            var openAI = new OpenAIChatCompletionService("gpt-6-luna", sp.GetRequiredService<OpenAIClient>());
             return new CreditAwareChatCompletionService(
                 openAI,
                 sp.GetRequiredService<ModelAvailability>(),

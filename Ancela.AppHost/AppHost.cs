@@ -43,7 +43,7 @@ var googleHealthRefreshToken = builder.AddParameter("google-health-refresh-token
 var ownerTotpSecret = builder.AddParameter("owner-totp-secret", true);
 
 var openai = builder.AddOpenAI("openai").WithApiKey(openAiApiKeyParameter);
-var chat = openai.AddModel("chat", "gpt-5.4");
+var chat = openai.AddModel("chat", "gpt-6-luna");
 
 var cosmosDb = builder.AddAzureCosmosDB("cosmos")
                       .RunAsEmulator(configureContainer: container =>

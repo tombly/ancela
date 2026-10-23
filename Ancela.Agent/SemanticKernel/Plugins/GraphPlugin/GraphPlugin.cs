@@ -95,7 +95,7 @@ public class GraphPlugin(IGraphClient graphClient)
     #region Contacts
 
     [KernelFunction("get_contacts")]
-    [Description("Retrieves the user's contacts from their address book.")]
+    [Description("Retrieves the user's contacts from their address book: names, email addresses and phone numbers. What the user asked you to remember about someone is saved knowledge (get_knowledge), not a contact.")]
     public async Task<ContactModel[]> GetContactsAsync(
          [Description("The maximum number of contacts to retrieve.")]
          int maxResults = 100)
