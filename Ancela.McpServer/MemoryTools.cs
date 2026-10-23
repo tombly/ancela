@@ -21,7 +21,7 @@ public sealed class MemoryTools(IMemoryClient _memory, AncelaEnvironment _enviro
     public async Task<IReadOnlyList<TodoView>> GetTodosAsync()
     {
         var todos = await _memory.GetToDosAsync(_environment.AgentPhoneNumber);
-        return [.. todos.Select(t => new TodoView(t.Id, t.Content, t.Created))];
+        return [.. todos.Select(t => new TodoView(t.Id, t.Content, t.Created, t.Due))];
     }
 
     [McpServerTool(Name = "get_knowledge", ReadOnly = true)]
@@ -39,6 +39,6 @@ public sealed class MemoryTools(IMemoryClient _memory, AncelaEnvironment _enviro
 /// <c>UserPhoneNumber</c> — who added a note is not something the model needs, and phone numbers
 /// are the one piece of personal data in these containers.
 /// </summary>
-public record TodoView(Guid Id, string Content, DateTimeOffset Created);
+public record TodoView(Guid Id, string Content, DateTimeOffset Created, DateOnly? Due);
 
 public record KnowledgeView(Guid Id, string Content, DateTimeOffset Created);

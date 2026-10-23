@@ -37,7 +37,7 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClien
         if (includeLinkedImages is null && await _graphClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
             return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
 
-        var email = await _graphClient.RenderEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel), includeLinkedImages == true);
+        var email = await _graphClient.RenderEmailAsPdfAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
         var title = string.IsNullOrWhiteSpace(email.Subject) ? "(no subject)" : Whitespace.Replace(email.Subject, " ").Trim();
 
         using var pdf = new MemoryStream(email.Pdf);

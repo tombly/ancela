@@ -271,6 +271,8 @@ public class SecurityTests
     [InlineData(KernelProfile.ScheduledTask, "send_sms")]
     [InlineData(KernelProfile.ScheduledTask, "register_user")]
     [InlineData(KernelProfile.ScheduledTask, "save_email_to_onedrive")]  // may read email, not copy it out
+    [InlineData(KernelProfile.StandingRule, "set_todo_due_date")]
+    [InlineData(KernelProfile.ScheduledTask, "set_todo_due_date")]
     [InlineData(KernelProfile.StandingRule, "send_email_to_remarkable")]
     [InlineData(KernelProfile.ScheduledTask, "send_email_to_remarkable")]
     public async Task AutonomousToolGuardFilter_BlocksNonAllowedFunction(KernelProfile profile, string functionName)

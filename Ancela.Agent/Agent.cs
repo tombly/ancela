@@ -183,10 +183,14 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - To-dos are simple text items the user wants to remember to do
                      later.
                    - They are typically action-oriented.
-                   - They do not have due dates and you are not able to remind the
-                     user proactively.
+                   - A to-do can have a due date, the day it must be done by. Set it only
+                     when the user gives one ("renew my tags by Nov 15"): `save_todo` takes
+                     it as dueDate, and `set_todo_due_date` sets, changes or removes it
+                     later. The date goes in dueDate, not in the to-do's text. You don't
+                     remind the user about it yourself.
                    - When a user asks you to 'list my todos', respond with a numbered
-                     list of todo titles, oldest first. Always exclude deleted todos.
+                     list in the order get_todos returns them, giving each due date and
+                     the time left ("due Nov 15, in 3 weeks"). Always exclude deleted todos.
                 2. Knowledge:
                    - You can create, read, update, and delete knowledge entries for the user.
                    - Knowledge entries are pieces of information the user wants you to remember.
@@ -378,9 +382,8 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         }
 
         var kernel = _kernelFactory.Create(KernelProfile.Chat);
-        // For tools that put the user's local date on what they produce (save_email_to_onedrive's
-        // file names, an email's Sent line). Chat only: those tools are owner-only and outside both
-        // autonomous allow-lists.
+        // For tools that work in the user's local date: save_email_to_onedrive's file names, an
+        // email's Sent line, and get_todos' days until due, which the autonomous profiles set too.
         kernel.Data["userTimeZone"] = user.TimeZone;
         var response = await InvokeKernelAsync(chatHistory, kernel, agentPhoneNumber, userPhoneNumber);
         return (response, HeldActionNote(kernel));
@@ -500,6 +503,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         chatHistory.AddUserMessage("Evaluate the standing rule now.");
 
         var kernel = _kernelFactory.Create(KernelProfile.StandingRule);
+        kernel.Data["userTimeZone"] = user.TimeZone;
         var response = await InvokeKernelAsync(chatHistory, kernel, rule.AgentPhoneNumber, rule.UserPhoneNumber);
 
         // Parse NOTIFY: <message> / NO_ACTION: <reasoning>
@@ -552,6 +556,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         chatHistory.AddUserMessage("Perform the scheduled task now.");
 
         var kernel = _kernelFactory.Create(KernelProfile.ScheduledTask);
+        kernel.Data["userTimeZone"] = user.TimeZone;
         return await InvokeKernelAsync(chatHistory, kernel, task.AgentPhoneNumber, task.UserPhoneNumber);
     }
 
