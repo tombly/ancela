@@ -51,7 +51,7 @@ The message flow:
 1. A user texts the assistant's **Twilio** number.
 2. Twilio posts the message to an **Azure Functions** HTTP trigger, which enqueues it to **Azure Service Bus** and returns immediately.
 3. A queue processor picks up the message — one at a time, so a text sent right after another sees it in history. A lightweight interceptor handles session and access commands (`hello ancela`, `invite`, `revoke`); everything else is handed to the agent.
-4. The **agent** builds a [Semantic Kernel](https://learn.microsoft.com/semantic-kernel/) instance per request, exposes its capabilities as kernel functions, and lets **OpenAI (`gpt-5.4`)** decide which to call via automatic function calling.
+4. The **agent** builds a [Semantic Kernel](https://learn.microsoft.com/semantic-kernel/) instance per request, exposes its capabilities as kernel functions, and lets **OpenAI (`gpt-6-luna`, with reasoning off)** decide which to call via automatic function calling.
 5. Those functions read and write **Azure Cosmos DB** and reach out to Microsoft Graph, YNAB, the web (Tavily), Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
 
 **Autonomous work** (standing rules and scheduled tasks) runs the same agent from a timer/queue with no user present, under a restricted kernel profile (see [Security & trust model](#security--trust-model)).
