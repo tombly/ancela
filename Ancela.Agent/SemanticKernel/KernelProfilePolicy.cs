@@ -82,8 +82,9 @@ public static class KernelProfilePolicy
     }
 
     // Functions that act on the owner's shared resources, send on the agent's behalf, or
-    // read owner-private data (Google Health data, the diagnostics self-check — which reveals
-    // operational/security posture — and home network status, which is presence data).
+    // read owner-private data (email, Google Health data, the diagnostics self-check — which
+    // reveals operational/security posture — and home network status, which is presence data).
+    // Other users can't see any email content: not a preview, a whole email, or a copy of one.
     // Non-owner users are denied access even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
     // save_email_to_onedrive writes into the owner's OneDrive and send_email_to_remarkable onto
@@ -91,7 +92,7 @@ public static class KernelProfilePolicy
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
-        "send_email_to_remarkable",
+        "send_email_to_remarkable", "get_recent_emails", "read_email",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
         "check_services", "check_anomalies",
         "get_network_client_count", "get_network_uptime",

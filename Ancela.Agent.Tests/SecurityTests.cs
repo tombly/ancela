@@ -377,6 +377,8 @@ public class SecurityTests
     [InlineData("get_network_uptime")]
     [InlineData("save_email_to_onedrive")]
     [InlineData("send_email_to_remarkable")]
+    [InlineData("get_recent_emails")]
+    [InlineData("read_email")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -399,7 +401,8 @@ public class SecurityTests
     [Fact]
     public void OwnerOnlyFunctions_AreReadDeniedToNonOwners_ButReadsAreNot()
     {
-        // The owner-only axis covers send/write actions; read functions stay open to all users.
+        // The owner-only axis covers send/write actions and owner-private reads; other reads stay
+        // open to all users.
         KernelProfilePolicy.IsOwnerOnly("send_sms").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("send_email").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("create_calendar_event").Should().BeTrue();
@@ -415,9 +418,11 @@ public class SecurityTests
             because: "it writes the owner's email into the owner's OneDrive");
         KernelProfilePolicy.IsOwnerOnly("send_email_to_remarkable").Should().BeTrue(
             because: "it sends the owner's email to the owner's tablet");
+        KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeTrue(
+            because: "other users may not see any of the owner's email, previews included");
+        KernelProfilePolicy.IsOwnerOnly("read_email").Should().BeTrue(
+            because: "other users may not see any of the owner's email");
 
-        KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
-        KernelProfilePolicy.IsOwnerOnly("read_email").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();

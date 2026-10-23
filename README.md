@@ -72,8 +72,10 @@ contacts) and one YNAB token — using app-only credentials held by the instance
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. Those users act *through* the agent and can therefore reach the
-owner's connected data — read/send the owner's mail, read/write the calendar, read
-contacts and finances. **This is intentional.** Authorized users are trusted
+owner's connected data — read the calendar, contacts and finances. **This is
+intentional.** Email is the exception: only the owner can read it, so other users see no
+email content at all, and sending (SMS and email) and creating calendar events are
+owner-only too. Authorized users are trusted
 principals invited by the owner; they are not mutually-isolated tenants, and the
 agent is not a multi-tenant SaaS. Reviewers should treat cross-user access to the
 owner's data as by-design, not as a vulnerability.

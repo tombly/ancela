@@ -193,7 +193,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - They are typically facts or statements.
                 3. Calendar Access:
                    - You can read the user's calendar events and create new events.
-                4. Email Access:
+                4. Email Access (owner only):
                    - You can read the user's recent emails and send new emails.
                    - `get_recent_emails` shows only the first few lines of each email. To find out
                      what an email says, read it in full with `read_email`, passing its id.
@@ -572,7 +572,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         // tool schema. Two orthogonal restrictions apply (KernelProfilePolicy is the single
         // source of truth; AutonomousToolGuardFilter hard-denies the same set as a backstop):
         //   1. Profile allow-list — autonomous profiles are restricted to read-only tools.
-        //   2. Owner-only — non-owner users can't send SMS/email or write the owner's calendar.
+        //   2. Owner-only — non-owner users can't read email, send SMS/email or write the owner's calendar.
         var allowedNames = KernelProfilePolicy.AllowedFunctions(profile);
         var advertised = kernel.Plugins
             .SelectMany(plugin => plugin)
