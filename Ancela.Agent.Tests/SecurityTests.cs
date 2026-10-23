@@ -267,6 +267,8 @@ public class SecurityTests
     [InlineData(KernelProfile.ScheduledTask, "send_sms")]
     [InlineData(KernelProfile.ScheduledTask, "register_user")]
     [InlineData(KernelProfile.ScheduledTask, "save_email_to_onedrive")]  // may read email, not copy it out
+    [InlineData(KernelProfile.StandingRule, "send_email_to_remarkable")]
+    [InlineData(KernelProfile.ScheduledTask, "send_email_to_remarkable")]
     public async Task AutonomousToolGuardFilter_BlocksNonAllowedFunction(KernelProfile profile, string functionName)
     {
         // The filter throws InvalidOperationException, which Semantic Kernel propagates unwrapped.
@@ -370,6 +372,7 @@ public class SecurityTests
     [InlineData("get_network_client_count")]
     [InlineData("get_network_uptime")]
     [InlineData("save_email_to_onedrive")]
+    [InlineData("send_email_to_remarkable")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -406,6 +409,8 @@ public class SecurityTests
             because: "home network status is owner-private");
         KernelProfilePolicy.IsOwnerOnly("save_email_to_onedrive").Should().BeTrue(
             because: "it writes the owner's email into the owner's OneDrive");
+        KernelProfilePolicy.IsOwnerOnly("send_email_to_remarkable").Should().BeTrue(
+            because: "it sends the owner's email to the owner's tablet");
 
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
@@ -443,6 +448,7 @@ public class SecurityTests
 
     [Theory]
     [InlineData("get_recent_emails", "save_email_to_onedrive")]  // writes only into the owner's folder
+    [InlineData("get_recent_emails", "send_email_to_remarkable")]  // sends only to the owner's tablet
     [InlineData("get_recent_emails", "create_calendar_event")]   // no attendees, so no invitation goes out
     [InlineData("get_recent_emails", "get_recent_emails")]
     [InlineData("web_search", "web_fetch")]                      // opening a result is what search is for

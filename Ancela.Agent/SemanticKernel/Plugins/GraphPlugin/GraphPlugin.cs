@@ -73,11 +73,7 @@ public class GraphPlugin(IGraphClient graphClient)
          string emailId)
     {
         // The file name leads with the received date, which should be the user's date, not UTC's.
-        var timeZone = kernel.Data.TryGetValue("userTimeZone", out var id) && id is string tz
-            && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found)
-            ? found
-            : TimeZoneInfo.Utc;
-        return await graphClient.SaveEmailAsPdfAsync(emailId, timeZone);
+        return await graphClient.SaveEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel));
     }
 
     #endregion

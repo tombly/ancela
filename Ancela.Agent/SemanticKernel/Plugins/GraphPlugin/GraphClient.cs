@@ -13,6 +13,7 @@ public interface IGraphClient
     Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
+    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone);
     Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
@@ -279,11 +280,30 @@ public class GraphClient : IGraphClient
     }
 
     /// <summary>
-    /// Saves an email as a PDF in the OneDrive folder: the raw message goes in as a temporary .eml,
-    /// Graph converts it, the PDF is saved beside it, and the .eml is deleted. A message over the
-    /// 2 MB conversion limit is rendered from its headers and body alone.
+    /// Saves an email as a PDF in the OneDrive folder, named for its local received time and
+    /// subject. See <see cref="RenderEmailAsPdfAsync"/>.
     /// </summary>
     public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
+    {
+        var email = await RenderEmailAsPdfAsync(messageId, timeZone);
+        var (driveId, folderId) = OneDriveFolder();
+        var fileName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, timeZone);
+        var saved = await UploadToFolderAsync(driveId, folderId, fileName, email.Pdf);
+        return new SavedEmailModel
+        {
+            FileName = saved.Name ?? fileName,
+            WebUrl = saved.WebUrl ?? string.Empty,
+            BodyOnly = email.BodyOnly,
+            OmittedAttachments = email.OmittedAttachments,
+        };
+    }
+
+    /// <summary>
+    /// Renders a whole email as a PDF: the raw message goes into the OneDrive folder as a temporary
+    /// .eml, Graph converts it, and the .eml is deleted. A message over the 2 MB conversion limit is
+    /// rendered from its headers and body alone.
+    /// </summary>
+    public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
         var (driveId, folderId) = OneDriveFolder();
@@ -310,13 +330,11 @@ public class GraphClient : IGraphClient
         var temporaryId = temporary.Id ?? throw new InvalidOperationException("Graph returned no id for the uploaded email.");
         try
         {
-            var pdf = await ConvertToPdfAsync(driveId, temporaryId);
-            var fileName = EmailPdf.FileName(summary.Subject, summary.ReceivedDateTime ?? DateTimeOffset.UtcNow, timeZone);
-            var saved = await UploadToFolderAsync(driveId, folderId, fileName, pdf);
-            return new SavedEmailModel
+            return new EmailPdfModel
             {
-                FileName = saved.Name ?? fileName,
-                WebUrl = saved.WebUrl ?? string.Empty,
+                Subject = summary.Subject,
+                ReceivedDateTime = summary.ReceivedDateTime ?? DateTimeOffset.UtcNow,
+                Pdf = await ConvertToPdfAsync(driveId, temporaryId),
                 BodyOnly = bodyOnly,
                 OmittedAttachments = omitted,
             };
@@ -324,7 +342,7 @@ public class GraphClient : IGraphClient
         finally
         {
             // Best effort: a leftover "ancela-….eml" in the owner's own folder is untidy, not a
-            // leak, and throwing here would report a save that worked as a failure.
+            // leak, and throwing here would report a conversion that worked as a failure.
             try { await _appClient.Drives[driveId].Items[temporaryId].DeleteAsync(); }
             catch (Exception) { }
         }

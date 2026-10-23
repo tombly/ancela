@@ -1,4 +1,5 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.Services;
 using Moq;
 
@@ -80,6 +81,43 @@ public class AgentGraphTests : AgentTestBase
 
         MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()),
             Times.Never, "when the named email can't be found, nothing may be saved in its place");
+    }
+
+    [Fact]
+    public async Task SendEmailsToRemarkable_SendsEachWholeEmail_NotTextTheModelWrote()
+    {
+        // The production bug: asked to send two emails to the reMarkable, the model had only their
+        // 255-character previews and passed send_to_remarkable a one-line summary of each.
+        var remarkable = new Mock<IRemarkableService>();
+        remarkable
+            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("doc-id");
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
+        EmailModel[] fromTheOffice =
+        [
+            CreateEmail("trip", "office@school.example", "Field trip permission form", hoursAgo: 3),
+            CreateEmail("lunch", "office@school.example", "Lunch menu changes", hoursAgo: 5),
+        ];
+        SetupEmails(search => search is null ? [.. fromTheOffice, .. NewestFifty()[..48]] : fromTheOffice);
+        MockGraphClient
+            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()))
+            .ReturnsAsync((string id, TimeZoneInfo _) => new EmailPdfModel
+            {
+                Subject = id,
+                ReceivedDateTime = DateTimeOffset.UtcNow,
+                Pdf = "%PDF-1.7"u8.ToArray(),
+                BodyOnly = false,
+                OmittedAttachments = [],
+            });
+
+        await SendUntilAsync("send the two emails from the school office to my reMarkable", () =>
+        {
+            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("trip", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("lunch", It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
+        });
+
+        remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never, "an email sent as text is whatever the model wrote from a 255-character preview");
     }
 
     [Fact]

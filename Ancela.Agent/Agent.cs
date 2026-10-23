@@ -246,6 +246,10 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
                    - You can send text content to the user's reMarkable tablet as a PDF using
                      `send_to_remarkable`. The user provides (or you choose) a short title
                      shown on the device, and the body text becomes the PDF content.
+                   - To send an email, use `send_email_to_remarkable` with the email's id from
+                     `get_recent_emails`, once per email: it sends the whole email. If the
+                     result says BodyOnly, say the email was too large to convert whole, so the
+                     PDF has the message but not the listed attachments.
                    - Use this when the user explicitly asks to "send to my reMarkable",
                      "put on my reMarkable", or similar. Don't push content there unprompted.
                 12. Scheduled Tasks:
@@ -374,7 +378,8 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
 
         var kernel = _kernelFactory.Create(KernelProfile.Chat);
         // For tools that put the user's local date on what they produce (save_email_to_onedrive's
-        // file names). Chat only: that tool is owner-only and outside both autonomous allow-lists.
+        // file names, an email's Sent line). Chat only: those tools are owner-only and outside both
+        // autonomous allow-lists.
         kernel.Data["userTimeZone"] = user.TimeZone;
         var response = await InvokeKernelAsync(chatHistory, kernel, agentPhoneNumber, userPhoneNumber);
         return (response, HeldActionNote(kernel));

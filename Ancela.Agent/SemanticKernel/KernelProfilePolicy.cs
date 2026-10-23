@@ -86,10 +86,12 @@ public static class KernelProfilePolicy
     // operational/security posture — and home network status, which is presence data).
     // Non-owner users are denied access even in the otherwise-unrestricted Chat profile.
     // This is an axis orthogonal to the profile allow-lists above — both are enforced.
-    // save_email_to_onedrive writes into the owner's OneDrive and is in neither allow-list.
+    // save_email_to_onedrive writes into the owner's OneDrive and send_email_to_remarkable onto
+    // the owner's tablet; both are in neither allow-list.
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
+        "send_email_to_remarkable",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
         "check_services", "check_anomalies",
         "get_network_client_count", "get_network_uptime",
@@ -124,8 +126,9 @@ public static class KernelProfilePolicy
     // forget_instruction is off so one can't remove a rule the user set. web_fetch is off after
     // mail and calendar because a URL the model picks is itself a way out (?q=<the inbox>), but
     // stays on after a search, since opening a result is what searching is for. Left on:
-    // save_email_to_onedrive and create_calendar_event, which write only into the owner's own
-    // folder and calendar (there is no attendees parameter, so no invitation goes out).
+    // save_email_to_onedrive, send_email_to_remarkable and create_calendar_event, which write only
+    // into the owner's own folder, tablet and calendar (there is no attendees parameter, so no
+    // invitation goes out).
     // Not covered: text a read put into Ancela's reply carries over in history, and knowledge
     // or to-dos saved after a read are not marked when read back later.
     private static readonly Dictionary<string, UntrustedSource> SwitchedOffAfter = new(StringComparer.OrdinalIgnoreCase)
