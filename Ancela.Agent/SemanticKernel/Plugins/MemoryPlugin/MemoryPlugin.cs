@@ -80,7 +80,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("get_knowledge")]
-    [Description("Retrieves knowledge entries from the database for the current agent")]
+    [Description("Retrieves the knowledge entries: the facts saved with save_knowledge. They are not listed in Current context, so call this to find out what is saved before saying something is or isn't, and to get an entry's ID for delete_knowledge.")]
     public async Task<KnowledgeModel[]> GetKnowledgeAsync(Kernel kernel)
     {
         EnsureKernelData(kernel);
