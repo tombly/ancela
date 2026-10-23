@@ -1,4 +1,3 @@
-using Azure.Identity;
 using Microsoft.Azure.Cosmos;
 
 namespace Ancela.Cli.Infrastructure;
@@ -46,7 +45,7 @@ public sealed class CosmosClientProvider : IDisposable
 
             _client?.Dispose();
             _endpoint = endpoint;
-            _client = new CosmosClient(endpoint, new DefaultAzureCredential(), new CosmosClientOptions
+            _client = new CosmosClient(endpoint, CliCredential.Instance, new CosmosClientOptions
             {
                 ApplicationName = "ancela-cli",
                 // Default serializer is Newtonsoft-based, matching the agent's

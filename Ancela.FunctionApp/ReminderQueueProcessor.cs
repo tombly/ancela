@@ -10,7 +10,8 @@ namespace Ancela.FunctionApp;
 public class ReminderQueueProcessor(
     ILogger<ReminderQueueProcessor> _logger,
     IReminderStore _store,
-    SmsService _smsService)
+    SmsService _smsService,
+    OutboundLog _outbound)
 {
     [Function(nameof(ReminderQueueProcessor))]
     public async Task Run([ServiceBusTrigger(ReminderQueueMessage.QueueName, Connection = "servicebus")] string body)
@@ -38,6 +39,7 @@ public class ReminderQueueProcessor(
         // This is deliberate: for reminders a rare duplicate text is preferable to claiming-
         // before-send, which would silently drop the reminder if the send then failed.
         await _smsService.Send(reminder.UserPhoneNumber, reminder.Message);
+        await _outbound.RecordAsync(reminder.AgentPhoneNumber, reminder.UserPhoneNumber, "sms", "reminder", reminder.Message);
         var markedSent = await _store.MarkSentAsync(reminder.Id, reminder.AgentPhoneNumber, DateTimeOffset.UtcNow);
 
         if (markedSent)

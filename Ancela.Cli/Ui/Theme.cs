@@ -15,6 +15,7 @@ public static class Theme
         "tool" => "deepskyblue1",
         "web" => "mediumpurple1",
         "sms-send" => "springgreen2",
+        "outbound" => "springgreen2",
         "rule-decision" => "gold1",
         "session" => "grey70",
         _ => "white",

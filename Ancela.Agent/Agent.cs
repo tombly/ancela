@@ -43,6 +43,18 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
     /// message never learns why the action was held and reads the email again to check, which
     /// switches the function off again: a reply to an email then never gets sent.
     /// </summary>
+    private const string HeldNotePrefix = "(Note for you, not shown to the user:";
+
+    /// <summary>
+    /// A history entry's text as the user saw it: without the note <see cref="HeldActionNote"/>
+    /// adds after the reply, for screens that show history (`ancela chat`).
+    /// </summary>
+    public static string WithoutHeldNote(string content)
+    {
+        var note = content.IndexOf($"\n\n{HeldNotePrefix}", StringComparison.Ordinal);
+        return note < 0 ? content : content[..note];
+    }
+
     private static string? HeldActionNote(Kernel kernel)
     {
         if (!kernel.Data.TryGetValue("untrustedContent", out var value) || value is not UntrustedContentLog log)
@@ -52,7 +64,7 @@ public class Agent(IKernelFactory _kernelFactory, IChatCompletionService _chatCo
         if (switchedOff.Count == 0)
             return null;
 
-        return $"(Note for you, not shown to the user: {string.Join(", ", switchedOff)} was switched off for this "
+        return $"{HeldNotePrefix} {string.Join(", ", switchedOff)} was switched off for this "
             + "message because it had read email, calendar or web content. If the user confirms, do what the reply "
             + "above describes, using the details in it, without reading email, calendar or the web first. Reading "
             + "any of them switches it off again.)";

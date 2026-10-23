@@ -13,7 +13,7 @@ public class ChatInterceptor(
     Agent _agent,
     TotpService _totp)
 {
-    public async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber, Media[] media)
+    public virtual async Task<string?> HandleMessage(string message, string userPhoneNumber, string agentPhoneNumber, Media[] media)
     {
         var trimmed = message.Trim();
         var isOwner = _ownerService.IsOwner(userPhoneNumber);

@@ -13,6 +13,8 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Spectre.Console.Cli" />
     <PackageReference Include="Spectre.Console.Json" />
+    <PackageReference Include="RadLine" />
+    <PackageReference Include="Azure.Messaging.ServiceBus" />
     <PackageReference Include="QRCoder" />
     <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.Azure.Cosmos" />

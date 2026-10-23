@@ -62,7 +62,7 @@ The message flow:
 
 **Tech stack:** .NET 10 / C# 13 · Aspire (orchestration + Bicep infrastructure-as-code) · Azure Functions (isolated worker) · Azure Cosmos DB · Azure Service Bus · Semantic Kernel + OpenAI · Twilio · Microsoft Graph · YNAB · reMarkable.
 
-A companion read-only CLI (`Ancela.Cli`) browses the Cosmos containers for auditing and runs owner TOTP enrollment.
+A companion CLI (`Ancela.Cli`) browses the Cosmos containers for auditing, runs owner TOTP enrollment, and lets the owner chat with Ancela from the terminal when SMS can't reach them (`ancela chat`, below).
 
 ## Security & trust model
 
@@ -92,6 +92,13 @@ the owner (by phone number) before `hello ancela` does anything, and the owner c
 `revoke` them. Identity, though, still rests on the SMS sender number, which is
 spoofable — so the highest-value privilege (the owner's own `invite`/`revoke`) is the
 weakest point if someone spoofs the owner's number.
+
+`ancela chat` is the one way in besides SMS. It puts messages on the same `chat-messages`
+queue, and the queue takes each message's sender number at face value, so being able to send
+to it is being able to talk as any user. Only two things send to it: the Twilio webhook, which
+checks Twilio's request signature, and the owner's own Entra account, which signs in with
+`az login` and holds the Azure Service Bus Data Sender role on that one queue. The namespace
+accepts no connection-string keys.
 
 **Owner step-up (TOTP), required.** `invite`/`revoke` require a second factor: the
 owner appends a current 6-digit authenticator code (e.g. `invite +15551234567 408291`),
@@ -285,6 +292,41 @@ deploy still needs a value it doesn't have, run it without `--non-interactive` s
 
 `aspire publish` writes the generated Bicep to `Ancela.AppHost/aspire-output/` for review;
 deploying doesn't need it.
+
+### Chat from the terminal
+
+`ancela chat` talks to Ancela without SMS: on a plane with Wi-Fi, or anywhere a text won't get
+through. It looks and works like a terminal chat (Claude Code's, roughly): each tool Ancela
+calls appears as it finishes, then the reply. Replies come back to the terminal, not by text.
+Between messages it shows anything Ancela texted you meanwhile (reminders, scheduled tasks,
+rule alerts).
+
+It signs in with your `az login`, finds Cosmos and Service Bus from `ANCELA_RESOURCE_PREFIX`,
+and needs to know which number is yours:
+
+```bash
+export ANCELA_OWNER_PHONE_NUMBER=+15551234567   # the number you text Ancela from
+```
+
+Sending needs one role, once, on the chat queue only:
+
+```bash
+az role assignment create \
+  --assignee "$(az ad signed-in-user show --query id -o tsv)" \
+  --role "Azure Service Bus Data Sender" \
+  --scope "$(az servicebus namespace show -g "$ANCELA_RESOURCE_GROUP" -n "$ANCELA_RESOURCE_PREFIX-servicebus" --query id -o tsv)/queues/chat-messages"
+```
+
+Then:
+
+```bash
+dotnet run --project Ancela.Cli -- chat                         # a conversation
+dotnet run --project Ancela.Cli -- chat "what's on my list?"    # one message
+```
+
+In a conversation, Enter sends, Shift+Enter or Option+Enter adds a line, Up and Down recall
+what you typed, Esc stops waiting for a reply (it still shows when it arrives), and `/help`
+lists the commands (`/history`, `/clear`, `/exit`).
 
 ## License
 

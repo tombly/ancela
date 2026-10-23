@@ -18,12 +18,18 @@ services.AddTransient<ListContainerCommand>();
 services.AddTransient<ShowContainerCommand>();
 services.AddTransient<EnrollCommand>();
 services.AddTransient<GoogleHealthAuthCommand>();
+services.AddTransient<ChatCommand>();
 
 var registrar = new TypeRegistrar(services);
 var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("ancela");
+
+    config.AddCommand<ChatCommand>("chat")
+        .WithDescription("Talk to Ancela from here, for when SMS can't reach you.")
+        .WithExample("chat")
+        .WithExample("chat", "\"what's on my list?\"");
 
     config.AddCommand<PingCommand>("ping")
         .WithDescription("List every Cosmos container with its live document count.");

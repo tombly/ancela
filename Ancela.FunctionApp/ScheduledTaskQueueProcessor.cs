@@ -21,6 +21,7 @@ public class ScheduledTaskQueueProcessor(
     SmsService _smsService,
     IAuditLog _auditLog,
     CorrelationContext _correlation,
+    OutboundLog _outbound,
     Ancela.Agent.Agent _agent)
 {
     [Function(nameof(ScheduledTaskQueueProcessor))]
@@ -59,6 +60,7 @@ public class ScheduledTaskQueueProcessor(
             var reply = await _agent.PerformScheduledTask(task, user);
             stopwatch.Stop();
             await _smsService.Send(task.UserPhoneNumber, reply);
+            await _outbound.RecordAsync(task.AgentPhoneNumber, task.UserPhoneNumber, "sms", "scheduled-task", reply);
             await WriteAuditAsync(task, reply, success: true, error: null, stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)

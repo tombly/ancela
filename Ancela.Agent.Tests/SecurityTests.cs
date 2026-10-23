@@ -742,6 +742,7 @@ public class SecurityTests
             smsService,
             auditLog.Object,
             correlation,
+            new OutboundLog(auditLog.Object, correlation),
             agent);
     }
 

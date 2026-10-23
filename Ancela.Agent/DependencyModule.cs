@@ -58,6 +58,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<ModelAvailability>();
         builder.Services.AddSingleton<ICreditAlertService, CreditAlertService>();
         builder.Services.AddSingleton<CorrelationContext>();
+        builder.Services.AddSingleton<OutboundLog>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         builder.Services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
         // Last, so it runs innermost and the audit records the result as the model sees it.

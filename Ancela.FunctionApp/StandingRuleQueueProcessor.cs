@@ -22,6 +22,7 @@ public class StandingRuleQueueProcessor(
     SmsService _smsService,
     IAuditLog _auditLog,
     CorrelationContext _correlation,
+    OutboundLog _outbound,
     Ancela.Agent.Agent _agent)
 {
     [Function(nameof(StandingRuleQueueProcessor))]
@@ -83,6 +84,7 @@ public class StandingRuleQueueProcessor(
         {
             // Send to the fixed owner number — never to a model-chosen recipient.
             await _smsService.Send(rule.UserPhoneNumber, evaluation.Message);
+            await _outbound.RecordAsync(rule.AgentPhoneNumber, rule.UserPhoneNumber, "sms", "standing-rule", evaluation.Message);
             await _store.MarkNotifiedAsync(rule.Id, rule.AgentPhoneNumber, evaluatedAt);
             notified = true;
             _logger.LogInformation("Standing rule {RuleId} notified user.", rule.Id);
