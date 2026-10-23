@@ -13,7 +13,9 @@ public class ChatQueueProcessor(
     ILogger<ChatQueueProcessor> _logger,
     ChatInterceptor _chatInterceptor,
     SmsService _smsService,
-    OwnerService _ownerService)
+    OwnerService _ownerService,
+    OutboundLog _outbound,
+    CorrelationContext _correlation)
 {
     [Function(nameof(ChatQueueProcessor))]
     public async Task Run([ServiceBusTrigger(ChatQueueMessage.QueueName, Connection = "servicebus")] string body)
@@ -22,6 +24,7 @@ public class ChatQueueProcessor(
             ?? throw new InvalidOperationException($"Failed to deserialize chat queue message: {body}");
 
         _logger.LogInformation("Processing message from queue: {Message}", message.Content);
+        _correlation.Use(message.Id);
 
         string? reply;
         try
@@ -38,26 +41,24 @@ public class ChatQueueProcessor(
             // dead-lettered, which is how an empty balance went unexplained for nine days in
             // September: the sender saw nothing at all. Retrying cannot help — the balance is
             // empty until it is paid — so the message is completed, not abandoned.
-            await _smsService.Send(
-                message.UserPhoneNumber,
-                OutOfFundsMessages.ForUser(_ownerService.IsOwner(message.UserPhoneNumber)));
+            await ReplyAsync(message, OutOfFundsMessages.ForUser(_ownerService.IsOwner(message.UserPhoneNumber)));
             _logger.LogWarning("Out of OpenAI credit; answered {User} instead of retrying.", message.UserPhoneNumber);
             return;
         }
 
-        if (reply != null)
-            await _smsService.Send(message.UserPhoneNumber, reply);
-
+        await ReplyAsync(message, reply);
         _logger.LogInformation("Successfully processed message from queue");
     }
-}
 
-public record ChatQueueMessage
-{
-    public const string QueueName = "chat-messages";
-
-    public string Content { get; init; } = string.Empty;
-    public string UserPhoneNumber { get; init; } = string.Empty;
-    public string AgentPhoneNumber { get; init; } = string.Empty;
-    public Media[] Media { get; init; } = [];
+    private async Task ReplyAsync(ChatQueueMessage message, string? reply)
+    {
+        // A CLI message's reply goes in the audit log, where `ancela chat` reads it by the
+        // message's ID, and not by text: the CLI is for when SMS can't reach the phone, and the
+        // text would arrive later as a duplicate. With no reply (an unregistered sender), the
+        // empty record still tells the CLI to stop waiting.
+        if (message.Channel == ChatChannel.Cli)
+            await _outbound.RecordAsync(message.AgentPhoneNumber, message.UserPhoneNumber, "cli", "reply", reply ?? string.Empty);
+        else if (reply != null)
+            await _smsService.Send(message.UserPhoneNumber, reply);
+    }
 }

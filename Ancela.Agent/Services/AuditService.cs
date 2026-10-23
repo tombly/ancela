@@ -52,12 +52,25 @@ public class CosmosAuditLog(CosmosClient _cosmosClient, ILogger<CosmosAuditLog> 
 
 /// <summary>
 /// Carries a correlation ID through async call chains without requiring it to be passed
-/// explicitly. Set once at Agent.Chat entry; readable by AuditFilter and any other
-/// infrastructure that runs within that async context.
+/// explicitly. Set once per message; readable by AuditFilter and any other infrastructure that
+/// runs within that async context.
 /// </summary>
 public class CorrelationContext
 {
     private static readonly AsyncLocal<Guid> _id = new();
     public Guid Current => _id.Value;
-    public void New() => _id.Value = Guid.NewGuid();
+
+    /// <summary>
+    /// Starts this message's correlation, unless the code that received the message already set
+    /// one with <see cref="Use"/>. The chat queue does, with the message's own ID, so `ancela chat`
+    /// can follow its message through the audit log.
+    /// </summary>
+    public void New()
+    {
+        if (_id.Value == Guid.Empty)
+            _id.Value = Guid.NewGuid();
+    }
+
+    /// <summary>Correlates everything that follows in this async flow with <paramref name="id"/>.</summary>
+    public void Use(Guid id) => _id.Value = id;
 }
