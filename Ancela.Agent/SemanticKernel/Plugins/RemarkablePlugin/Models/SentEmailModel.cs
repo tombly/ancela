@@ -2,15 +2,18 @@ namespace Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 
 public class SentEmailModel
 {
+    /// <summary>False when nothing was sent yet: see <see cref="Note"/>.</summary>
+    public required bool Sent { get; init; }
+
     /// <summary>The document's name on the tablet: the email's subject.</summary>
-    public required string Title { get; init; }
+    public string? Title { get; init; }
 
-    /// <summary>
-    /// True when the whole message was over Graph's 2 MB conversion limit, so the PDF was rendered
-    /// from the headers and body alone.
-    /// </summary>
-    public required bool BodyOnly { get; init; }
+    /// <summary>Images the email links to on other servers.</summary>
+    public required int LinkedImages { get; init; }
 
-    /// <summary>In body-only mode, the attachments that are not in the PDF. Empty otherwise.</summary>
-    public required string[] OmittedAttachments { get; init; }
+    /// <summary>Images that should be in the PDF and aren't.</summary>
+    public int ImagesMissing { get; init; }
+
+    /// <summary>When nothing was sent, what to ask the user.</summary>
+    public string? Note { get; init; }
 }

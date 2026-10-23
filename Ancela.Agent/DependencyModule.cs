@@ -68,6 +68,7 @@ public static class DependencyModule
         builder.Services.AddSingleton<SmsPlugin>();
         builder.Services.AddSingleton<GraphPlugin>();
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
+        builder.Services.AddSingleton<ILinkedImageFetcher, LinkedImageFetcher>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
         builder.Services.AddSingleton<ProjectsPlugin>();

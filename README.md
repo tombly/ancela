@@ -148,7 +148,10 @@ web search or fetch, sending and instructions are switched off. The same guard f
 enforces this in code. Ancela says what it was about to do, and the user confirms in their
 next message, which starts with nothing read, so replying to an email takes two texts.
 Saving an email to OneDrive and creating a calendar event stay on, since they write only
-into the owner's own folder and calendar. This doesn't cover everything: text from a read
+into the owner's own folder and calendar. Images an email links to are downloaded, for a PDF
+of it, only when the owner says yes, since downloading them tells the sender the email was
+opened; the download goes only to public addresses, so a planted link can't reach anything
+inside Azure. This doesn't cover everything: text from a read
 can carry over in Ancela's reply, which is kept in history, and knowledge or to-dos saved
 after a read aren't marked when they're read back later.
 

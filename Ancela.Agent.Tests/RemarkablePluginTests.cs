@@ -34,16 +34,16 @@ public class RemarkablePluginTests
 
     private RemarkablePlugin Plugin => new(_remarkable.Object, _graph.Object);
 
-    private void SetupEmail(string? subject, bool bodyOnly = false, string[]? omitted = null) =>
+    private void SetupEmail(string? subject, int imagesMissing = 0) =>
         _graph
-            .Setup(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>()))
+            .Setup(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .ReturnsAsync(new EmailPdfModel
             {
                 Subject = subject,
                 ReceivedDateTime = DateTimeOffset.UtcNow,
                 Pdf = Pdf,
-                BodyOnly = bodyOnly,
-                OmittedAttachments = omitted ?? [],
+                LinkedImages = 0,
+                ImagesMissing = imagesMissing,
             });
 
     [Fact]
@@ -56,8 +56,10 @@ public class RemarkablePluginTests
         var upload = _uploads.Should().ContainSingle().Subject;
         upload.Title.Should().Be("Field trip permission form");
         upload.Pdf.Should().Equal(Pdf);
+        sent.Sent.Should().BeTrue();
         sent.Title.Should().Be("Field trip permission form");
-        sent.BodyOnly.Should().BeFalse();
+        _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), false),
+            Times.Once, "an email with no linked images has nothing to ask about");
         _remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -75,25 +77,55 @@ public class RemarkablePluginTests
     }
 
     [Fact]
-    public async Task SendEmail_RendersInTheUsersTimeZone_AndReportsAttachmentsLeftOut()
+    public async Task SendEmail_RendersInTheUsersTimeZone_AndReportsImagesMissing()
     {
-        SetupEmail("Scans", bodyOnly: true, omitted: ["scan.tiff"]);
+        SetupEmail("Scans", imagesMissing: 2);
         var kernel = new Kernel();
         kernel.Data["userTimeZone"] = "America/Los_Angeles";
 
         var sent = await Plugin.SendEmailToRemarkableAsync(kernel, "email-1");
 
         _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1",
-            It.Is<TimeZoneInfo>(tz => tz.HasSameRules(TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles")))));
-        sent.BodyOnly.Should().BeTrue();
-        sent.OmittedAttachments.Should().Equal("scan.tiff");
+            It.Is<TimeZoneInfo>(tz => tz.HasSameRules(TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles"))), false));
+        sent.ImagesMissing.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task SendEmail_WithLinkedImages_SendsNothingUntilTheUserAnswers()
+    {
+        // Downloading linked images tells the sender the email was opened, so the user is asked first.
+        _graph.Setup(g => g.GetLinkedImageCountAsync("email-1")).ReturnsAsync(12);
+
+        var sent = await Plugin.SendEmailToRemarkableAsync(new Kernel(), "email-1");
+
+        sent.Sent.Should().BeFalse();
+        sent.LinkedImages.Should().Be(12);
+        sent.Note.Should().StartWith("Nothing was sent yet. The email links to 12 images");
+        _graph.Verify(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.Never);
+        _uploads.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SendEmail_WithTheUsersAnswer_SendsWithoutAskingAgain(bool include)
+    {
+        _graph.Setup(g => g.GetLinkedImageCountAsync("email-1")).ReturnsAsync(12);
+        SetupEmail("Fall catalog");
+
+        var sent = await Plugin.SendEmailToRemarkableAsync(new Kernel(), "email-1", includeLinkedImages: include);
+
+        sent.Sent.Should().BeTrue();
+        _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), include), Times.Once);
+        _graph.Verify(g => g.GetLinkedImageCountAsync(It.IsAny<string>()), Times.Never);
+        _uploads.Should().ContainSingle();
     }
 
     [Fact]
     public async Task SendEmail_WhenTheEmailCantBeRendered_SendsNothing()
     {
         _graph
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>()))
+            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .ThrowsAsync(new InvalidOperationException("Graph returned no email for that id."));
 
         var act = () => Plugin.SendEmailToRemarkableAsync(new Kernel(), "email-1");

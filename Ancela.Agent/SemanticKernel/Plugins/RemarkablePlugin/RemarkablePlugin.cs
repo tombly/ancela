@@ -31,18 +31,23 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClien
     [Description("Sends one of the user's emails, whole, to their reMarkable tablet as a PDF titled with its subject. Only when the user asks.")]
     public async Task<SentEmailModel> SendEmailToRemarkableAsync(
         Kernel kernel,
-        [Description("The email's id, exactly as returned by get_recent_emails.")] string emailId)
+        [Description("The email's id, exactly as returned by get_recent_emails.")] string emailId,
+        [Description(EmailPdf.IncludeLinkedImagesDescription)] bool? includeLinkedImages = null)
     {
-        var email = await _graphClient.RenderEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel));
+        if (includeLinkedImages is null && await _graphClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
+            return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
+
+        var email = await _graphClient.RenderEmailAsPdfAsync(emailId, EmailPdf.UserTimeZone(kernel), includeLinkedImages == true);
         var title = string.IsNullOrWhiteSpace(email.Subject) ? "(no subject)" : Whitespace.Replace(email.Subject, " ").Trim();
 
         using var pdf = new MemoryStream(email.Pdf);
         await _remarkableService.SendPdfAsync(title, pdf);
         return new SentEmailModel
         {
+            Sent = true,
             Title = title,
-            BodyOnly = email.BodyOnly,
-            OmittedAttachments = email.OmittedAttachments,
+            LinkedImages = email.LinkedImages,
+            ImagesMissing = email.ImagesMissing,
         };
     }
 }
