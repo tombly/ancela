@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin.Models;
 using FluentAssertions;
 using Moq;
 
@@ -22,7 +23,8 @@ public class AgentTodoTests : AgentTestBase
                 m => m.SaveToDoAsync(
                     AgentPhoneNumber,
                     UserPhoneNumber,
-                    It.Is<string>(content => content.ToLower().Contains("milk"))),
+                    It.Is<string>(content => content.ToLower().Contains("milk")),
+                    null),
                 Times.AtLeastOnce));
     }
 
@@ -95,5 +97,54 @@ public class AgentTodoTests : AgentTestBase
             MockMemoryClient.Verify(
                 m => m.DeleteToDoAsync(todoId, AgentPhoneNumber),
                 Times.AtLeastOnce));
+    }
+
+    [Fact]
+    public async Task SaveTodo_WithADeadline_StoresItAsTheDueDate()
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById(TestUserTimeZone)).DateTime);
+        var nov15 = new DateOnly(today.Year, 11, 15);
+        if (nov15 < today)
+            nov15 = nov15.AddYears(1);
+
+        await SendUntilAsync("I have to renew my vehicle tags by Nov 15th", () =>
+            MockMemoryClient.Verify(
+                m => m.SaveToDoAsync(AgentPhoneNumber, UserPhoneNumber,
+                    It.Is<string>(content => content.Contains("tag", StringComparison.OrdinalIgnoreCase)), nov15),
+                Times.AtLeastOnce));
+    }
+
+    [Fact]
+    public async Task MorningBriefing_WarnsAboutTodosDueSoon_AndNotTheRest()
+    {
+        // The use the due date exists for: a scheduled briefing reads get_todos and warns about
+        // what is close, and Ancela never reminds on its own.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById(TestUserTimeZone)).DateTime);
+        SetupExistingTodos(
+            CreateTodo("Renew vehicle tags", due: today.AddDays(5)),
+            CreateTodo("File the property tax appeal", due: today.AddDays(45)),
+            CreateTodo("Buy milk"));
+        var briefing = new ScheduledTask
+        {
+            Id = Guid.NewGuid(),
+            UserPhoneNumber = UserPhoneNumber,
+            AgentPhoneNumber = AgentPhoneNumber,
+            Description = "Morning briefing: warn me about any to-dos due in the next two weeks, with how many days are left.",
+            TimeOfDay = "07:30",
+            DaysOfWeek = [0, 1, 2, 3, 4, 5, 6],
+        };
+
+        string? reply = null;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            reply = await Agent.PerformScheduledTask(briefing, TestUser);
+            if (reply.Contains("tags", StringComparison.OrdinalIgnoreCase) && reply.Contains('5'))
+                break;
+        }
+
+        reply.Should().ContainEquivalentOf("tags").And.Contain("5", because: $"the tags are due in 5 days; the reply was: {reply}");
+        reply.Should().NotContainEquivalentOf("tax appeal", because: "it isn't due for 45 days");
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
 using Microsoft.Azure.Cosmos;
 
@@ -5,8 +6,9 @@ namespace Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 
 public interface IMemoryClient
 {
-    Task SaveToDoAsync(string agentPhoneNumber, string userPhoneNumber, string content);
+    Task SaveToDoAsync(string agentPhoneNumber, string userPhoneNumber, string content, DateOnly? due);
     Task<ToDoModel[]> GetToDosAsync(string agentPhoneNumber);
+    Task SetToDoDueDateAsync(Guid id, string agentPhoneNumber, DateOnly? due);
     Task DeleteToDoAsync(Guid id, string agentPhoneNumber);
     Task SaveKnowledgeAsync(string agentPhoneNumber, string userPhoneNumber, string content);
     Task<KnowledgeModel[]> GetKnowledgeAsync(string agentPhoneNumber);
@@ -91,7 +93,7 @@ public class MemoryClient(CosmosClient _cosmosClient) : IMemoryClient
         return containerResponse.Container;
     }
 
-    public async Task SaveToDoAsync(string agentPhoneNumber, string userPhoneNumber, string content)
+    public async Task SaveToDoAsync(string agentPhoneNumber, string userPhoneNumber, string content, DateOnly? due)
     {
         ArgumentNullException.ThrowIfNull(agentPhoneNumber);
         ArgumentNullException.ThrowIfNull(userPhoneNumber);
@@ -104,12 +106,28 @@ public class MemoryClient(CosmosClient _cosmosClient) : IMemoryClient
             userPhoneNumber,
             agentPhoneNumber,
             created = DateTimeOffset.Now,
-            deleted = (DateTimeOffset?)null
+            deleted = (DateTimeOffset?)null,
+            due = DueText(due),
         };
 
         var container = await GetToDoContainerAsync();
         await container.CreateItemAsync(todo, new PartitionKey(todo.agentPhoneNumber));
     }
+
+    public async Task SetToDoDueDateAsync(Guid id, string agentPhoneNumber, DateOnly? due)
+    {
+        ArgumentNullException.ThrowIfNull(agentPhoneNumber);
+
+        var container = await GetToDoContainerAsync();
+
+        var response = await container.ReadItemAsync<dynamic>(id.ToString(), new PartitionKey(agentPhoneNumber));
+        var todo = response.Resource;
+        todo.due = DueText(due);
+        await container.ReplaceItemAsync(todo, id.ToString(), new PartitionKey(agentPhoneNumber));
+    }
+
+    // A plain date, no time or zone: the day in the user's own calendar.
+    private static string? DueText(DateOnly? due) => due?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     public async Task<ToDoModel[]> GetToDosAsync(string agentPhoneNumber)
     {

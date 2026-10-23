@@ -278,14 +278,15 @@ public abstract class AgentTestBase
     /// <summary>
     /// Creates a ToDoModel for testing.
     /// </summary>
-    protected static ToDoModel CreateTodo(string content, Guid? id = null)
+    protected static ToDoModel CreateTodo(string content, Guid? id = null, DateOnly? due = null)
     {
         return new ToDoModel
         {
             Id = id ?? Guid.NewGuid(),
             Content = content,
             Created = DateTimeOffset.UtcNow,
-            Deleted = null
+            Deleted = null,
+            Due = due,
         };
     }
 

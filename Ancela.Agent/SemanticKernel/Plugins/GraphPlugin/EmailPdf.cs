@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Ancela.Agent.Services;
 using Microsoft.Graph.Models;
-using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
@@ -33,16 +32,6 @@ public static class EmailPdf
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex SizeAttribute = new(@"(?<=\s)(?<name>width|height)\s*=\s*[""']?(?<v>\d+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    /// <summary>
-    /// The time zone <see cref="Agent"/> puts in the Chat kernel's data (<c>userTimeZone</c>), or UTC
-    /// when it is missing or unknown.
-    /// </summary>
-    public static TimeZoneInfo UserTimeZone(Kernel kernel) =>
-        kernel.Data.TryGetValue("userTimeZone", out var id) && id is string tz
-            && TimeZoneInfo.TryFindSystemTimeZoneById(tz, out var found)
-            ? found
-            : TimeZoneInfo.Utc;
 
     /// <summary>The includeLinkedImages parameter, the same on every tool that makes an email a PDF.</summary>
     public const string IncludeLinkedImagesDescription =
