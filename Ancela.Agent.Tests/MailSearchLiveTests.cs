@@ -3,6 +3,8 @@ using Azure.Identity;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Graph;
+using Microsoft.Graph.Models;
+using Microsoft.Graph.Users.Item;
 using Xunit.Abstractions;
 using MailFolder = Ancela.Agent.SemanticKernel.Plugins.GraphPlugin.MailFolder;
 
@@ -114,6 +116,133 @@ public class MailSearchLiveTests(ITestOutputHelper _output)
         _output.WriteLine($"Inbox email: preview {longEmail.BodyPreview.Length} characters, body {email.Body.Length} "
             + $"(truncated: {email.Truncated}); Sent email read: {sent.Length > 0}");
     }
+
+    [Fact]
+    public async Task ReadAttachment_ReadsATextAttachment_ByTheNameReadEmailGives()
+    {
+        // read_email lists the files attached; read_attachment fetches one by that name and unpacks
+        // it. Looks for a .zip, .gz or text file in the inbox, such as a DMARC report.
+        if (Load() is not { } config) { _output.WriteLine("Skipped: Graph settings not found."); return; }
+        var withAttachments = await RawClient(config).Users[config.UserId].MailFolders["inbox"].Messages.GetAsync(c =>
+        {
+            c.QueryParameters.Select = ["id"];
+            c.QueryParameters.Filter = "hasAttachments eq true";
+            c.QueryParameters.Top = 25;
+        });
+        config.ExportForGraphClient();
+        var graph = new GraphClient();
+
+        string[] readable = [".zip", ".gz", ".xml", ".csv", ".txt", ".ics", ".json"];
+        foreach (var message in withAttachments?.Value ?? [])
+        {
+            var email = await graph.GetEmailAsync(message.Id!);
+            if (email.Attachments.FirstOrDefault(n => readable.Any(e => n.EndsWith(e, StringComparison.OrdinalIgnoreCase))) is not { } name)
+                continue;
+
+            var attachment = await graph.GetAttachmentAsync(email.Id, name);
+
+            attachment.Name.Should().Be(name);
+            attachment.Files.Should().NotBeEmpty();
+            attachment.Files[0].Text.Should().NotBeNullOrWhiteSpace();
+            _output.WriteLine($"Read a {Path.GetExtension(name)} attachment: {attachment.Files.Length} file(s), "
+                + $"{attachment.Files.Sum(f => f.Text.Length)} characters, truncated: {attachment.Files.Any(f => f.Truncated)}");
+            return;
+        }
+        _output.WriteLine($"Skipped: none of the {withAttachments?.Value?.Count ?? 0} inbox emails with attachments has a text, .zip or .gz one.");
+    }
+
+    [Fact]
+    public async Task TrashEmail_MovesAnEmailToDeletedItems()
+    {
+        // Needs Mail.ReadWrite (README, step 1): with Mail.Read alone, making the email is a 403.
+        // Works on an email of its own, made in the Inbox rather than sent, so nothing leaves the
+        // mailbox, nothing else in it is touched, and the test needs no permission but the one it
+        // tests. The email is deleted at the end.
+        if (Load() is not { } config) { _output.WriteLine("Skipped: Graph settings not found."); return; }
+        var mailbox = RawClient(config).Users[config.UserId];
+        var (made, subject) = await MakeTestEmailAsync(mailbox, "trash_email");
+        config.ExportForGraphClient();
+        var graph = new GraphClient();
+        try
+        {
+            // A message made rather than received has no sender, so only the subject is checked.
+            (await graph.MoveToDeletedItemsAsync(made)).Should().StartWith($"Moved to Deleted Items: \"{subject}\" from ",
+                because: "the audit log records the result, and the id alone can't say which email it was");
+
+            (await WithSubject(mailbox, "inbox", subject)).Should().BeEmpty();
+            var trashed = await WithSubject(mailbox, "deleteditems", subject);
+            trashed.Should().ContainSingle(because: "a trashed email can still be read and restored");
+            (await graph.MoveToDeletedItemsAsync(trashed[0])).Should().StartWith($"That email is already in Deleted Items: \"{subject}\"");
+            _output.WriteLine("Moved the test email from the Inbox to Deleted Items.");
+        }
+        finally
+        {
+            await DeleteTestEmailAsync(mailbox, subject);
+        }
+    }
+
+    [Fact]
+    public async Task MarkEmailRead_SetsTheFlag_BothWays_AndKeepsTheId()
+    {
+        // Needs Mail.ReadWrite, as trash_email does. Works on an email of its own, like the test above.
+        if (Load() is not { } config) { _output.WriteLine("Skipped: Graph settings not found."); return; }
+        var mailbox = RawClient(config).Users[config.UserId];
+        var (made, subject) = await MakeTestEmailAsync(mailbox, "mark_email_read");
+        config.ExportForGraphClient();
+        var graph = new GraphClient();
+        async Task<bool?> IsRead() => (await mailbox.Messages[made].GetAsync(c => c.QueryParameters.Select = ["isRead"]))?.IsRead;
+        try
+        {
+            (await graph.MarkReadAsync(made, read: false)).Should().StartWith($"Marked as unread: \"{subject}\"");
+            (await IsRead()).Should().BeFalse();
+
+            // The same id still works: unlike a move, marking an email doesn't change its id, so a
+            // task can mark a report read and then trash it.
+            (await graph.MarkReadAsync(made, read: true)).Should().StartWith($"Marked as read: \"{subject}\"");
+            (await IsRead()).Should().BeTrue();
+            (await graph.MarkReadAsync(made, read: true)).Should().StartWith($"That email is already marked as read: \"{subject}\"");
+
+            await graph.MoveToDeletedItemsAsync(made);
+            var trashed = await WithSubject(mailbox, "deleteditems", subject);
+            (await mailbox.Messages[trashed.Single()].GetAsync(c => c.QueryParameters.Select = ["isRead"]))!.IsRead
+                .Should().BeTrue(because: "the move keeps the flag, so a report marked read isn't unread in Deleted Items");
+            _output.WriteLine("Marked the test email unread, then read, then moved it to Deleted Items still read.");
+        }
+        finally
+        {
+            await DeleteTestEmailAsync(mailbox, subject);
+        }
+    }
+
+    /// <summary>
+    /// An email made in the Inbox rather than sent, so nothing leaves the mailbox and nothing else in
+    /// it is touched. Made rather than received, it has no sender.
+    /// </summary>
+    private static async Task<(string Id, string Subject)> MakeTestEmailAsync(UserItemRequestBuilder mailbox, string tool)
+    {
+        var subject = $"Ancela {tool} test {Guid.NewGuid():N}";
+        var made = await mailbox.MailFolders["inbox"].Messages.PostAsync(new Message
+        {
+            Subject = subject,
+            Body = new ItemBody { ContentType = BodyType.Text, Content = $"Made by MailSearchLiveTests to test {tool}." },
+            IsRead = true,
+        });
+        return (made!.Id!, subject);
+    }
+
+    private static async Task DeleteTestEmailAsync(UserItemRequestBuilder mailbox, string subject)
+    {
+        foreach (var folder in new[] { "inbox", "deleteditems" })
+            foreach (var id in await WithSubject(mailbox, folder, subject))
+                await mailbox.Messages[id].DeleteAsync();
+    }
+
+    private static async Task<string[]> WithSubject(UserItemRequestBuilder mailbox, string folder, string subject) =>
+        ((await mailbox.MailFolders[folder].Messages.GetAsync(c =>
+        {
+            c.QueryParameters.Select = ["id"];
+            c.QueryParameters.Filter = $"subject eq '{subject}'";
+        }))?.Value ?? []).Select(m => m.Id!).ToArray();
 
     private sealed record Config(string TenantId, string ClientId, string ClientSecret, string UserId)
     {

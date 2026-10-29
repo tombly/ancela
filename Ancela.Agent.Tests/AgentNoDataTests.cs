@@ -22,7 +22,7 @@ public class AgentNoDataTests : AgentTestBase
         @"couldn['’]?t|could not|unable|error|trouble|problem|issue|fail|connect|access|reach", RegexOptions.IgnoreCase);
 
     private static readonly Regex SoundsLikeNothingScheduled = new(
-        @"\bno (events|meetings|appointments)|nothing (is )?(on|scheduled|planned)|\bfree\b|\bclear\b|\bempty\b|don['’]?t have anything", RegexOptions.IgnoreCase);
+        @"\bno (calendar )?(events|meetings|appointments)|nothing (is )?(on|scheduled|planned)|\bfree\b|\bclear\b|\bempty\b|don['’]?t have anything", RegexOptions.IgnoreCase);
 
     [Fact]
     public async Task EmptyCalendar_IsReportedAsNothing_NotAsAFailure()

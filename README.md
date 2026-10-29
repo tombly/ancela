@@ -13,7 +13,7 @@ across the real-world services it's connected to.
 
 You interact entirely over SMS. Under the hood the assistant has a set of capabilities:
 
-- **Calendar & email** — read your calendar, create events, read your inbox, and send mail (via Microsoft Graph). The owner can also save an email as a PDF to one OneDrive folder.
+- **Calendar & email** — read your calendar, create events, read your inbox (text attachments too, such as a CSV export or a DMARC report), mark emails read and move them to the trash, and send mail (via Microsoft Graph). The owner can also save an email as a PDF to one OneDrive folder.
 - **Contacts** — look up people's details from your address book.
 - **Money** — check account balances and recent transactions (via YNAB).
 - **Memory** — remember facts about you and keep a shared list of to-dos. It also keeps instructions for how to behave with you from now on (a persona, what to call you, a preference).
@@ -21,7 +21,7 @@ You interact entirely over SMS. Under the hood the assistant has a set of capabi
 - **Reminders** — schedule a one-time SMS reminder for a specific time.
 - **Standing rules** — watch a recurring condition on a timer and notify you when it's met.
 - **Scheduled tasks** — run a recurring action on a clock schedule and report back (e.g. a daily calendar summary).
-- **Web** — search the web and fetch page content to answer questions.
+- **Web** — search the web and fetch page content to answer questions, and look up who holds an IP address in the internet registries.
 - **reMarkable** — send a document to your reMarkable tablet (owner only).
 
 ### Example prompts
@@ -38,6 +38,7 @@ How much is in my checking account?
 Remind me to call the dentist at 9am Monday
 Every morning at 7, text me my calendar for the day
 Let me know if I get an email from the landlord
+Every morning at 8, summarize yesterday's DMARC reports, then trash them
 Start a project for our backpacking trip and add a packing list
 From now on, answer like HAL 9000
 ```
@@ -52,7 +53,9 @@ The message flow:
 2. Twilio posts the message to an **Azure Functions** HTTP trigger, which enqueues it to **Azure Service Bus** and returns immediately.
 3. A queue processor picks up the message — one at a time, so a text sent right after another sees it in history. A lightweight interceptor handles session and access commands (`hello ancela`, `invite`, `revoke`); everything else is handed to the agent.
 4. The **agent** builds a [Semantic Kernel](https://learn.microsoft.com/semantic-kernel/) instance per request, exposes its capabilities as kernel functions, and lets **OpenAI (`gpt-6-luna`, with reasoning off)** decide which to call via automatic function calling.
-5. Those functions read and write **Azure Cosmos DB** and reach out to Microsoft Graph, YNAB, the web (Tavily), Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
+5. Those functions read and write **Azure Cosmos DB** and reach out to Microsoft Graph, YNAB, the web (Tavily), the internet registries, Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
+
+**Tools.** Each capability is a small, general tool (search email, read one, read an attachment, look up an IP address, mark an email read, move one to the trash), and the model combines them to carry out a request. A new kind of request should rarely need a new tool: the DMARC summary above is a scheduled task over those six, with no DMARC code anywhere. A tool is built for one purpose only when the model has been shown to fail at the combination, when a general tool would be too powerful for the trust model below, or when content should move without passing through the model. [AGENTS.md](AGENTS.md#tool-design-small-tools-the-model-combines) has the reasoning and examples.
 
 **Autonomous work** (standing rules and scheduled tasks) runs the same agent from a timer/queue with no user present, under a restricted kernel profile (see [Security & trust model](#security--trust-model)).
 
@@ -68,7 +71,9 @@ A companion CLI (`Ancela.Cli`) browses the Cosmos containers for auditing, runs 
 
 Ancela is a **single-owner** assistant. Each deployed instance is wired to exactly
 one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
-contacts) and one YNAB token — using app-only credentials held by the instance.
+contacts) and one YNAB token — using app-only credentials held by the instance. Those
+credentials reach only the owner's mailbox and one OneDrive folder, not the whole tenant
+(see [step 1](#1-configure-microsoft-graph-access) of the setup).
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. Those users act *through* the agent and can therefore reach the
@@ -115,7 +120,8 @@ spoofing, not against an attacker who can read the owner's texts or the applicat
 logs; it is lightweight hardening, not hardware MFA.
 
 What is *not* in the trust model: untrusted **web content** fetched by the agent
-(`web_search` / `web_fetch`) is not trusted, and neither is any external page reached
+(`web_search` / `web_fetch`, and the registry records `lookup_ip` reads, which an address's
+holder writes) is not trusted, and neither is any external page reached
 during autonomous standing-rule or scheduled-task evaluation. That content must never
 be treated as instructions.
 
@@ -129,13 +135,21 @@ to do harm rather than relying on the model to behave:
   functions to the model. A single allow-list (`KernelProfilePolicy`) drives this, and
   a hard-deny invocation filter enforces the same list as a backstop: any call outside
   the allow-list — every send/mutation, and indeed anything not explicitly permitted —
-  is blocked before it executes, regardless of what the model requests.
+  is blocked before it executes, regardless of what the model requests. There is one
+  exception, below.
 - **The model never owns the send path.** A standing-rule evaluation cannot send at
   all; it returns a decision plus suggested message text, and *code* then enforces the
   notification cooldown and sends only to the owner's fixed number. A scheduled task's
   output is likewise sent by code to the owner's number. The model cannot choose a
   recipient, so it has no channel to exfiltrate data to a third party even if hijacked.
-- **Untrusted input.** Email bodies and calendar event descriptions are externally
+- **Email it read, and only after the work.** A scheduled task can mark an email read
+  (`mark_email_read`) and move it to Deleted Items (`trash_email`), so a task that processes
+  emails, such as DMARC reports, can clear them away. The guard lets it change only an email
+  the same run has read, with no read of it failing: a report whose attachment couldn't be read
+  stays unread in the inbox, and text planted in one email can't reach an email the run never
+  opened. The owner can restore anything from Deleted Items or mark it unread again, and each
+  change is in the audit log. These are the only changes an autonomous run can make.
+- **Untrusted input.** Email bodies, attachments and calendar event descriptions are externally
   controlled channels that can carry injection payloads. The `StandingRule` profile
   excludes them entirely; the `ScheduledTask` profile allows them (needed for tasks
   like "daily calendar summary") but labels their content as untrusted data in the
@@ -149,13 +163,15 @@ it.
 
 **Chat after untrusted content.** In chat a person is in the loop, but the model can still
 act on text an outsider wrote before that person sees anything. So once a message has read
-email or calendar content, sending (SMS and email), `web_fetch` (a URL can carry data out)
+email (attachments included) or calendar content, sending (SMS and email), `web_fetch` (a URL can carry data out)
 and saving or removing instructions are switched off for the rest of that message. After a
-web search or fetch, sending and instructions are switched off. The same guard filter
+web search, a fetch or an IP lookup, sending and instructions are switched off. An IP lookup
+asks the internet registries, not the address's own DNS server (a reverse lookup), so the
+addresses Ancela looks up after reading email never reach a server an outsider runs. The same guard filter
 enforces this in code. Ancela says what it was about to do, and the user confirms in their
 next message, which starts with nothing read, so replying to an email takes two texts.
-Saving an email to OneDrive and creating a calendar event stay on, since they write only
-into the owner's own folder and calendar. Images an email links to are downloaded, for a PDF
+Saving an email to OneDrive, marking one read, moving one to Deleted Items and creating a calendar event stay
+on, since they touch only the owner's own folder, mailbox and calendar. Images an email links to are downloaded, for a PDF
 of it, only when the owner says yes, since downloading them tells the sender the email was
 opened; the download goes only to public addresses, so a planted link can't reach anything
 inside Azure. This doesn't cover everything: text from a read
@@ -184,13 +200,51 @@ from and making it auditable when the model encounters it again.
 
 In your organization's [Entra admin center](https://aad.portal.azure.com/), create an
 **App registration** (single-tenant, no redirect URI) and note its **Application
-(client) ID** and **Directory (tenant) ID**. Under **API permissions**, add these
-*Application* permissions and **grant admin consent**: `User.Read.All`,
-`Calendars.ReadWrite`, `Contacts.Read`, `Mail.Read`, `Mail.Send`. Then create a
-**client secret** under **Certificates & secrets** and copy its value.
+(client) ID** and **Directory (tenant) ID**. Then create a **client secret** under
+**Certificates & secrets** and copy its value.
 
-To save emails as PDFs (`save_email_to_onedrive`), also add the *Application* permission
-`Files.SelectedOperations.Selected` and grant admin consent. On its own it grants nothing;
+The app reaches only the owner's mailbox and one OneDrive folder. An *Application*
+permission granted the usual way, under the registration's **API permissions**, covers the
+whole tenant: `Mail.Send` there would let the app send as anyone in it. So mail, calendar and
+contacts are granted in Exchange Online instead, limited to the owner's mailbox
+([RBAC for Applications](https://learn.microsoft.com/exchange/permissions-exo/application-rbac)).
+In Exchange Online PowerShell (`Connect-ExchangeOnline`, as an Exchange administrator):
+
+```powershell
+New-ServicePrincipal -AppId <client ID> -ObjectId <enterprise application object ID> -DisplayName Ancela
+$owner = (Get-Mailbox <owner's email address>).ExternalDirectoryObjectId   # the owner's Entra object ID
+New-ManagementScope -Name "Ancela owner" -RecipientRestrictionFilter "ExternalDirectoryObjectId -eq '$owner'"
+"Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "Contacts.Read" | ForEach-Object {
+    New-ManagementRoleAssignment -App <client ID> -Role "Application $_" -CustomResourceScope "Ancela owner"
+}
+Test-ServicePrincipalAuthorization -Identity <client ID> -Resource <owner's email address>
+```
+
+The test should list all four roles with `InScope` `True`; `False` means the scope's filter
+matches no mailbox (`(Get-ManagementScope "Ancela owner").RecipientFilter` shows it, and
+`Set-ManagementScope` fixes it without redoing the assignments). `$owner` is a GUID, the same
+value as the `graph-user-id` secret below; the filter matches nothing if given an email address.
+The enterprise application's object ID is on its own Overview page: open it from the app
+registration's **Managed application in local directory** link, since the Enterprise
+applications list hides some apps unless filtered to **All applications**. App registrations
+shows a different object ID.
+A change takes 30 minutes to 2 hours to reach Graph. `Mail.ReadWrite` covers reading email,
+marking it read (`mark_email_read`) and moving it to Deleted Items (`trash_email`). The app needs no directory permission such as
+`User.Read.All`: it only ever addresses the owner's mailbox by that ID.
+
+**Moving an existing setup over.** Earlier versions of this guide granted `User.Read.All`,
+`Mail.Read`, `Mail.Send`, `Calendars.ReadWrite` and `Contacts.Read` under **API
+permissions**. The two kinds of grant add up, so those keep their reach to every mailbox until
+they're removed. Make the Exchange assignments above first, and once the test lists them, give
+them two hours. Then remove the five from **API permissions** and revoke their admin consent.
+Removed any sooner, Ancela loses email, calendar and contacts until the Exchange grants take
+effect. Afterwards, `check_services` and the live mailbox tests (`MailSearchLiveTests`) show
+that everything still works; `TrashEmail_MovesAnEmailToDeletedItems` passes only through
+Exchange, since Entra never granted `Mail.ReadWrite`.
+
+To save emails as PDFs (`save_email_to_onedrive`), add the *Application* permission
+`Files.SelectedOperations.Selected` under **API permissions** and grant admin consent: the only
+permission granted in Entra. On its own it grants nothing;
 you then give the app write access to **one folder**. Don't use `Files.ReadWrite.All`
 instead: it would let the app write to every OneDrive in the tenant.
 
