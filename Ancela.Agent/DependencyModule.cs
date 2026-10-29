@@ -4,6 +4,7 @@ using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -121,6 +122,9 @@ public static class DependencyModule
             // NWS takes coordinates only and has no geocoder, so place names resolve here first.
             client.BaseAddress = new Uri("https://geocoding-api.open-meteo.com");
         });
+        builder.Services.AddSingleton<IpLookupPlugin>();
+        builder.Services.AddSingleton<IRdapClient, RdapClient>();
+        RdapClient.AddHttpClient(builder.Services);
         builder.Services.AddSingleton<InstructionsPlugin>();
         builder.Services.AddSingleton<UnifiPlugin>();
         builder.Services.AddSingleton<IUnifiClient, UnifiClient>();

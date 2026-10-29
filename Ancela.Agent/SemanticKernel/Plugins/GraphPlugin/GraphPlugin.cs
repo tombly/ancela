@@ -53,12 +53,43 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("read_email")]
-    [Description("Reads one email in full: sender, recipients, date and the whole body as text. get_recent_emails shows only the first few lines of each email, so use this to find out what an email says.")]
+    [Description("Reads one email in full: sender, recipients, date, the whole body as text and the names of its attachments. get_recent_emails shows only the first few lines of each email, so use this to find out what an email says.")]
     public async Task<EmailContentModel> ReadEmailAsync(
          [Description("The email's id, exactly as returned by get_recent_emails.")]
          string emailId)
     {
         return await graphClient.GetEmailAsync(emailId);
+    }
+
+    [KernelFunction("read_attachment")]
+    [Description("Reads a text file attached to an email (.txt, .csv, .xml, .json, .ics and the like), unpacking a .zip or .gz first. Doesn't read PDFs, images or Office documents. read_email lists an email's attachments.")]
+    public async Task<AttachmentContentModel> ReadAttachmentAsync(
+         [Description("The email's id, exactly as returned by get_recent_emails.")]
+         string emailId,
+         [Description("The attachment's file name, exactly as read_email lists it.")]
+         string name)
+    {
+        return await graphClient.GetAttachmentAsync(emailId, name);
+    }
+
+    [KernelFunction("mark_email_read")]
+    [Description("Marks one email as read, or as unread. Only when the user or the task asks for it.")]
+    public async Task<string> MarkEmailReadAsync(
+         [Description("The email's id, exactly as returned by get_recent_emails.")]
+         string emailId,
+         [Description("True to mark it read, false to mark it unread.")]
+         bool read = true)
+    {
+        return await graphClient.MarkReadAsync(emailId, read);
+    }
+
+    [KernelFunction("trash_email")]
+    [Description("Moves one email to Deleted Items, where it can still be read and restored. Only when the user or the task asks for it. The move gives the email a new id, so do anything else to it first, such as marking it read.")]
+    public async Task<string> TrashEmailAsync(
+         [Description("The email's id, exactly as returned by get_recent_emails.")]
+         string emailId)
+    {
+        return await graphClient.MoveToDeletedItemsAsync(emailId);
     }
 
     [KernelFunction("send_email")]

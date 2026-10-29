@@ -29,6 +29,7 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
     private const string ProfileDenialMarker = "is not permitted in the";
     private const string OwnerOnlyDenialMarker = "may only be invoked by the owner";
     private const string UntrustedContentDenialMarker = AutonomousToolGuardFilter.UntrustedContentDenialMarker;
+    private const string UnreadEmailDenialMarker = AutonomousToolGuardFilter.UnreadEmailDenialMarker;
 
     public async Task<AuditActivitySummary> ScanAsync(string agentPhoneNumber, int windowHours)
     {
@@ -133,7 +134,7 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
             WHERE c.agentPhoneNumber = @agent AND c.timestamp >= @cutoff
               AND c.success = false
               AND (CONTAINS(c.error, '{ProfileDenialMarker}') OR CONTAINS(c.error, '{OwnerOnlyDenialMarker}')
-                   OR CONTAINS(c.error, '{UntrustedContentDenialMarker}'))
+                   OR CONTAINS(c.error, '{UntrustedContentDenialMarker}') OR CONTAINS(c.error, '{UnreadEmailDenialMarker}'))
             """)
             .WithParameter("@agent", agentPhoneNumber)
             .WithParameter("@cutoff", cutoff);

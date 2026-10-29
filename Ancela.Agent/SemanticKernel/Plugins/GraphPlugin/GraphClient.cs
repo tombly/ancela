@@ -13,6 +13,9 @@ public interface IGraphClient
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
     Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null);
     Task<EmailContentModel> GetEmailAsync(string messageId);
+    Task<AttachmentContentModel> GetAttachmentAsync(string messageId, string attachmentName);
+    Task<string> MarkReadAsync(string messageId, bool read);
+    Task<string> MoveToDeletedItemsAsync(string messageId);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<int> GetLinkedImageCountAsync(string messageId);
     Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
@@ -248,21 +251,128 @@ public class GraphClient : IGraphClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
 
-        var message = await _appClient.Users[_entraUserId].Messages[messageId].GetAsync(config =>
+        var request = _appClient.Users[_entraUserId].Messages[messageId];
+        var message = await request.GetAsync(config =>
         {
             config.QueryParameters.Select = ["id", "subject", "from", "toRecipients", "ccRecipients", "receivedDateTime", "body", "hasAttachments", "parentFolderId"];
             // Graph converts an HTML body to text, which is all the model needs and far shorter.
             config.Headers.Add("Prefer", "outlook.body-content-type=\"text\"");
         }) ?? throw new InvalidOperationException("Graph returned no email for that id.");
 
-        // The same folders get_recent_emails reads. Its results are where ids come from, but an id
-        // can also come from anywhere else the model has read, such as another email's text.
-        if (!(await ReadableFolderIdsAsync()).Contains(message.ParentFolderId))
-            throw new InvalidOperationException("That email is not in the Inbox, Sent or Deleted folder, the only ones Ancela reads.");
+        await CheckReadableFolderAsync(message);
 
+        // hasAttachments leaves out pictures in the body, so an email with only those needs no list.
+        if (message.HasAttachments == true)
+            message.Attachments = [.. await FileAttachmentsAsync(request)];
         return ToEmailContent(message);
     }
 
+    /// <summary>
+    /// The most an attachment may weigh to be downloaded. Only the first <see cref="AttachmentText.TextCap"/>
+    /// characters are read, so this bounds the download, not what the model sees.
+    /// </summary>
+    private const long AttachmentSizeCap = 3_000_000;
+
+    /// <summary>
+    /// One attachment's text, unpacked from a .zip or .gz (<see cref="AttachmentText"/>). Reports sent
+    /// as files, such as DMARC aggregate reports, have nothing in the email's body.
+    /// </summary>
+    public async Task<AttachmentContentModel> GetAttachmentAsync(string messageId, string attachmentName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(attachmentName);
+
+        var request = _appClient.Users[_entraUserId].Messages[messageId];
+        var message = await request.GetAsync(config => config.QueryParameters.Select = ["parentFolderId"])
+            ?? throw new InvalidOperationException("Graph returned no email for that id.");
+        await CheckReadableFolderAsync(message);
+
+        var attachments = await FileAttachmentsAsync(request);
+        var match = attachments.FirstOrDefault(a => string.Equals(a.Name, attachmentName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new NotInEmailException(attachments.Length == 0
+                ? "That email has no attachments."
+                : $"That email has no attachment named '{attachmentName}'. Its attachments: {string.Join(", ", attachments.Select(a => a.Name))}.");
+        if (match.Size > AttachmentSizeCap)
+            throw new InvalidOperationException($"{match.Name} is {match.Size / 1_000_000.0:0.#} MB, more than the {AttachmentSizeCap / 1_000_000} MB Ancela downloads.");
+
+        return await request.Attachments[match.Id].GetAsync() switch
+        {
+            FileAttachment { ContentBytes: { } bytes } => AttachmentText.Read(match.Name ?? attachmentName, bytes),
+            ItemAttachment => throw new InvalidOperationException($"{match.Name} is an attached email or calendar item, not a file, so read_attachment can't open it."),
+            ReferenceAttachment => throw new InvalidOperationException($"{match.Name} is a link to a file stored elsewhere, not a file attached to the email."),
+            _ => throw new InvalidOperationException("Graph returned no content for the attachment."),
+        };
+    }
+
+    /// <summary>
+    /// Marks an email in the Inbox, Sent or Deleted folder as read or unread. Unlike a move, this
+    /// keeps the email's id.
+    /// </summary>
+    public async Task<string> MarkReadAsync(string messageId, bool read)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+
+        var request = _appClient.Users[_entraUserId].Messages[messageId];
+        var message = await request.GetAsync(config => config.QueryParameters.Select = ["parentFolderId", "subject", "from", "isRead"])
+            ?? throw new InvalidOperationException("Graph returned no email for that id.");
+        await CheckReadableFolderAsync(message);
+        var state = read ? "read" : "unread";
+        if (message.IsRead == read)
+            return Changed(message, $"That email is already marked as {state}");
+
+        _ = await request.PatchAsync(new Message { IsRead = read })
+            ?? throw new InvalidOperationException("Graph returned no email for the change.");
+        return Changed(message, $"Marked as {state}");
+    }
+
+    /// <summary>
+    /// Moves an email from the Inbox or Sent folder to Deleted Items, where Ancela can still read it
+    /// and the owner can restore it. Never a permanent delete.
+    /// </summary>
+    public async Task<string> MoveToDeletedItemsAsync(string messageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
+
+        var request = _appClient.Users[_entraUserId].Messages[messageId];
+        var message = await request.GetAsync(config => config.QueryParameters.Select = ["parentFolderId", "subject", "from"])
+            ?? throw new InvalidOperationException("Graph returned no email for that id.");
+        await CheckReadableFolderAsync(message);
+        if (message.ParentFolderId == (await ReadableFolderIdsAsync())[(int)MailFolder.Deleted])
+            return Changed(message, "That email is already in Deleted Items");
+
+        _ = await request.Move.PostAsync(new Microsoft.Graph.Users.Item.Messages.Item.Move.MovePostRequestBody { DestinationId = "deleteditems" })
+            ?? throw new InvalidOperationException("Graph returned no email for the move.");
+        return Changed(message, "Moved to Deleted Items");
+    }
+
+    /// <summary>
+    /// The result of a change to an email, naming it by subject and sender. The audit log records the
+    /// result, and the id in its arguments can't say later which email it was: a move changes it.
+    /// </summary>
+    public static string Changed(Message message, string what) =>
+        $"{what}: \"{message.Subject ?? "(no subject)"}\" from {message.From?.EmailAddress?.Address ?? "an unknown sender"}.";
+
+    /// <summary>The email's attachments, pictures in the body aside, without their content.</summary>
+    private static async Task<Attachment[]> FileAttachmentsAsync(Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder request)
+    {
+        // No content: without $select, file attachments come back with it.
+        var attachments = (await request.Attachments.GetAsync(config =>
+            config.QueryParameters.Select = ["id", "name", "isInline", "size"]))?.Value
+            ?? throw new InvalidOperationException("Graph returned no attachment list for the email.");
+        return [.. attachments.Where(a => a.IsInline != true)];
+    }
+
+    /// <summary>
+    /// The same folders get_recent_emails reads. Its results are where ids come from, but an id can
+    /// also come from anywhere else the model has read, such as another email's text.
+    /// </summary>
+    private async Task CheckReadableFolderAsync(Message message)
+    {
+        if (!(await ReadableFolderIdsAsync()).Contains(message.ParentFolderId))
+            throw new InvalidOperationException("That email is not in the Inbox, Sent or Deleted folder, the only ones Ancela reads.");
+    }
+
+    // In MailFolder's order, so an id can be looked up by its folder.
     private async Task<string[]> ReadableFolderIdsAsync() =>
         _readableFolderIds ??= await Task.WhenAll(Enum.GetValues<MailFolder>().Select(async folder =>
             (await _appClient.Users[_entraUserId].MailFolders[WellKnownName(folder)].GetAsync(config => config.QueryParameters.Select = ["id"]))?.Id
@@ -271,6 +381,7 @@ public class GraphClient : IGraphClient
     /// <summary>
     /// Maps a message fetched with a text body, tidied and cut to <see cref="EmailBodyCap"/>. Text
     /// converted from HTML carries runs of blank lines and trailing spaces that cost tokens.
+    /// <see cref="Message.Attachments"/> holds the file attachments' names when there are any.
     /// </summary>
     public static EmailContentModel ToEmailContent(Message message)
     {
@@ -296,7 +407,7 @@ public class GraphClient : IGraphClient
             ReceivedDateTime = message.ReceivedDateTime ?? DateTimeOffset.MinValue,
             Body = body,
             Truncated = truncated,
-            HasAttachments = message.HasAttachments ?? false,
+            Attachments = (message.Attachments ?? []).Where(a => a.IsInline != true).Select(a => a.Name ?? "(unnamed)").ToArray(),
         };
     }
 

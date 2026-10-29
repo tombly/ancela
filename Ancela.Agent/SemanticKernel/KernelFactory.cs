@@ -1,6 +1,7 @@
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -47,6 +48,7 @@ public sealed class KernelFactory(
     DiagnosticsPlugin _diagnosticsPlugin,
     UnifiPlugin _unifiPlugin,
     WeatherPlugin _weatherPlugin,
+    IpLookupPlugin _ipLookupPlugin,
     InstructionsPlugin _instructionsPlugin) : IKernelFactory
 {
     public Kernel Create(KernelProfile profile)
@@ -78,6 +80,7 @@ public sealed class KernelFactory(
                 plugins.AddFromObject(_diagnosticsPlugin);
                 plugins.AddFromObject(_unifiPlugin);
                 plugins.AddFromObject(_weatherPlugin);
+                plugins.AddFromObject(_ipLookupPlugin);
                 plugins.AddFromObject(_instructionsPlugin);
                 break;
         }

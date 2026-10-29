@@ -2,6 +2,7 @@ using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
@@ -120,6 +121,8 @@ public class SecurityTests
         services.AddSingleton<UnifiPlugin>();
         services.AddSingleton<IWeatherClient>(_ => new Mock<IWeatherClient>().Object);
         services.AddSingleton<WeatherPlugin>();
+        services.AddSingleton<IRdapClient>(_ => new Mock<IRdapClient>().Object);
+        services.AddSingleton<IpLookupPlugin>();
         services.AddSingleton<InstructionsPlugin>(_ => new InstructionsPlugin(new Mock<IUserService>().Object));
         services.AddSingleton<IFunctionInvocationFilter, AuditFilter>();
         services.AddSingleton<IFunctionInvocationFilter, AutonomousToolGuardFilter>();
@@ -180,6 +183,8 @@ public class SecurityTests
             because: "email bodies are attacker-controlled input and standing rules don't need them");
         allowed.Should().NotContain("read_email",
             because: "email bodies are attacker-controlled input and standing rules don't need them");
+        allowed.Should().NotContain("read_attachment",
+            because: "an attachment is as much the sender's as the body is");
         allowed.Should().NotContain("get_calendar_events",
             because: "calendar event descriptions are attacker-controlled input and standing rules don't need them");
     }
@@ -195,6 +200,14 @@ public class SecurityTests
             because: "scheduled tasks like 'email digest' legitimately need email access");
         allowed.Should().Contain("read_email",
             because: "a digest can't say what an email says from its first 255 characters");
+        allowed.Should().Contain("read_attachment",
+            because: "a report sent as a file, such as a DMARC report, has nothing in the email's body");
+        allowed.Should().Contain("lookup_ip",
+            because: "it reaches only the internet registries, never a server the model picks");
+        allowed.Should().Contain("trash_email",
+            because: "a task that processes emails, such as DMARC reports, clears them away afterwards");
+        allowed.Should().Contain("mark_email_read",
+            because: "a processed report shouldn't leave Deleted Items showing unread mail");
         allowed.Should().Contain("get_calendar_events",
             because: "scheduled tasks like 'calendar summary' legitimately need calendar access");
     }
@@ -274,6 +287,8 @@ public class SecurityTests
     [InlineData(KernelProfile.StandingRule, "set_todo_due_date")]
     [InlineData(KernelProfile.ScheduledTask, "set_todo_due_date")]
     [InlineData(KernelProfile.StandingRule, "send_email_to_remarkable")]
+    [InlineData(KernelProfile.StandingRule, "trash_email")]  // only scheduled tasks process emails
+    [InlineData(KernelProfile.StandingRule, "mark_email_read")]
     [InlineData(KernelProfile.ScheduledTask, "send_email_to_remarkable")]
     public async Task AutonomousToolGuardFilter_BlocksNonAllowedFunction(KernelProfile profile, string functionName)
     {
@@ -381,6 +396,9 @@ public class SecurityTests
     [InlineData("send_email_to_remarkable")]
     [InlineData("get_recent_emails")]
     [InlineData("read_email")]
+    [InlineData("read_attachment")]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
     public async Task AutonomousToolGuardFilter_BlocksOwnerOnlyFunction_ForNonOwnerInChatProfile(string functionName)
     {
         // A non-owner registered user is read-only: owner-only functions are hard-denied even
@@ -424,10 +442,18 @@ public class SecurityTests
             because: "other users may not see any of the owner's email, previews included");
         KernelProfilePolicy.IsOwnerOnly("read_email").Should().BeTrue(
             because: "other users may not see any of the owner's email");
+        KernelProfilePolicy.IsOwnerOnly("read_attachment").Should().BeTrue(
+            because: "an attachment is part of the owner's email");
+        KernelProfilePolicy.IsOwnerOnly("trash_email").Should().BeTrue(
+            because: "it changes the owner's mailbox");
+        KernelProfilePolicy.IsOwnerOnly("mark_email_read").Should().BeTrue(
+            because: "it changes the owner's mailbox");
 
         KernelProfilePolicy.IsOwnerOnly("get_calendar_events").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("get_contacts").Should().BeFalse();
         KernelProfilePolicy.IsOwnerOnly("web_search").Should().BeFalse();
+        KernelProfilePolicy.IsOwnerOnly("lookup_ip").Should().BeFalse(
+            because: "a registry record is public and says nothing about the owner");
     }
 
     // --- Untrusted content within one message ---
@@ -442,6 +468,11 @@ public class SecurityTests
     [InlineData("read_email", "send_sms")]
     [InlineData("read_email", "web_fetch")]
     [InlineData("read_email", "remember_instruction")]
+    [InlineData("read_attachment", "send_email")]
+    [InlineData("read_attachment", "send_sms")]
+    [InlineData("read_attachment", "web_fetch")]
+    [InlineData("lookup_ip", "send_email")]                 // whoever holds the block writes its record
+    [InlineData("lookup_ip", "remember_instruction")]
     [InlineData("get_calendar_events", "send_email")]
     [InlineData("get_calendar_events", "web_fetch")]
     [InlineData("web_search", "send_email")]
@@ -490,6 +521,9 @@ public class SecurityTests
     [InlineData("get_recent_emails", "get_recent_emails")]
     [InlineData("get_recent_emails", "read_email")]
     [InlineData("read_email", "save_email_to_onedrive")]
+    [InlineData("read_attachment", "lookup_ip")]                 // the registries are the only place it goes
+    [InlineData("read_email", "trash_email")]                    // moves only within the owner's mailbox, and can be undone
+    [InlineData("read_email", "mark_email_read")]                // likewise
     [InlineData("web_search", "web_fetch")]                      // opening a result is what search is for
     [InlineData("web_fetch", "web_fetch")]
     [InlineData("get_contacts", "send_email")]                   // the user's own address book is not outside text
@@ -550,6 +584,115 @@ public class SecurityTests
         unknown.Should().BeEmpty(
             because: $"every name in the untrusted-content rules must map to a real function, but these don't: {string.Join(", ", unknown)}");
     }
+
+    // --- mark_email_read and trash_email: the only changes a scheduled task may make ---
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task ScheduledTask_ChangesAnEmail_ItHasRead(string change)
+    {
+        var kernel = GuardedKernel(KernelProfile.ScheduledTask);
+        await ReadAsync(kernel, "read_attachment", "report-1");
+
+        var result = await ReadAsync(kernel, change, "report-1");
+
+        result.GetValue<string>().Should().Be("ok", because: "the report was read, so it was processed");
+    }
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task ScheduledTask_DoesNotChange_AnEmailItHasNotRead(string change)
+    {
+        var kernel = GuardedKernel(KernelProfile.ScheduledTask);
+        await ReadAsync(kernel, "read_email", "report-1");
+
+        var act = async () => await ReadAsync(kernel, change, "inbox-email");
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*{AutonomousToolGuardFilter.UnreadEmailDenialMarker}*",
+                because: "text planted in a report must not reach an email the run never opened, and check_anomalies counts this");
+    }
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task ScheduledTask_DoesNotChange_AnEmailWhoseReadFailed(string change)
+    {
+        // read_email worked but read_attachment didn't: the report wasn't processed, so it stays
+        // where it is, unread.
+        var kernel = GuardedKernel(KernelProfile.ScheduledTask);
+        await ReadAsync(kernel, "read_email", "report-1");
+        var failingRead = KernelFunctionFactory.CreateFromMethod(
+            string (string emailId) => throw new InvalidOperationException("report.xml.gz is damaged"), functionName: "read_attachment");
+        await ((Func<Task>)(async () => await kernel.InvokeAsync(failingRead, new() { ["emailId"] = "report-1" })))
+            .Should().ThrowAsync<InvalidOperationException>();
+
+        var act = async () => await ReadAsync(kernel, change, "report-1");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{AutonomousToolGuardFilter.UnreadEmailDenialMarker}*");
+    }
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task ScheduledTask_ChangesAnEmail_AfterAGuessedAttachmentName(string change)
+    {
+        // The model called read_attachment alongside read_email, guessing "report.xml" before it had
+        // the real name, then read the report by that. A guess reads nothing, so it isn't a failed read.
+        var kernel = GuardedKernel(KernelProfile.ScheduledTask);
+        await ReadAsync(kernel, "read_email", "report-1");
+        await ((Func<Task>)(async () => await kernel.InvokeAsync(MissingAttachment(), new() { ["emailId"] = "report-1" })))
+            .Should().ThrowAsync<NotInEmailException>();
+        await ReadAsync(kernel, "read_attachment", "report-1");
+
+        var result = await ReadAsync(kernel, change, "report-1");
+
+        result.GetValue<string>().Should().Be("ok");
+    }
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task ScheduledTask_DoesNotChange_AnEmailItOnlyGuessedAt(string change)
+    {
+        // The guess doesn't count as a read either: the email was never opened.
+        var kernel = GuardedKernel(KernelProfile.ScheduledTask);
+        await ((Func<Task>)(async () => await kernel.InvokeAsync(MissingAttachment(), new() { ["emailId"] = "report-1" })))
+            .Should().ThrowAsync<NotInEmailException>();
+
+        var act = async () => await ReadAsync(kernel, change, "report-1");
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{AutonomousToolGuardFilter.UnreadEmailDenialMarker}*");
+    }
+
+    private static KernelFunction MissingAttachment() => KernelFunctionFactory.CreateFromMethod(
+        string (string emailId) => throw new NotInEmailException("That email has no attachment named 'report.xml'."),
+        functionName: "read_attachment");
+
+    [Theory]
+    [InlineData("trash_email")]
+    [InlineData("mark_email_read")]
+    public async Task Chat_ChangesAnEmail_WithoutReadingItFirst(string change)
+    {
+        // "Delete the newsletter from the shop": the user asked, and sees the reply.
+        var result = await ReadAsync(GuardedKernel(KernelProfile.Chat), change, "newsletter");
+
+        result.GetValue<string>().Should().Be("ok");
+    }
+
+    private static Kernel GuardedKernel(KernelProfile profile)
+    {
+        var kernel = GuardedChatKernel();
+        kernel.Data["profile"] = profile;
+        return kernel;
+    }
+
+    /// <summary>Invokes a stand-in for a function that takes an emailId, as the email tools do.</summary>
+    private static Task<FunctionResult> ReadAsync(Kernel kernel, string functionName, string emailId) =>
+        kernel.InvokeAsync(KernelFunctionFactory.CreateFromMethod((string emailId) => "ok", functionName: functionName),
+            new() { ["emailId"] = emailId });
 
     private static Kernel GuardedChatKernel()
     {

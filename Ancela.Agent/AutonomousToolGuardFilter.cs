@@ -20,12 +20,17 @@ namespace Ancela.Agent;
 /// <see cref="KernelProfilePolicy.SwitchedOffBy"/> names (sending, instructions). This one is not
 /// mirrored in what is advertised: the model learns of it from the error, which says what to do
 /// instead, and the next message from a note Agent adds to history.</item>
+/// <item>In an autonomous run, mark_email_read and trash_email only on an email the run has read
+/// without an error (<see cref="KernelProfilePolicy.NeedsSuccessfulRead"/>).</item>
 /// </list>
 /// </summary>
 public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logger) : IFunctionInvocationFilter
 {
     // What AuditAnomalyScanner matches to count an untrusted-content denial as a guard denial.
     public const string UntrustedContentDenialMarker = "is switched off for the rest of this message";
+
+    // Likewise for an email change on an email the autonomous run hasn't read, or failed to.
+    public const string UnreadEmailDenialMarker = "works only on an email this run has read without an error";
 
     public async Task OnFunctionInvocationAsync(FunctionInvocationContext context, Func<FunctionInvocationContext, Task> next)
     {
@@ -91,11 +96,50 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
                 "calendar or the web first, or this will be switched off again.");
         }
 
+        if (KernelProfilePolicy.NeedsSuccessfulRead(profile, context.Function.Name)
+            && !untrusted.ReadWithoutError(EmailId(context)))
+        {
+            _logger.LogWarning(
+                "AutonomousToolGuardFilter: blocked {Function} in {Profile} profile on an email the run hasn't read.",
+                context.Function.Name, profile);
+
+            throw new InvalidOperationException(
+                $"Function '{context.Function.Name}' in the {profile} profile {UnreadEmailDenialMarker}. Nothing " +
+                "was done. Read the email first (read_email, or read_attachment for a report attached to it), " +
+                "and if reading it failed, leave it as it is.");
+        }
+
         // Recorded before the read runs, so a read that fails partway still counts.
         untrusted.Add(KernelProfilePolicy.UntrustedSourceOf(context.Function.Name));
 
-        await next(context);
+        if (!KernelProfilePolicy.ReadsOneEmail(context.Function.Name))
+        {
+            await next(context);
+            return;
+        }
+
+        // Recorded after, because what counts is whether the read worked.
+        try
+        {
+            await next(context);
+            untrusted.EmailRead(EmailId(context), succeeded: true);
+        }
+        catch (NotInEmailException)
+        {
+            // Nothing was read, so nothing failed to read. The model calls read_attachment alongside
+            // read_email, guessing a name such as report.xml before it has the real one, then retries
+            // with that; counting the guess would leave a report it summarized unread in the inbox.
+            throw;
+        }
+        catch
+        {
+            untrusted.EmailRead(EmailId(context), succeeded: false);
+            throw;
+        }
     }
+
+    private static string? EmailId(FunctionInvocationContext context) =>
+        context.Arguments.TryGetValue("emailId", out var id) ? id?.ToString() : null;
 
     /// <summary>
     /// The kernel's record of the untrusted content read so far. <see cref="KernelFactory"/> puts
@@ -113,8 +157,8 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
 }
 
 /// <summary>
-/// The kinds of untrusted content one kernel, and so one message, has read, and what the guard
-/// refused because of it. A class rather than a value in <see cref="Kernel.Data"/> so concurrent
+/// The kinds of untrusted content one kernel, and so one message, has read, which emails it read
+/// and whether every read of each worked, and what the guard refused because of it. A class rather than a value in <see cref="Kernel.Data"/> so concurrent
 /// tool calls can't lose an update, should concurrent invocation ever be turned on.
 /// </summary>
 public sealed class UntrustedContentLog
@@ -130,4 +174,25 @@ public sealed class UntrustedContentLog
     public IReadOnlyCollection<string> SwitchedOffFunctions => _switchedOff.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
 
     public void SwitchedOff(string functionName) => _switchedOff.TryAdd(functionName, 0);
+
+    private readonly ConcurrentDictionary<string, bool> _emailsRead = new(StringComparer.Ordinal);
+
+    /// <summary>Records one read of an email. A failed read marks it for the rest of the message.</summary>
+    public void EmailRead(string? emailId, bool succeeded)
+    {
+        if (!string.IsNullOrEmpty(emailId))
+            _emailsRead.AddOrUpdate(emailId, succeeded, (_, before) => before && succeeded);
+    }
+
+    /// <summary>True if this message has read the email, and no read of it failed.</summary>
+    public bool ReadWithoutError(string? emailId) =>
+        !string.IsNullOrEmpty(emailId) && _emailsRead.TryGetValue(emailId, out var worked) && worked;
 }
+
+/// <summary>
+/// Thrown by a read of one email when the call names something the email doesn't have, such as an
+/// attachment name the model guessed. The guard doesn't count it as a failed read of the email, as it
+/// does a damaged file or a Graph error. A dedicated type rather than <see cref="ArgumentException"/>,
+/// which a real failure can also be: a <see cref="System.Text.DecoderFallbackException"/> is one.
+/// </summary>
+public sealed class NotInEmailException(string message) : ArgumentException(message);

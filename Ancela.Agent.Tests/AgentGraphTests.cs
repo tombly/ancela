@@ -1,5 +1,8 @@
 using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin.Models;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Moq;
@@ -178,7 +181,7 @@ public class AgentGraphTests : AgentTestBase
             .ReturnsAsync(new EmailContentModel
             {
                 Id = "setup", Subject = setup.Subject, From = setup.From, To = [], Cc = [],
-                ReceivedDateTime = setup.ReceivedDateTime, Body = steps, Truncated = false, HasAttachments = false,
+                ReceivedDateTime = setup.ReceivedDateTime, Body = steps, Truncated = false, Attachments = [],
             });
 
         await SendUntilAsync("what's the last step in the account setup email from my bank?", reply =>
@@ -187,6 +190,151 @@ public class AgentGraphTests : AgentTestBase
             reply.Should().ContainEquivalentOf("two-factor", because: $"step 7 is only in the full email; the reply was: {reply}");
         });
     }
+
+    [Fact]
+    public async Task DmarcSummary_CombinesTheEmailAndIpTools_ThenTrashesTheReports()
+    {
+        // No tool knows what DMARC is. A scheduled summary has to find the reports, list each one's
+        // attachments, read them, look up who holds each rejected address, and mark read and trash
+        // what it read: six general tools the model combines by itself, with reasoning off.
+        var (registries, markedRead) = SetupDmarcReports();
+
+        var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
+            reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Mailchimp", StringComparison.OrdinalIgnoreCase));
+
+        MockGraphClient.Verify(g => g.GetAttachmentAsync("google", It.IsAny<string>()), Times.AtLeastOnce);
+        MockGraphClient.Verify(g => g.GetAttachmentAsync("yahoo", It.IsAny<string>()), Times.AtLeastOnce);
+        registries.Verify(r => r.LookupAsync("203.0.113.50"), Times.AtLeastOnce);
+        registries.Verify(r => r.LookupAsync("198.51.100.7"), Times.AtLeastOnce);
+        reply.Should().ContainEquivalentOf("DigitalOcean", because: $"203.0.113.50 was rejected; the reply was: {reply}")
+            .And.ContainEquivalentOf("Mailchimp", because: "198.51.100.7 was rejected")
+            .And.Contain("6").And.Contain("3");
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.AtLeastOnce);
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("sale"), Times.Never, "only the reports were processed");
+        markedRead.Should().BeEquivalentTo(["google", "yahoo"], because: "each report is marked read before the move changes its id");
+    }
+
+    [Fact]
+    public async Task DmarcSummary_LeavesAReportItCouldNotRead()
+    {
+        // "After successful processing": Yahoo's attachment can't be read, so that report stays in the
+        // inbox for next time, and the summary says so rather than leaving it out.
+        var (_, markedRead) = SetupDmarcReports(yahooAttachmentFails: true);
+
+        var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
+            reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Yahoo", StringComparison.OrdinalIgnoreCase));
+
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.Never, "its report was never read");
+        markedRead.Should().NotContain("yahoo", because: "an unread report stays unread, for the owner to notice");
+        reply.Should().ContainEquivalentOf("Yahoo", because: $"the summary must say a report couldn't be read; the reply was: {reply}");
+    }
+
+    private ScheduledTask DmarcSummaryTask() => new()
+    {
+        Id = Guid.NewGuid(),
+        UserPhoneNumber = UserPhoneNumber,
+        AgentPhoneNumber = AgentPhoneNumber,
+        Description = "Summarize yesterday's DMARC reports: which senders were rejected, how many messages, and who each "
+            + "rejected IP address belongs to. Then mark each report you processed as read and move it to the trash.",
+        TimeOfDay = "08:00",
+        DaysOfWeek = [0, 1, 2, 3, 4, 5, 6],
+    };
+
+    /// <summary>
+    /// Runs the task up to three times, until <paramref name="passes"/> accepts the reply. Mock calls
+    /// add up across attempts, so the caller verifies with AtLeastOnce or Never.
+    /// </summary>
+    private async Task<string> PerformUntilAsync(ScheduledTask task, Func<string, bool> passes)
+    {
+        var reply = string.Empty;
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            reply = await Agent.PerformScheduledTask(task, TestUser);
+            if (passes(reply))
+                break;
+        }
+        return reply;
+    }
+
+    /// <summary>
+    /// Google's and Yahoo's reports for yesterday, a newsletter that isn't one, and the registries'
+    /// answers for the rejected addresses: a spoofer on DigitalOcean (6) and Mailchimp (3). Also the
+    /// emails marked read: as in Graph, a moved email's old id no longer works.
+    /// </summary>
+    private (Mock<IRdapClient> Registries, HashSet<string> MarkedRead) SetupDmarcReports(bool yahooAttachmentFails = false)
+    {
+        var yesterday = DateTimeOffset.UtcNow.Date.AddDays(-1);
+        var (begin, end) = (new DateTimeOffset(yesterday).ToUnixTimeSeconds(), new DateTimeOffset(yesterday).ToUnixTimeSeconds() + 86399);
+        string Report(string org, params (string Ip, int Count, string Disposition, string Result)[] rows) =>
+            $"<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<feedback>\n"
+            + $"  <report_metadata><org_name>{org}</org_name><date_range><begin>{begin}</begin><end>{end}</end></date_range></report_metadata>\n"
+            + "  <policy_published><domain>example.com</domain><p>reject</p></policy_published>\n"
+            + string.Concat(rows.Select(r =>
+                $"  <record><row><source_ip>{r.Ip}</source_ip><count>{r.Count}</count><policy_evaluated><disposition>{r.Disposition}</disposition>"
+                + $"<dkim>{r.Result}</dkim><spf>{r.Result}</spf></policy_evaluated></row><identifiers><header_from>example.com</header_from></identifiers></record>\n"))
+            + "</feedback>\n";
+
+        var google = CreateEmail("google", "noreply-dmarc-support@google.com", "Report domain: example.com Submitter: google.com Report-ID: 4931150279366017725", hoursAgo: 5);
+        var yahoo = CreateEmail("yahoo", "noreply@dmarc.yahoo.com", "Report Domain: example.com Submitter: yahoo.com Report-ID: <1700000000.123456>", hoursAgo: 3);
+        EmailModel[] inbox = [CreateEmail("sale", "news@shop.example", "Fall sale ends tonight", hoursAgo: 1), yahoo, google];
+        SetupEmails(_ => inbox);
+        SetupReport(google, body: "", $"google.com!example.com!{begin}!{end}.zip", Report("google.com",
+            ("209.85.220.41", 14, "none", "pass"), ("203.0.113.50", 6, "reject", "fail")));
+        SetupReport(yahoo, body: "This is an aggregate DMARC report from Yahoo for your domain \"example.com\".", $"yahoo.com!example.com!{begin}!{end}.xml.gz",
+            Report("Yahoo", ("198.51.100.7", 3, "reject", "fail"), ("209.85.220.69", 5, "none", "pass")));
+        if (yahooAttachmentFails)
+            MockGraphClient.Setup(g => g.GetAttachmentAsync("yahoo", It.IsAny<string>()))
+                .ThrowsAsync(new InvalidDataException("The archive entry was compressed using an unsupported compression method."));
+        var (moved, markedRead) = (new HashSet<string>(), new HashSet<string>());
+        MockGraphClient.Setup(g => g.MoveToDeletedItemsAsync(It.IsAny<string>())).ReturnsAsync((string id) =>
+        {
+            var email = inbox.Single(e => e.Id == id);
+            moved.Add(id);
+            return $"Moved to Deleted Items: \"{email.Subject}\" from {email.From}.";
+        });
+        MockGraphClient.Setup(g => g.MarkReadAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync((string id, bool read) =>
+        {
+            if (moved.Contains(id))
+                throw new InvalidOperationException("The specified object was not found in the store.");
+            var email = inbox.Single(e => e.Id == id);
+            if (read)
+                markedRead.Add(id);
+            return $"Marked as {(read ? "read" : "unread")}: \"{email.Subject}\" from {email.From}.";
+        });
+
+        var registries = new Mock<IRdapClient>();
+        registries.Setup(r => r.LookupAsync(It.IsAny<string>())).ReturnsAsync((string ip) => ip switch
+        {
+            "203.0.113.50" => Registration(ip, "DIGITALOCEAN-203-0-113-0", "DigitalOcean, LLC"),
+            "198.51.100.7" => Registration(ip, "RSG-DELIVERY", "MailChimp"),
+            _ => Registration(ip, "GOOGLE", "Google LLC"),
+        });
+        ExtraPlugins.Add(new IpLookupPlugin(registries.Object));
+        return (registries, markedRead);
+    }
+
+    /// <summary>
+    /// A report email as read_email and read_attachment give it: the data is only in the attachment,
+    /// and a name other than the one listed fails as it does against Graph.
+    /// </summary>
+    private void SetupReport(EmailModel email, string body, string attachment, string xml)
+    {
+        MockGraphClient.Setup(g => g.GetEmailAsync(email.Id)).ReturnsAsync(new EmailContentModel
+        {
+            Id = email.Id, Subject = email.Subject, From = email.From, To = ["dmarc@example.com"], Cc = [],
+            ReceivedDateTime = email.ReceivedDateTime, Body = body, Truncated = false, Attachments = [attachment],
+        });
+        var file = attachment.EndsWith(".gz") ? attachment[..^3] : attachment.Replace(".zip", ".xml");
+        MockGraphClient.Setup(g => g.GetAttachmentAsync(email.Id, It.IsAny<string>())).ReturnsAsync((string _, string name) =>
+            name == attachment
+                ? new AttachmentContentModel { Name = name, Files = [new AttachmentFileModel { Name = file, Text = xml, Truncated = false }], NotRead = [] }
+                : throw new NotInEmailException($"That email has no attachment named '{name}'. Its attachments: {attachment}."));
+    }
+
+    private static IpRegistration Registration(string ip, string network, string holder) =>
+        new(ip, network, null, "US", [], [new RegistryContact(holder, ["registrant"])]);
 
     [Fact]
     public async Task ReplyToAnEmail_ConfirmsFirst_ThenSendsInTheNextMessage()

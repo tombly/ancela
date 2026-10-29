@@ -16,6 +16,9 @@ public class EmailContentModel
     /// <summary>True when the body was longer than the cap and the rest is missing.</summary>
     public required bool Truncated { get; init; }
 
-    /// <summary>Attachments are not read; this says whether there are any the body may refer to.</summary>
-    public required bool HasAttachments { get; init; }
+    /// <summary>
+    /// The names of the files attached, pictures in the body aside. A report sent as a file is only
+    /// in its attachment, so read_attachment reads the text ones by these names.
+    /// </summary>
+    public required string[] Attachments { get; init; }
 }

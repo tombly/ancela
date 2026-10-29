@@ -37,13 +37,24 @@ public static class KernelProfilePolicy
     // Read-only functions for ScheduledTask execution. Email and calendar are included
     // because tasks like "daily calendar summary" or "email digest" legitimately need
     // them. The system prompt explicitly marks their content as untrusted data.
+    // read_attachment too: a report sent as a file (a DMARC report, a bank's CSV) has
+    // nothing in the email's body.
     // web_fetch is excluded because it takes an attacker-controllable URL — a direct
-    // exfiltration channel for any injected content.
+    // exfiltration channel for any injected content. lookup_ip is safe here where web_fetch
+    // is not: it reaches only the internet registries, never a server the model picks.
+    // mark_email_read and trash_email are the only changes a scheduled task may make, so a task
+    // that processes emails (DMARC reports) can clear them away afterwards. They change only an
+    // email the same run has read without an error (NeedsSuccessfulRead), so they come after the
+    // processing succeeded and reach only emails the run opened. Deleted Items keeps the email
+    // and a read email can be marked unread again, so either can be undone, and the audit log
+    // records each one.
     private static readonly HashSet<string> ScheduledTaskAllowed = new(StringComparer.OrdinalIgnoreCase)
     {
         "web_search",
         "get_todos", "get_knowledge",
-        "get_calendar_events", "get_recent_emails", "read_email", "get_contacts", "get_contact_by_name",
+        "get_calendar_events", "get_recent_emails", "read_email", "read_attachment", "get_contacts", "get_contact_by_name",
+        "mark_email_read", "trash_email",
+        "lookup_ip",
         "get_accounts", "get_categories", "get_month_summaries",
         "get_transactions", "get_scheduled_transactions",
         "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
@@ -92,8 +103,8 @@ public static class KernelProfilePolicy
     private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
-        "send_email_to_remarkable", "get_recent_emails", "read_email",
-        "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
+        "send_email_to_remarkable", "get_recent_emails", "read_email", "read_attachment", "mark_email_read",
+        "trash_email", "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
         "check_services", "check_anomalies",
         "get_network_client_count", "get_network_uptime",
     };
@@ -106,8 +117,31 @@ public static class KernelProfilePolicy
     /// </summary>
     public static bool IsOwnerOnly(string functionName) => OwnerOnlyFunctions.Contains(functionName);
 
+    // The functions that read one email, named by their emailId argument. A read that throws
+    // counts against the email: an autonomous run won't mark it read or move it. Asking for
+    // something the email doesn't have (NotInEmailException) reads nothing, and doesn't count.
+    private static readonly HashSet<string> OneEmailReads = new(StringComparer.OrdinalIgnoreCase) { "read_email", "read_attachment" };
+
+    /// <summary>True if <paramref name="functionName"/> reads the one email its emailId argument names.</summary>
+    public static bool ReadsOneEmail(string functionName) => OneEmailReads.Contains(functionName);
+
+    // The functions that change one email, named by their emailId argument.
+    private static readonly HashSet<string> OneEmailChanges = new(StringComparer.OrdinalIgnoreCase) { "mark_email_read", "trash_email" };
+
+    /// <summary>
+    /// True if, in <paramref name="profile"/>, <paramref name="functionName"/> may act only on an email
+    /// the same run has read, with no read of it failing. Applies to the email changes when no person
+    /// is there to see them: a report whose attachment failed stays unread where it was, for the
+    /// owner to notice. In Chat the user asked for the change and sees the reply.
+    /// </summary>
+    public static bool NeedsSuccessfulRead(KernelProfile profile, string functionName) =>
+        profile is not (KernelProfile.Chat or KernelProfile.Onboarding)
+        && OneEmailChanges.Contains(functionName);
+
     // Reads whose results carry text that people other than the user write: anyone can email
-    // the user or put text in a meeting invite, and anyone can publish a web page. Once one of
+    // the user or put text in a meeting invite, and anyone can publish a web page. An IP
+    // address's registry record counts as the web: whoever holds the block writes its names
+    // and description. Once one of
     // these has run, the model may be acting on instructions planted in that text, so for the
     // rest of the message the functions below are switched off. This is the one restriction
     // that applies in Chat. A kernel serves one message, so the next message starts clean: the
@@ -116,9 +150,11 @@ public static class KernelProfilePolicy
     {
         ["get_recent_emails"] = UntrustedSource.MailOrCalendar,
         ["read_email"] = UntrustedSource.MailOrCalendar,
+        ["read_attachment"] = UntrustedSource.MailOrCalendar,
         ["get_calendar_events"] = UntrustedSource.MailOrCalendar,
         ["web_search"] = UntrustedSource.Web,
         ["web_fetch"] = UntrustedSource.Web,
+        ["lookup_ip"] = UntrustedSource.Web,
     };
 
     // What each source switches off. Sending is off after either, because a planted
@@ -130,7 +166,8 @@ public static class KernelProfilePolicy
     // stays on after a search, since opening a result is what searching is for. Left on:
     // save_email_to_onedrive, send_email_to_remarkable and create_calendar_event, which write only
     // into the owner's own folder, tablet and calendar (there is no attendees parameter, so no
-    // invitation goes out).
+    // invitation goes out). mark_email_read and trash_email stay on too: they change an email
+    // only within the owner's own mailbox, and either can be undone.
     // Not covered: text a read put into Ancela's reply carries over in history, and knowledge
     // or to-dos saved after a read are not marked when read back later.
     private static readonly Dictionary<string, UntrustedSource> SwitchedOffAfter = new(StringComparer.OrdinalIgnoreCase)
