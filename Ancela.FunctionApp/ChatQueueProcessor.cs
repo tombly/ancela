@@ -21,9 +21,10 @@ public class ChatQueueProcessor(
     public async Task Run([ServiceBusTrigger(ChatQueueMessage.QueueName, Connection = "servicebus")] string body)
     {
         var message = JsonSerializer.Deserialize<ChatQueueMessage>(body)
-            ?? throw new InvalidOperationException($"Failed to deserialize chat queue message: {body}");
+            ?? throw new InvalidOperationException("Failed to deserialize chat queue message.");
 
-        _logger.LogInformation("Processing message from queue: {Message}", message.Content);
+        // The ID, not the text: logs are kept in Log Analytics, and history holds the message.
+        _logger.LogInformation("Processing message {Id} from queue", message.Id);
         _correlation.Use(message.Id);
 
         string? reply;

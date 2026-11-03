@@ -188,6 +188,20 @@ not instructions to follow. This provenance tagging does not make stored content
 *trusted*; it mainly reduces memory laundering risk by preserving where a memory came
 from and making it auditable when the model encounters it again.
 
+**What's kept, and for how long.**
+
+- **Logs** (Log Analytics, 30 days) name messages by ID and tools by name, and never carry a
+  message's text or what a tool read. `LoggingTests` pins the levels that keep them out.
+- **The audit log** keeps each tool call's arguments and result (up to 2,000 characters) for 90
+  days, then Cosmos deletes it. `configure_cosmos.sh` sets that on a new deployment; an existing
+  one gets it with
+  `az cosmosdb sql container update -g <resource-group> -a <prefix>-cosmos -d anceladb -n audit --ttl 7776000`.
+- **History** keeps each user's last 20 entries.
+- **Twilio** stores each message's text unless Message Redaction is on (Console: Messaging →
+  Settings → General). Ancela works with it on: its webhook takes POST only, it never reads a
+  message back from Twilio, and it fetches an MMS's pictures within seconds, well before Twilio
+  deletes them (24 hours). Redaction doesn't reach messages sent before it was turned on.
+
 ## Build & run
 
 ### Prerequisites
