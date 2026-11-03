@@ -74,12 +74,16 @@ az cosmosdb sql container create \
   --name "projects" \
   --partition-key-path "/agentPhoneNumber"
 
+# Audit entries expire after 90 days (Cosmos deletes an item that long after its last write).
+# They hold tool arguments and results, such as an email's text, and nothing reads further back:
+# check_anomalies looks at most 30 days back.
 az cosmosdb sql container create \
   --account-name $cosmos_account \
   --resource-group $resource_group \
   --database-name "anceladb" \
   --name "audit" \
-  --partition-key-path "/agentPhoneNumber"
+  --partition-key-path "/agentPhoneNumber" \
+  --ttl 7776000
 
 # Holds the single owner OAuth token per provider (e.g. google-health). Deliberately omitted from the
 # read-only CLI catalog so the audit viewer can't dump access/refresh tokens.
