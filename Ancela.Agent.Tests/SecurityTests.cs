@@ -74,6 +74,7 @@ public class SecurityTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IGraphClient>(_ => new Mock<IGraphClient>().Object);
+        services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<IGraphClient>());
         services.AddSingleton<IMemoryClient>(_ => new Mock<IMemoryClient>().Object);
         services.AddSingleton<SmsService, SpySmsService>();
         services.AddSingleton<OwnerService>();

@@ -118,7 +118,7 @@ public class ReadEmailTests
         var graph = new Mock<IGraphClient>();
         graph.Setup(g => g.MoveToDeletedItemsAsync("email-1")).ReturnsAsync("Moved to Deleted Items.");
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object));
+        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object));
 
         var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["trash_email"], new() { ["emailId"] = "email-1" });
 
@@ -134,7 +134,7 @@ public class ReadEmailTests
         var graph = new Mock<IGraphClient>();
         graph.Setup(g => g.MarkReadAsync("email-1", expected)).ReturnsAsync("Marked.");
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object));
+        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object));
         var arguments = new KernelArguments { ["emailId"] = "email-1" };
         if (read is { } flag)
             arguments["read"] = flag;
@@ -151,7 +151,7 @@ public class ReadEmailTests
         var graph = new Mock<IGraphClient>();
         graph.Setup(g => g.GetEmailAsync("email-1")).ReturnsAsync(GraphClient.ToEmailContent(Message("Step 1")));
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object));
+        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object));
 
         var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["read_email"], new() { ["emailId"] = "email-1" });
 

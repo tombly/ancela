@@ -9,7 +9,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 /// Semantic Kernel plugin for sending text content to the owner's reMarkable tablet
 /// as a PDF document.
 /// </summary>
-public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClient _graphClient)
+public class RemarkablePlugin(IRemarkableService _remarkableService, IMailClient _mailClient)
 {
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
 
@@ -36,10 +36,10 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClien
         [Description("The email's id, exactly as returned by get_recent_emails.")] string emailId,
         [Description(EmailPdf.IncludeLinkedImagesDescription)] bool? includeLinkedImages = null)
     {
-        if (includeLinkedImages is null && await _graphClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
+        if (includeLinkedImages is null && await _mailClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
             return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
 
-        var email = await _graphClient.RenderEmailAsPdfAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
+        var email = await _mailClient.RenderEmailAsPdfAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
         var title = string.IsNullOrWhiteSpace(email.Subject) ? "(no subject)" : Whitespace.Replace(email.Subject, " ").Trim();
 
         using var pdf = new MemoryStream(email.Pdf);

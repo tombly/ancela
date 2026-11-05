@@ -69,6 +69,18 @@ public static class DependencyModule
         builder.Services.AddSingleton<SmsPlugin>();
         builder.Services.AddSingleton<GraphPlugin>();
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
+        builder.Services.AddSingleton<IPdfConverter>(sp => sp.GetRequiredService<IGraphClient>());
+        // Whose mail the email tools read: Microsoft 365 through Graph, or iCloud over IMAP and SMTP
+        // (V2 step 5). AppHost.cs sets it; the calendar and contacts stay on Graph either way.
+        if (string.Equals(Environment.GetEnvironmentVariable("MAIL_PROVIDER"), "icloud", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Services.AddSingleton<ImapMailClient>();
+            builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<ImapMailClient>());
+        }
+        else
+        {
+            builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<IGraphClient>());
+        }
         builder.Services.AddSingleton<ILinkedImageFetcher, LinkedImageFetcher>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();
