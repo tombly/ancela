@@ -233,4 +233,102 @@ public class ChatInterceptorTests
         _userService.Verify(u => u.CreatePendingAsync(AgentPhoneNumber, OwnerPhoneNumber), Times.Once);
         _agent.Verify(a => a.Onboard("hello ancela", OwnerPhoneNumber, AgentPhoneNumber, It.IsAny<Media[]>()), Times.Once);
     }
+
+    // --- grant / ungrant: what another user may do ---
+
+    [Fact]
+    public async Task Grant_FromOwner_WithValidCode_AddsTheGrants()
+    {
+        _userService.Setup(u => u.GetAsync(AgentPhoneNumber, GuestPhoneNumber)).ReturnsAsync(Registered(GuestPhoneNumber));
+
+        var reply = await _interceptor.HandleMessage($"grant +1 555 987 6543 Budget, todos {Code()}", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be($"{GuestPhoneNumber} now has: todos, budget.");
+        _userService.Verify(u => u.SetGrantsAsync(AgentPhoneNumber, GuestPhoneNumber,
+            It.Is<List<string>>(g => g.SequenceEqual(new[] { "todos", "budget" }))), Times.Once);
+        _auditLog.Verify(a => a.LogAsync(It.Is<AuditEntry>(e =>
+            e.Category == "session" && e.Function == "grant" && e.Success && e.Arguments == $"{GuestPhoneNumber} budget todos")), Times.Once);
+    }
+
+    [Fact]
+    public async Task Ungrant_RemovesOnlyTheNamedGrants()
+    {
+        var guest = Registered(GuestPhoneNumber);
+        guest.Grants = ["todos", "budget"];
+        _userService.Setup(u => u.GetAsync(AgentPhoneNumber, GuestPhoneNumber)).ReturnsAsync(guest);
+
+        var reply = await _interceptor.HandleMessage($"ungrant +15559876543 budget {Code()}", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be($"{GuestPhoneNumber} now has: todos.");
+        _userService.Verify(u => u.SetGrantsAsync(AgentPhoneNumber, GuestPhoneNumber,
+            It.Is<List<string>>(g => g.SequenceEqual(new[] { "todos" }))), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("todo")]     // a typo
+    [InlineData("email")]    // never grantable
+    [InlineData("always")]   // every user has these; not something to grant
+    [InlineData("none")]
+    [InlineData("3")]        // Enum.TryParse would take a number
+    public async Task Grant_WithAWordThatIsNotAGrant_ChangesNothing(string word)
+    {
+        _userService.Setup(u => u.GetAsync(AgentPhoneNumber, GuestPhoneNumber)).ReturnsAsync(Registered(GuestPhoneNumber));
+
+        var reply = await _interceptor.HandleMessage($"grant +15559876543 budget {word} {Code()}", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().StartWith($"Not a grant: {word}. Nothing changed.");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Grant_WithMissingCode_IsRefused()
+    {
+        _userService.Setup(u => u.GetAsync(AgentPhoneNumber, GuestPhoneNumber)).ReturnsAsync(Registered(GuestPhoneNumber));
+
+        var reply = await _interceptor.HandleMessage("grant +15559876543 todos", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be("That command needs your authenticator code. Resend as: grant <number> <grants> <code>.");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Grant_ForSomeoneNotInvited_SaysToInviteFirst()
+    {
+        var reply = await _interceptor.HandleMessage($"grant +15559876543 todos {Code()}", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be($"{GuestPhoneNumber} doesn't have access. Invite them first.");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Grant_ToTheOwner_ChangesNothing()
+    {
+        var reply = await _interceptor.HandleMessage($"grant +15550000001 todos {Code()}", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be("You have every tool already.");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Grant_FromNonOwner_IsNotAPrivilegedCommand()
+    {
+        var reply = await _interceptor.HandleMessage($"grant +15559876543 todos {Code()}", GuestPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().BeNull(because: "a sender with no account is dropped, command or not");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Grant_WithoutANumberFirst_IsAMessage()
+    {
+        // "Grant" is also a name.
+        var owner = Registered(OwnerPhoneNumber);
+        _userService.Setup(u => u.GetAsync(AgentPhoneNumber, OwnerPhoneNumber)).ReturnsAsync(owner);
+        _agent.Setup(a => a.Chat(It.IsAny<string>(), OwnerPhoneNumber, AgentPhoneNumber, owner, It.IsAny<Media[]>())).ReturnsAsync("CHAT");
+
+        var reply = await _interceptor.HandleMessage("Grant called about dinner on Friday", OwnerPhoneNumber, AgentPhoneNumber, []);
+
+        reply.Should().Be("CHAT");
+        _userService.Verify(u => u.SetGrantsAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<List<string>>()), Times.Never);
+    }
 }

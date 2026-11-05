@@ -23,6 +23,8 @@ public class AuditActivitySummary
 
     public int InviteCount { get; init; }
     public int RevokeCount { get; init; }
+    public int GrantCount { get; init; }
+    public int UngrantCount { get; init; }
     public int DeregisterCount { get; init; }
 
     public int WebSearchCount { get; init; }

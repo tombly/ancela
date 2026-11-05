@@ -9,6 +9,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.ReminderPlugin;
 public class ReminderPlugin(IReminderStore _store, IReminderScheduler _scheduler, ILogger<ReminderPlugin> _logger)
 {
     [KernelFunction("create_reminder")]
+    [Tool(Grant = ToolGrant.Reminders)]
     [Description("Schedules a single SMS reminder to the user at a specific absolute time. Resolve relative times (\"tomorrow afternoon\") to an absolute ISO-8601 timestamp using the user's local timezone before calling, and confirm the resolved time back to the user in your response.")]
     public async Task<string> CreateReminderAsync(Kernel kernel,
         [Description("Absolute due time as an ISO-8601 timestamp with offset, e.g. 2026-05-25T14:00:00-07:00.")] string dueAt,
@@ -63,6 +64,7 @@ public class ReminderPlugin(IReminderStore _store, IReminderScheduler _scheduler
     }
 
     [KernelFunction("list_reminders")]
+    [Tool(Grant = ToolGrant.Reminders)]
     [Description("Lists the user's upcoming (Scheduled) reminders, soonest first.")]
     public async Task<Reminder[]> ListRemindersAsync(Kernel kernel)
     {
@@ -71,6 +73,7 @@ public class ReminderPlugin(IReminderStore _store, IReminderScheduler _scheduler
     }
 
     [KernelFunction("cancel_reminder")]
+    [Tool(Grant = ToolGrant.Reminders)]
     [Description("Cancels a scheduled reminder by its ID. Use list_reminders to look up IDs.")]
     public async Task<string> CancelReminderAsync(Kernel kernel,
         [Description("The reminder ID (GUID) to cancel.")] string reminderId)

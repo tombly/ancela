@@ -43,7 +43,7 @@ public class ProjectStore(CosmosClient _cosmosClient) : IProjectStore
     {
         var container = await GetContainerAsync();
         var query = new QueryDefinition(
-            "SELECT c.id, c.name, c.purpose FROM c WHERE c.agentPhoneNumber = @agent AND c.isArchived = false ORDER BY c.createdAt ASC")
+            "SELECT c.id, c.name, c.purpose, c.userPhoneNumber FROM c WHERE c.agentPhoneNumber = @agent AND c.isArchived = false ORDER BY c.createdAt ASC")
             .WithParameter("@agent", agentPhoneNumber);
 
         var iterator = container.GetItemQueryIterator<ProjectSummary>(query);

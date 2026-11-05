@@ -13,6 +13,7 @@ public class StandingRulePlugin(IStandingRuleStore _store, IStandingRuleSchedule
     private const int MinEvaluationIntervalHours = 1;
 
     [KernelFunction("create_standing_rule")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Creates a recurring 'standing rule' that you evaluate on an interval and act on only when warranted, e.g. 'let me know if the Cync patio lights go on sale'. Unlike a reminder (a one-shot message at a fixed time), a standing rule is a condition you watch over time and notify the user about when it becomes true.")]
     public async Task<string> CreateStandingRuleAsync(Kernel kernel,
         [Description("What to watch for, in plain language. Be specific about the condition that should trigger a notification.")] string description,
@@ -70,6 +71,7 @@ public class StandingRulePlugin(IStandingRuleStore _store, IStandingRuleSchedule
     }
 
     [KernelFunction("list_standing_rules")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Lists the user's active and paused standing rules, oldest first.")]
     public async Task<StandingRule[]> ListStandingRulesAsync(Kernel kernel)
     {
@@ -78,6 +80,7 @@ public class StandingRulePlugin(IStandingRuleStore _store, IStandingRuleSchedule
     }
 
     [KernelFunction("pause_standing_rule")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Pauses a standing rule so it stops being evaluated until resumed. Use list_standing_rules to look up IDs.")]
     public async Task<string> PauseStandingRuleAsync(Kernel kernel,
         [Description("The standing rule ID (GUID) to pause.")] string ruleId)
@@ -96,6 +99,7 @@ public class StandingRulePlugin(IStandingRuleStore _store, IStandingRuleSchedule
     }
 
     [KernelFunction("resume_standing_rule")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Resumes a paused standing rule, scheduling its next evaluation. Use list_standing_rules to look up IDs.")]
     public async Task<string> ResumeStandingRuleAsync(Kernel kernel,
         [Description("The standing rule ID (GUID) to resume.")] string ruleId)
@@ -116,6 +120,7 @@ public class StandingRulePlugin(IStandingRuleStore _store, IStandingRuleSchedule
     }
 
     [KernelFunction("delete_standing_rule")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Permanently deletes a standing rule. Use list_standing_rules to look up IDs.")]
     public async Task<string> DeleteStandingRuleAsync(Kernel kernel,
         [Description("The standing rule ID (GUID) to delete.")] string ruleId)

@@ -7,6 +7,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.RegistrationPlugin;
 public class RegistrationPlugin(IUserService _userService, IAuditLog _auditLog, CorrelationContext _correlation)
 {
     [KernelFunction("register_user")]
+    [Tool(Grant = ToolGrant.Always)]
     [Description("Completes user registration by saving their name, timezone, and home location. Call only after confirming all three with the user.")]
     public async Task<string> RegisterUserAsync(Kernel kernel,
         [Description("The user's preferred name.")] string name,

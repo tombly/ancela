@@ -9,4 +9,11 @@ public class ProjectSummary
     public Guid Id { get; set; }
     public required string Name { get; set; }
     public string? Purpose { get; set; }
+
+    /// <summary>
+    /// Who created it, so a read of another user's project counts as outside text. Read from
+    /// Cosmos (Newtonsoft) but left out of what the model is shown (System.Text.Json).
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? UserPhoneNumber { get; set; }
 }

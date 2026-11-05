@@ -22,8 +22,9 @@ var graphUserIdParameter = builder.AddParameter("graph-user-id", true);
 var graphTenantIdParameter = builder.AddParameter("graph-tenant-id", true);
 var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
 var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
-// The one OneDrive folder the app may write to (save_email_to_onedrive). The app holds
-// Files.SelectedOperations.Selected plus a per-folder grant, so these must name that folder.
+// The one OneDrive folder the app may write to, where an email is turned into a PDF for the
+// reMarkable (send_email_to_remarkable). The app holds Files.SelectedOperations.Selected plus a
+// per-folder grant, so these must name that folder.
 var graphOneDriveDriveId = builder.AddParameter("graph-onedrive-drive-id", true);
 var graphOneDriveFolderId = builder.AddParameter("graph-onedrive-folder-id", true);
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);

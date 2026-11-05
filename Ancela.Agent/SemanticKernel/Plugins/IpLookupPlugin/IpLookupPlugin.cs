@@ -7,6 +7,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 public class IpLookupPlugin(IRdapClient _rdapClient)
 {
     [KernelFunction("lookup_ip")]
+    [Tool(Grant = ToolGrant.Web, Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.Web)]
     [Description("Looks up who holds an IP address in the internet registries (ARIN, RIPE, APNIC, LACNIC, AFRINIC): "
         + "the network's name, the organizations named on it, its country and address range. Use it to find out "
         + "whose server an address in an email, a report or an alert belongs to.")]

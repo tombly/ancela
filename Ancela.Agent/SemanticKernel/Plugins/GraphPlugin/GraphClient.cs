@@ -18,7 +18,6 @@ public interface IGraphClient
     Task<string> MoveToDeletedItemsAsync(string messageId);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<int> GetLinkedImageCountAsync(string messageId);
-    Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
     Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
     Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
@@ -475,26 +474,6 @@ public class GraphClient : IGraphClient
     }
 
     /// <summary>
-    /// Saves an email as a PDF in the OneDrive folder, named for its local received time and
-    /// subject. See <see cref="RenderEmailAsPdfAsync"/>.
-    /// </summary>
-    public async Task<SavedEmailModel> SaveEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
-    {
-        var email = await RenderEmailAsPdfAsync(messageId, timeZone, includeLinkedImages);
-        var (driveId, folderId) = OneDriveFolder();
-        var fileName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, timeZone);
-        var saved = await UploadToFolderAsync(driveId, folderId, fileName, email.Pdf);
-        return new SavedEmailModel
-        {
-            Saved = true,
-            FileName = saved.Name ?? fileName,
-            WebUrl = saved.WebUrl ?? string.Empty,
-            LinkedImages = email.LinkedImages,
-            ImagesMissing = email.ImagesMissing,
-        };
-    }
-
-    /// <summary>
     /// How many images the email links to on other servers (tracking pixels aside). Downloading
     /// them tells the sender the email was opened, so the owner is asked first.
     /// </summary>
@@ -611,7 +590,7 @@ public class GraphClient : IGraphClient
     private async Task<DriveItem> UploadToFolderAsync(string driveId, string folderId, string fileName, byte[] content)
     {
         // Addressed by path under the folder, escaped here: the SDK's ItemWithPath doesn't
-        // percent-encode, and fileName carries an email subject. An existing name is replaced.
+        // percent-encode. An existing name is replaced.
         var url = $"{GraphBaseUrl}/drives/{Uri.EscapeDataString(driveId)}/items/{Uri.EscapeDataString(folderId)}"
             + $":/{Uri.EscapeDataString(fileName)}:/content";
         using var stream = new MemoryStream(content);

@@ -20,6 +20,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 public class YnabPlugin(YnabClient _ynabClient)
 {
     [KernelFunction("get_accounts")]
+    [Tool(Grant = ToolGrant.Budget, Autonomous = Autonomy.Both)]
     [Description("Gets account balances along with the computed net worth, total assets, and total liabilities")]
     public async Task<AccountsSummaryModel> GetAccountsAsync()
     {
@@ -27,6 +28,7 @@ public class YnabPlugin(YnabClient _ynabClient)
     }
 
     [KernelFunction("get_categories")]
+    [Tool(Grant = ToolGrant.Budget, Autonomous = Autonomy.Both)]
     [Description("Gets budget categories with the amount budgeted, spent (activity), and available (balance), plus goal progress. Defaults to the current month. Use this for category spending totals instead of summing transactions.")]
     public async Task<CategoryModel[]> GetCategoriesAsync(
         [Description("Any date within the target month; omit for the current month.")] DateTimeOffset? month = null)
@@ -35,6 +37,7 @@ public class YnabPlugin(YnabClient _ynabClient)
     }
 
     [KernelFunction("get_month_summaries")]
+    [Tool(Grant = ToolGrant.Budget, Autonomous = Autonomy.Both)]
     [Description("Gets a summary of all budget months")]
     public async Task<MonthSummaryModel[]> GetMonthSummaryAsync()
     {
@@ -42,6 +45,7 @@ public class YnabPlugin(YnabClient _ynabClient)
     }
 
     [KernelFunction("get_transactions")]
+    [Tool(Grant = ToolGrant.Budget, Autonomous = Autonomy.Both)]
     [Description("Gets transactions, newest first, for the last 30 days unless 'sinceDate' is given. Optionally filter by account, category, or payee name. Each transaction includes its approval status, so use this for review questions too; prefer get_categories for category spending totals.")]
     public async Task<TransactionModel[]> GetTransactionsAsync(
         [Description("Only return transactions on or after this date. Defaults to 30 days ago.")] DateTimeOffset? sinceDate = null,
@@ -53,6 +57,7 @@ public class YnabPlugin(YnabClient _ynabClient)
     }
 
     [KernelFunction("get_scheduled_transactions")]
+    [Tool(Grant = ToolGrant.Budget, Autonomous = Autonomy.Both)]
     [Description("Gets upcoming scheduled (recurring) transactions such as bills, ordered by next date")]
     public async Task<ScheduledTransactionModel[]> GetScheduledTransactionsAsync()
     {

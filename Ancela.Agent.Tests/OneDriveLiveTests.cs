@@ -13,7 +13,8 @@ using MailFolder = Ancela.Agent.SemanticKernel.Plugins.GraphPlugin.MailFolder;
 namespace Ancela.Agent.Tests;
 
 /// <summary>
-/// Live diagnostic for save_email_to_onedrive against the real tenant. Excluded from normal runs
+/// Live diagnostic for turning an email into a PDF in the OneDrive folder (send_email_to_remarkable)
+/// against the real tenant. Excluded from normal runs
 /// (Integration trait) and skips unless the Graph app settings (Parameters:graph-* in user secrets,
 /// or the GRAPH_* environment variables) and the granted folder's GRAPH_ONEDRIVE_DRIVE_ID /
 /// GRAPH_ONEDRIVE_FOLDER_ID are set:
@@ -126,7 +127,7 @@ public class OneDriveLiveTests(ITestOutputHelper _output)
     }
 
     [Fact]
-    public async Task SavesTheNewestInboxEmail_AndRemovesItsTemporaryFile()
+    public async Task RendersTheNewestInboxEmail_AndRemovesItsTemporaryFile()
     {
         if (Load() is not { } config) { _output.WriteLine("Skipped: Graph/OneDrive settings not found."); return; }
         var (client, _) = BuildSpiedClient(config);
@@ -136,35 +137,13 @@ public class OneDriveLiveTests(ITestOutputHelper _output)
         var email = (await graph.GetUserEmailsAsync(MailFolder.Inbox)).FirstOrDefault();
         if (email is null) { _output.WriteLine("Skipped: the inbox is empty."); return; }
 
-        // Never replace, then delete, a PDF the owner saved for real.
-        var expectedName = EmailPdf.FileName(email.Subject, email.ReceivedDateTime, Pacific);
-        if ((await FolderNamesAsync(client, config)).Contains(expectedName))
-        {
-            _output.WriteLine("Skipped: the newest email has already been saved to the folder.");
-            return;
-        }
+        // Never the linked images: downloading them would tell a real sender the email was opened.
+        var rendered = await graph.RenderEmailAsPdfAsync(email.Id, Pacific, includeLinkedImages: false);
 
-        SavedEmailModel? saved = null;
-        try
-        {
-            // Never the linked images: downloading them would tell a real sender the email was opened.
-            saved = await graph.SaveEmailAsPdfAsync(email.Id, Pacific, includeLinkedImages: false);
-
-            saved.FileName.Should().Be(expectedName);
-            saved.WebUrl.Should().StartWith("https://");
-            var names = await FolderNamesAsync(client, config);
-            names.Should().Contain(expectedName);
-            names.Should().NotContain(n => n.StartsWith("ancela-") && n.EndsWith(".html"),
-                because: "the temporary source file is deleted after conversion");
-            _output.WriteLine($"saved ({saved.LinkedImages} linked images left out, {saved.ImagesMissing} missing); temporary file removed");
-        }
-        finally
-        {
-            var children = await client.Drives[config.DriveId].Items[config.FolderId].Children
-                .GetAsync(c => c.QueryParameters.Select = ["id", "name"]);
-            if (children?.Value?.FirstOrDefault(i => i.Name == expectedName)?.Id is { } id)
-                await client.Drives[config.DriveId].Items[id].DeleteAsync();
-        }
+        rendered.Pdf.AsSpan().StartsWith("%PDF-"u8).Should().BeTrue();
+        (await FolderNamesAsync(client, config)).Should().NotContain(n => n.StartsWith("ancela-") && n.EndsWith(".html"),
+            because: "the temporary source file is deleted after conversion");
+        _output.WriteLine($"rendered {rendered.Pdf.Length:N0} bytes ({rendered.LinkedImages} linked images left out, {rendered.ImagesMissing} missing); temporary file removed");
     }
 
     private static async Task<HashSet<string>> FolderNamesAsync(GraphServiceClient client, Config config)

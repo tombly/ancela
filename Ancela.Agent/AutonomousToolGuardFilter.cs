@@ -15,8 +15,8 @@ namespace Ancela.Agent;
 /// what <see cref="Agent"/> advertises:
 /// <list type="bullet">
 /// <item>Profile allow-lists for autonomous profiles (StandingRule, ScheduledTask).</item>
-/// <item>Owner-only functions (sending SMS/email, writing the owner's calendar) for non-owners.</item>
-/// <item>Within one message, after email, calendar or web content has been read, the functions
+/// <item>For anyone but the owner, every function their grants don't name.</item>
+/// <item>Within one message, after email, calendar, web content or another user's text has been read, the functions
 /// <see cref="KernelProfilePolicy.SwitchedOffBy"/> names (sending, instructions). This one is not
 /// mirrored in what is advertised: the model learns of it from the error, which says what to do
 /// instead, and the next message from a note Agent adds to history.</item>
@@ -31,6 +31,11 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
 
     // Likewise for an email change on an email the autonomous run hasn't read, or failed to.
     public const string UnreadEmailDenialMarker = "works only on an email this run has read without an error";
+
+    // And for a function the user's grants don't include (for the owner, never).
+    public const string NotGrantedDenialMarker = "isn't available to this user: the owner hasn't granted it";
+
+    private static readonly IReadOnlySet<ToolGrant> NoGrants = new HashSet<ToolGrant>();
 
     public async Task OnFunctionInvocationAsync(FunctionInvocationContext context, Func<FunctionInvocationContext, Task> next)
     {
@@ -53,19 +58,23 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
                 $"Function '{context.Function.Name}' is not permitted in the {profile} profile.");
         }
 
-        // Default-deny owner-only functions: missing/false isOwner is treated as not-owner.
+        // Default-deny for anyone but the owner: missing/false isOwner is treated as not-owner,
+        // and missing grants as none.
         var isOwner = context.Kernel.Data.TryGetValue("isOwner", out var o) && o is true;
-        if (!isOwner && KernelProfilePolicy.IsOwnerOnly(context.Function.Name))
+        var grants = context.Kernel.Data.TryGetValue("grants", out var g) && g is IReadOnlySet<ToolGrant> held
+            ? held
+            : NoGrants;
+        if (!KernelProfilePolicy.MayUse(context.Function.Name, isOwner, grants))
         {
             _logger.LogWarning(
-                "AutonomousToolGuardFilter: blocked owner-only {Function} for non-owner caller.",
+                "AutonomousToolGuardFilter: blocked {Function}, which this user's grants don't include.",
                 context.Function.Name);
 
             throw new InvalidOperationException(
-                $"Function '{context.Function.Name}' may only be invoked by the owner.");
+                $"Function '{context.Function.Name}' {NotGrantedDenialMarker}.");
         }
 
-        var untrusted = UntrustedContentFor(context.Kernel);
+        var untrusted = KernelData.UntrustedContent(context.Kernel);
         var switchedOffBy = KernelProfilePolicy.SwitchedOffBy(context.Function.Name, untrusted.Seen);
         if (switchedOffBy != UntrustedSource.None)
         {
@@ -74,12 +83,12 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
                 context.Function.Name, switchedOffBy);
             untrusted.SwitchedOff(context.Function.Name);
 
-            var what = switchedOffBy switch
+            var what = string.Join(" and ", new[]
             {
-                UntrustedSource.MailOrCalendar => "email or calendar content",
-                UntrustedSource.Web => "web content",
-                _ => "email, calendar and web content",
-            };
+                switchedOffBy.HasFlag(UntrustedSource.MailOrCalendar) ? "email or calendar content" : null,
+                switchedOffBy.HasFlag(UntrustedSource.Web) ? "web content" : null,
+                switchedOffBy.HasFlag(UntrustedSource.OtherUsers) ? "to-dos, facts or project entries another user saved" : null,
+            }.OfType<string>());
             // The call is repeated back because the confirming message sees only the reply: on
             // 2026-10-23 a reply that said "reply to Bob" without his address got "Bob" sent as the
             // address. Showing every detail also lets the user see where it would go before saying yes.
@@ -140,20 +149,6 @@ public class AutonomousToolGuardFilter(ILogger<AutonomousToolGuardFilter> _logge
 
     private static string? EmailId(FunctionInvocationContext context) =>
         context.Arguments.TryGetValue("emailId", out var id) ? id?.ToString() : null;
-
-    /// <summary>
-    /// The kernel's record of the untrusted content read so far. <see cref="KernelFactory"/> puts
-    /// one in every kernel; a kernel built anywhere else gets one on its first call.
-    /// </summary>
-    private static UntrustedContentLog UntrustedContentFor(Kernel kernel)
-    {
-        if (kernel.Data.TryGetValue("untrustedContent", out var value) && value is UntrustedContentLog log)
-            return log;
-
-        log = new UntrustedContentLog();
-        kernel.Data["untrustedContent"] = log;
-        return log;
-    }
 }
 
 /// <summary>

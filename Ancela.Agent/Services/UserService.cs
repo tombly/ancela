@@ -19,6 +19,11 @@ public class UserProfile
     // How this user wants Ancela to behave in every conversation with them (remember_instruction).
     // Profiles saved before this existed have no such field and read back as empty.
     public List<UserInstruction> Instructions { get; set; } = [];
+
+    // What the owner has granted this user (`grant <number> <grants> <code>`), by name: "todos",
+    // "budget" (ToolGrant). Another user has no tools until granted some; the owner has every tool
+    // and no grants. Profiles saved before grants existed read back as empty.
+    public List<string> Grants { get; set; } = [];
 }
 
 [JsonObject(NamingStrategyType = typeof(CamelCaseNamingStrategy))]
@@ -35,6 +40,7 @@ public interface IUserService
     Task<UserProfile?> GetAsync(string agentPhoneNumber, string userPhoneNumber);
     Task CompleteRegistrationAsync(string agentPhoneNumber, string userPhoneNumber, string name, string timeZone, string location);
     Task SetInstructionsAsync(string agentPhoneNumber, string userPhoneNumber, List<UserInstruction> instructions);
+    Task SetGrantsAsync(string agentPhoneNumber, string userPhoneNumber, List<string> grants);
     Task DeleteAsync(string agentPhoneNumber, string userPhoneNumber);
 }
 
@@ -101,6 +107,15 @@ public class UserService(CosmosClient _cosmosClient) : IUserService
         var profile = await GetAsync(agentPhoneNumber, userPhoneNumber)
             ?? throw new InvalidOperationException($"No profile for {userPhoneNumber}");
         profile.Instructions = instructions;
+        await container.ReplaceItemAsync(profile, profile.Id.ToString(), new PartitionKey(agentPhoneNumber));
+    }
+
+    public async Task SetGrantsAsync(string agentPhoneNumber, string userPhoneNumber, List<string> grants)
+    {
+        var container = await GetContainerAsync();
+        var profile = await GetAsync(agentPhoneNumber, userPhoneNumber)
+            ?? throw new InvalidOperationException($"No profile for {userPhoneNumber}");
+        profile.Grants = grants;
         await container.ReplaceItemAsync(profile, profile.Id.ToString(), new PartitionKey(agentPhoneNumber));
     }
 

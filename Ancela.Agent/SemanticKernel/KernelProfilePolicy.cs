@@ -1,65 +1,67 @@
+using System.Reflection;
+using Microsoft.SemanticKernel;
+
 namespace Ancela.Agent.SemanticKernel;
 
 /// <summary>
-/// Single source of truth for which functions each <see cref="KernelProfile"/> may use.
-/// Both enforcement layers consume this:
+/// Single source of truth for which functions each <see cref="KernelProfile"/> and each user may
+/// use, read from the <see cref="ToolAttribute"/> on every tool. Both enforcement layers consume this:
 /// <list type="bullet">
 /// <item><see cref="Agent"/> advertises only these functions to the model
 /// (<c>FunctionChoiceBehavior.Auto(functions:)</c>) — so denied tools never enter the schema.</item>
 /// <item><see cref="AutonomousToolGuardFilter"/> hard-denies any invocation outside this set
 /// as defense-in-depth.</item>
 /// </list>
-/// The autonomous profiles use a <b>default-deny</b> allow-list: anything not explicitly
-/// listed (including any tool added later) is denied automatically. Chat and Onboarding are
-/// unrestricted (<c>null</c>), because a human is in the loop — except that within one message,
-/// reading email, calendar or the web switches sending and instructions off
-/// (<see cref="SwitchedOffBy"/>), which only the guard enforces.
+/// The autonomous profiles use a <b>default-deny</b> allow-list: a tool runs in one only if its
+/// declaration names it. Chat and Onboarding are unrestricted (<c>null</c>), because a human is in
+/// the loop — except that within one message, reading email, calendar, the web or another user's
+/// text switches sending and instructions off (<see cref="SwitchedOffBy"/>), which only the guard
+/// enforces.
+///
+/// Who may use a tool is a separate axis: the owner may use every tool, and another user only
+/// those their grants name (<see cref="MayUse"/>), so a tool is the owner's until a grant names it.
+///
+/// The autonomous profiles act with no one to review an action first, so they get reads and
+/// nothing that sends or writes, with two exceptions for clearing processed email away (see
+/// <c>mark_email_read</c>). Email and calendar are left out of StandingRule (anyone can send an
+/// email or put text in a meeting invite, and a rule checking a price doesn't need them);
+/// ScheduledTask has them, for tasks like a daily calendar summary, and its prompt marks their text
+/// as untrusted. <c>web_fetch</c> is in neither: it takes a URL the model, or an injected
+/// instruction, chooses, which is a way out for anything it read.
 /// </summary>
 public static class KernelProfilePolicy
 {
-    // Read-only functions for StandingRule evaluation. Email and calendar content are
-    // excluded: both are untrusted input channels (anyone can send an email or inject
-    // text into a meeting invite), and standing rules don't need them to check external
-    // conditions (prices, news, etc.). web_fetch is excluded because it takes an
-    // attacker-controllable URL — a direct exfiltration channel for any injected content.
-    private static readonly HashSet<string> StandingRuleAllowed = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "web_search",
-        "get_todos", "get_knowledge",
-        "get_contacts", "get_contact_by_name",
-        "get_accounts", "get_categories", "get_month_summaries",
-        "get_transactions", "get_scheduled_transactions",
-        // Safe here where web_fetch is not: the forecast reads one fixed government API rather
-        // than a URL the model (or an injected instruction) can choose.
-        "get_forecast",
-    };
+    // Every tool's declaration, by name. Read once from Ancela.Agent's [KernelFunction] methods; a
+    // function with no [Tool] (one a test builds, say) gets the defaults: the owner's, Chat only.
+    private static readonly IReadOnlyDictionary<string, ToolAttribute> Declared = ReadDeclarations();
 
-    // Read-only functions for ScheduledTask execution. Email and calendar are included
-    // because tasks like "daily calendar summary" or "email digest" legitimately need
-    // them. The system prompt explicitly marks their content as untrusted data.
-    // read_attachment too: a report sent as a file (a DMARC report, a bank's CSV) has
-    // nothing in the email's body.
-    // web_fetch is excluded because it takes an attacker-controllable URL — a direct
-    // exfiltration channel for any injected content. lookup_ip is safe here where web_fetch
-    // is not: it reaches only the internet registries, never a server the model picks.
-    // mark_email_read and trash_email are the only changes a scheduled task may make, so a task
-    // that processes emails (DMARC reports) can clear them away afterwards. They change only an
-    // email the same run has read without an error (NeedsSuccessfulRead), so they come after the
-    // processing succeeded and reach only emails the run opened. Deleted Items keeps the email
-    // and a read email can be marked unread again, so either can be undone, and the audit log
-    // records each one.
-    private static readonly HashSet<string> ScheduledTaskAllowed = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly ToolAttribute Undeclared = new();
+
+    private static Dictionary<string, ToolAttribute> ReadDeclarations()
     {
-        "web_search",
-        "get_todos", "get_knowledge",
-        "get_calendar_events", "get_recent_emails", "read_email", "read_attachment", "get_contacts", "get_contact_by_name",
-        "mark_email_read", "trash_email",
-        "lookup_ip",
-        "get_accounts", "get_categories", "get_month_summaries",
-        "get_transactions", "get_scheduled_transactions",
-        "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
-        "get_forecast",
-    };
+        var tools = new Dictionary<string, ToolAttribute>(StringComparer.OrdinalIgnoreCase);
+        var methods = typeof(KernelProfilePolicy).Assembly.GetTypes()
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly));
+        foreach (var method in methods)
+        {
+            if (method.GetCustomAttribute<KernelFunctionAttribute>() is { } function
+                && method.GetCustomAttribute<ToolAttribute>() is { } tool)
+                tools.Add(function.Name ?? method.Name, tool); // throws on two tools with one name
+        }
+        return tools;
+    }
+
+    private static ToolAttribute Of(string functionName) =>
+        Declared.TryGetValue(functionName, out var tool) ? tool : Undeclared;
+
+    /// <summary>Every declared tool's name, so tests can check each one is loaded and every loaded one declared.</summary>
+    public static IEnumerable<string> DeclaredFunctionNames => Declared.Keys;
+
+    private static readonly HashSet<string> StandingRuleAllowed = Names(t => t.Autonomous.HasFlag(Autonomy.StandingRule));
+    private static readonly HashSet<string> ScheduledTaskAllowed = Names(t => t.Autonomous.HasFlag(Autonomy.ScheduledTask));
+
+    private static HashSet<string> Names(Func<ToolAttribute, bool> where) =>
+        new(Declared.Where(d => where(d.Value)).Select(d => d.Key), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The functions a profile may use, or <c>null</c> for unrestricted profiles
@@ -92,41 +94,28 @@ public static class KernelProfilePolicy
         return allowed is null || allowed.Contains(functionName);
     }
 
-    // Functions that act on the owner's shared resources, send on the agent's behalf, or
-    // read owner-private data (email, Google Health data, the diagnostics self-check — which
-    // reveals operational/security posture — and home network status, which is presence data).
-    // Other users can't see any email content: not a preview, a whole email, or a copy of one.
-    // Non-owner users are denied access even in the otherwise-unrestricted Chat profile.
-    // This is an axis orthogonal to the profile allow-lists above — both are enforced.
-    // save_email_to_onedrive writes into the owner's OneDrive and send_email_to_remarkable onto
-    // the owner's tablet; both are in neither allow-list.
-    private static readonly HashSet<string> OwnerOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "send_sms", "send_email", "create_calendar_event", "send_to_remarkable", "save_email_to_onedrive",
-        "send_email_to_remarkable", "get_recent_emails", "read_email", "read_attachment", "mark_email_read",
-        "trash_email", "get_daily_activity", "get_sleep_summary", "get_resting_heart_rate",
-        "check_services", "check_anomalies",
-        "get_network_client_count", "get_network_uptime",
-    };
+    /// <summary>The grant that gives another user <paramref name="functionName"/>, or None if only the owner may use it.</summary>
+    public static ToolGrant GrantOf(string functionName) => Of(functionName).Grant;
+
+    /// <summary>True if no grant gives <paramref name="functionName"/> to anyone but the owner.</summary>
+    public static bool IsOwnerOnly(string functionName) => GrantOf(functionName) == ToolGrant.None;
 
     /// <summary>
-    /// True if <paramref name="functionName"/> may only be invoked by the owner (covers both
-    /// send/write actions and owner-private reads such as health data). Enforced independently
-    /// of profile: <see cref="Agent"/> drops these from the advertised set for non-owners, and
-    /// <see cref="AutonomousToolGuardFilter"/> hard-denies them as a backstop.
+    /// True if a user may use <paramref name="functionName"/>: the owner may use every tool, and
+    /// anyone else a tool every user has or one their <paramref name="grants"/> name. Enforced
+    /// independently of profile: <see cref="Agent"/> advertises only these, and
+    /// <see cref="AutonomousToolGuardFilter"/> hard-denies the rest as a backstop.
     /// </summary>
-    public static bool IsOwnerOnly(string functionName) => OwnerOnlyFunctions.Contains(functionName);
-
-    // The functions that read one email, named by their emailId argument. A read that throws
-    // counts against the email: an autonomous run won't mark it read or move it. Asking for
-    // something the email doesn't have (NotInEmailException) reads nothing, and doesn't count.
-    private static readonly HashSet<string> OneEmailReads = new(StringComparer.OrdinalIgnoreCase) { "read_email", "read_attachment" };
+    public static bool MayUse(string functionName, bool isOwner, IReadOnlySet<ToolGrant> grants) =>
+        isOwner || GrantOf(functionName) switch
+        {
+            ToolGrant.None => false,
+            ToolGrant.Always => true,
+            var grant => grants.Contains(grant),
+        };
 
     /// <summary>True if <paramref name="functionName"/> reads the one email its emailId argument names.</summary>
-    public static bool ReadsOneEmail(string functionName) => OneEmailReads.Contains(functionName);
-
-    // The functions that change one email, named by their emailId argument.
-    private static readonly HashSet<string> OneEmailChanges = new(StringComparer.OrdinalIgnoreCase) { "mark_email_read", "trash_email" };
+    public static bool ReadsOneEmail(string functionName) => Of(functionName).Email == OneEmail.Reads;
 
     /// <summary>
     /// True if, in <paramref name="profile"/>, <paramref name="functionName"/> may act only on an email
@@ -136,65 +125,31 @@ public static class KernelProfilePolicy
     /// </summary>
     public static bool NeedsSuccessfulRead(KernelProfile profile, string functionName) =>
         profile is not (KernelProfile.Chat or KernelProfile.Onboarding)
-        && OneEmailChanges.Contains(functionName);
+        && Of(functionName).Email == OneEmail.Changes;
 
-    // Reads whose results carry text that people other than the user write: anyone can email
-    // the user or put text in a meeting invite, and anyone can publish a web page. An IP
-    // address's registry record counts as the web: whoever holds the block writes its names
-    // and description. Once one of
-    // these has run, the model may be acting on instructions planted in that text, so for the
-    // rest of the message the functions below are switched off. This is the one restriction
-    // that applies in Chat. A kernel serves one message, so the next message starts clean: the
-    // user confirming is what switches them back on.
-    private static readonly Dictionary<string, UntrustedSource> UntrustedReads = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["get_recent_emails"] = UntrustedSource.MailOrCalendar,
-        ["read_email"] = UntrustedSource.MailOrCalendar,
-        ["read_attachment"] = UntrustedSource.MailOrCalendar,
-        ["get_calendar_events"] = UntrustedSource.MailOrCalendar,
-        ["web_search"] = UntrustedSource.Web,
-        ["web_fetch"] = UntrustedSource.Web,
-        ["lookup_ip"] = UntrustedSource.Web,
-    };
-
-    // What each source switches off. Sending is off after either, because a planted
-    // instruction pays off by getting something sent (forward the inbox, text this number).
-    // Instructions are off after either because remember_instruction's text goes into every
-    // later Chat prompt, which would carry an injection into messages that never read it;
-    // forget_instruction is off so one can't remove a rule the user set. web_fetch is off after
-    // mail and calendar because a URL the model picks is itself a way out (?q=<the inbox>), but
-    // stays on after a search, since opening a result is what searching is for. Left on:
-    // save_email_to_onedrive, send_email_to_remarkable and create_calendar_event, which write only
-    // into the owner's own folder, tablet and calendar (there is no attendees parameter, so no
-    // invitation goes out). mark_email_read and trash_email stay on too: they change an email
-    // only within the owner's own mailbox, and either can be undone.
-    // Not covered: text a read put into Ancela's reply carries over in history, and knowledge
-    // or to-dos saved after a read are not marked when read back later.
-    private static readonly Dictionary<string, UntrustedSource> SwitchedOffAfter = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["send_email"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
-        ["send_sms"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
-        ["remember_instruction"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
-        ["forget_instruction"] = UntrustedSource.MailOrCalendar | UntrustedSource.Web,
-        ["web_fetch"] = UntrustedSource.MailOrCalendar,
-    };
+    // Outside text: anyone can email the user or put text in a meeting invite, anyone can publish a
+    // web page, whoever holds an IP block writes its registry record, and another user writes the
+    // to-dos, facts and project entries they save. Once a read of it has run, the model may be
+    // acting on instructions planted in it, so for the rest of the message the tools whose OffAfter
+    // names it are switched off. This is the one restriction that applies in Chat. A kernel serves
+    // one message, so the next message starts clean: the user confirming is what switches them
+    // back on. Sending is off after any of it, because a planted instruction pays off by getting
+    // something sent; so are instructions, whose text goes into every later Chat prompt.
+    // Not covered: text a read put into Ancela's reply carries over in history.
 
     /// <summary>
     /// The kind of untrusted text <paramref name="functionName"/> returns, or
-    /// <see cref="UntrustedSource.None"/> if it returns none.
+    /// <see cref="UntrustedSource.None"/> if it returns none. Reads of shared data record
+    /// <see cref="UntrustedSource.OtherUsers"/> themselves, only when another user wrote what they return.
     /// </summary>
-    public static UntrustedSource UntrustedSourceOf(string functionName) =>
-        UntrustedReads.TryGetValue(functionName, out var source) ? source : UntrustedSource.None;
+    public static UntrustedSource UntrustedSourceOf(string functionName) => Of(functionName).Reads;
 
     /// <summary>
     /// The sources in <paramref name="seen"/> that switch <paramref name="functionName"/> off, or
     /// <see cref="UntrustedSource.None"/> if it may still run.
     /// </summary>
     public static UntrustedSource SwitchedOffBy(string functionName, UntrustedSource seen) =>
-        SwitchedOffAfter.TryGetValue(functionName, out var sources) ? sources & seen : UntrustedSource.None;
-
-    /// <summary>Every function named by the untrusted-content rules, so tests can check each one exists.</summary>
-    public static IEnumerable<string> UntrustedContentFunctionNames => UntrustedReads.Keys.Concat(SwitchedOffAfter.Keys);
+        Of(functionName).OffAfter & seen;
 }
 
 /// <summary>Where a read's untrusted text comes from (see <see cref="KernelProfilePolicy.UntrustedSourceOf"/>).</summary>
@@ -204,4 +159,8 @@ public enum UntrustedSource
     None = 0,
     MailOrCalendar = 1,
     Web = 2,
+    /// <summary>A to-do, fact or project another user saved: anyone but the owner and the user being served.</summary>
+    OtherUsers = 4,
+    /// <summary>Every kind: what sending and instructions are switched off after.</summary>
+    Any = MailOrCalendar | Web | OtherUsers,
 }

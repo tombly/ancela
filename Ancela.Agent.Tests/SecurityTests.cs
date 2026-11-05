@@ -110,7 +110,7 @@ public class SecurityTests
                 new Mock<IAuditLog>().Object,
                 new CorrelationContext()));
         services.AddSingleton<ITavilyClient>(_ => new Mock<ITavilyClient>().Object);
-        services.AddSingleton<ProjectsPlugin>(sp => new ProjectsPlugin(new Mock<IProjectStore>().Object));
+        services.AddSingleton<ProjectsPlugin>(sp => new ProjectsPlugin(new Mock<IProjectStore>().Object, sp.GetRequiredService<OwnerService>()));
         services.AddSingleton<WebPlugin>();
         services.AddSingleton<IRemarkableService>(_ => new Mock<IRemarkableService>().Object);
         services.AddSingleton<RemarkablePlugin>();
@@ -280,10 +280,8 @@ public class SecurityTests
     [InlineData(KernelProfile.StandingRule, "send_email")]
     [InlineData(KernelProfile.StandingRule, "create_calendar_event")]
     [InlineData(KernelProfile.StandingRule, "list_reminders")]  // not write/send, but still not allow-listed → default-deny
-    [InlineData(KernelProfile.StandingRule, "save_email_to_onedrive")]
     [InlineData(KernelProfile.ScheduledTask, "send_sms")]
     [InlineData(KernelProfile.ScheduledTask, "register_user")]
-    [InlineData(KernelProfile.ScheduledTask, "save_email_to_onedrive")]  // may read email, not copy it out
     [InlineData(KernelProfile.StandingRule, "set_todo_due_date")]
     [InlineData(KernelProfile.ScheduledTask, "set_todo_due_date")]
     [InlineData(KernelProfile.StandingRule, "send_email_to_remarkable")]
@@ -355,8 +353,10 @@ public class SecurityTests
     [Fact]
     public async Task AutonomousToolGuardFilter_AllowsReadFunction()
     {
+        // The owner's rule; GrantTests covers a guest's, whose grants also apply.
         var kernel = new Kernel();
         kernel.Data["profile"] = KernelProfile.StandingRule;
+        kernel.Data["isOwner"] = true;
         kernel.FunctionInvocationFilters.Add(
             new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
 
@@ -392,7 +392,6 @@ public class SecurityTests
     [InlineData("check_anomalies")]
     [InlineData("get_network_client_count")]
     [InlineData("get_network_uptime")]
-    [InlineData("save_email_to_onedrive")]
     [InlineData("send_email_to_remarkable")]
     [InlineData("get_recent_emails")]
     [InlineData("read_email")]
@@ -421,8 +420,8 @@ public class SecurityTests
     [Fact]
     public void OwnerOnlyFunctions_AreReadDeniedToNonOwners_ButReadsAreNot()
     {
-        // The owner-only axis covers send/write actions and owner-private reads; other reads stay
-        // open to all users.
+        // The owner-only axis covers send/write actions and owner-private reads; other reads can
+        // be granted to another user (GrantTests pins which grant gives which).
         KernelProfilePolicy.IsOwnerOnly("send_sms").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("send_email").Should().BeTrue();
         KernelProfilePolicy.IsOwnerOnly("create_calendar_event").Should().BeTrue();
@@ -434,8 +433,6 @@ public class SecurityTests
             because: "who is connected at home is presence data");
         KernelProfilePolicy.IsOwnerOnly("get_network_uptime").Should().BeTrue(
             because: "home network status is owner-private");
-        KernelProfilePolicy.IsOwnerOnly("save_email_to_onedrive").Should().BeTrue(
-            because: "it writes the owner's email into the owner's OneDrive");
         KernelProfilePolicy.IsOwnerOnly("send_email_to_remarkable").Should().BeTrue(
             because: "it sends the owner's email to the owner's tablet");
         KernelProfilePolicy.IsOwnerOnly("get_recent_emails").Should().BeTrue(
@@ -515,12 +512,10 @@ public class SecurityTests
     }
 
     [Theory]
-    [InlineData("get_recent_emails", "save_email_to_onedrive")]  // writes only into the owner's folder
     [InlineData("get_recent_emails", "send_email_to_remarkable")]  // sends only to the owner's tablet
     [InlineData("get_recent_emails", "create_calendar_event")]   // no attendees, so no invitation goes out
     [InlineData("get_recent_emails", "get_recent_emails")]
     [InlineData("get_recent_emails", "read_email")]
-    [InlineData("read_email", "save_email_to_onedrive")]
     [InlineData("read_attachment", "lookup_ip")]                 // the registries are the only place it goes
     [InlineData("read_email", "trash_email")]                    // moves only within the owner's mailbox, and can be undone
     [InlineData("read_email", "mark_email_read")]                // likewise
@@ -571,19 +566,29 @@ public class SecurityTests
     }
 
     [Fact]
-    public void UntrustedContentFunctionNames_AllMapToRealFunctions()
+    public void EveryLoadedFunction_DeclaresItsPolicy()
     {
-        // A misspelt name here would quietly switch nothing off.
-        var factory = BuildFactory();
-        var loaded = factory.Create(KernelProfile.Chat).Plugins
+        // A tool without [Tool] is the owner's, Chat only, and reads nothing outside: safe for who
+        // may call it, but a read of outside text left undeclared would switch nothing off.
+        var loaded = LoadedFunctionNames();
+
+        var undeclared = loaded.Except(KernelProfilePolicy.DeclaredFunctionNames, StringComparer.OrdinalIgnoreCase).ToList();
+        undeclared.Should().BeEmpty(
+            because: $"every tool must say who may use it and what it reads, but these don't: {string.Join(", ", undeclared)}");
+    }
+
+    [Fact]
+    public void EveryDeclaredFunction_IsLoaded()
+    {
+        var unloaded = KernelProfilePolicy.DeclaredFunctionNames.Except(LoadedFunctionNames(), StringComparer.OrdinalIgnoreCase).ToList();
+        unloaded.Should().BeEmpty(because: $"a declared tool KernelFactory doesn't load is dead policy: {string.Join(", ", unloaded)}");
+    }
+
+    private static HashSet<string> LoadedFunctionNames() =>
+        BuildFactory().Create(KernelProfile.Chat).Plugins
             .SelectMany(p => p)
             .Select(f => f.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var unknown = KernelProfilePolicy.UntrustedContentFunctionNames.Where(n => !loaded.Contains(n)).ToList();
-        unknown.Should().BeEmpty(
-            because: $"every name in the untrusted-content rules must map to a real function, but these don't: {string.Join(", ", unknown)}");
-    }
 
     // --- mark_email_read and trash_email: the only changes a scheduled task may make ---
 

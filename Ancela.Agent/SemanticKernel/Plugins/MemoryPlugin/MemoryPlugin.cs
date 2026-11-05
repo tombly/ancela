@@ -14,6 +14,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, OwnerService _ownerService)
 {
     [KernelFunction("save_todo")]
+    [Tool(Grant = ToolGrant.Todos)]
     [Description("Saves a to-do to the database")]
     public async Task SaveToDoAsync(Kernel kernel,
         [Description("The to-do content to save")]
@@ -33,6 +34,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("set_todo_due_date")]
+    [Tool]
     [Description("Sets, changes or removes the due date of an existing to-do. Use the get_todos function to retrieve todo IDs.")]
     public async Task SetToDoDueDateAsync(Kernel kernel,
         [Description("The GUID identifier of the to-do")]
@@ -46,6 +48,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("get_todos")]
+    [Tool(Grant = ToolGrant.Todos, Autonomous = Autonomy.Both)]
     [Description("Retrieves to-dos from the database for the current agent: those with a due date first, soonest first, each with DaysUntilDue (0 on the day, negative once passed), then the rest oldest first. Links in them come back as (link) unless includeLinks is true.")]
     public async Task<ToDoModel[]> GetToDosAsync(Kernel kernel,
         [Description("True only when the user wants a link from a to-do. Leave it false to list to-dos, so a long link doesn't fill the text.")]
@@ -54,6 +57,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
         EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
         var todos = await _memoryService.GetToDosAsync(agentPhoneNumber);
+        KernelData.ReadTextBy(kernel, _ownerService, todos.Select(t => t.UserPhoneNumber));
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, KernelData.UserTimeZone(kernel)).DateTime);
 
         // The to-do keeps the whole link; only the listing shortens it. One ~600-character
@@ -85,6 +89,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     private static readonly Regex Link = new(@"https?://\S+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     [KernelFunction("delete_todo")]
+    [Tool]
     [Description("Deletes a to-do from the database given its ID which is a GUID. Use the get_todos function to retrieve todo IDs.")]
     public async Task DeleteToDoAsync(Kernel kernel,
         [Description("The GUID identifier of the to-do to delete")]
@@ -96,6 +101,7 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("save_knowledge")]
+    [Tool(Grant = ToolGrant.Knowledge)]
     [Description("Saves a knowledge entry to the database")]
     public async Task SaveKnowledgeAsync(Kernel kernel,
         [Description("The knowledge content to save")]
@@ -111,15 +117,19 @@ public class MemoryPlugin(IMemoryClient _memoryService, SmsService _smsService, 
     }
 
     [KernelFunction("get_knowledge")]
+    [Tool(Grant = ToolGrant.Knowledge, Autonomous = Autonomy.Both)]
     [Description("Retrieves the knowledge entries: what the user asked you to remember with save_knowledge, facts about them and the people, places and things in their life. They are not listed in Current context, so call this before telling the user you don't know something about them, before saying something is or isn't saved, and to get an entry's ID for delete_knowledge.")]
     public async Task<KnowledgeModel[]> GetKnowledgeAsync(Kernel kernel)
     {
         EnsureKernelData(kernel);
         var agentPhoneNumber = kernel.Data["agentPhoneNumber"]?.ToString()!;
-        return await _memoryService.GetKnowledgeAsync(agentPhoneNumber);
+        var knowledge = await _memoryService.GetKnowledgeAsync(agentPhoneNumber);
+        KernelData.ReadTextBy(kernel, _ownerService, knowledge.Select(k => k.UserPhoneNumber));
+        return knowledge;
     }
 
     [KernelFunction("delete_knowledge")]
+    [Tool]
     [Description("Deletes a knowledge entry from the database given its ID which is a GUID. Use the get_knowledge function to retrieve knowledge IDs.")]
     public async Task DeleteKnowledgeAsync(Kernel kernel,
         [Description("The GUID identifier of the knowledge entry to delete")]

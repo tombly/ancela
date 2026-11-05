@@ -14,6 +14,7 @@ public class ScheduledTaskPlugin(
     ILogger<ScheduledTaskPlugin> _logger)
 {
     [KernelFunction("create_scheduled_task")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Creates a recurring task that runs at a set local time on chosen days and sends the user the result by SMS, e.g. 'send me a summary of my calendar each morning'. Unlike a reminder (a one-time message you write at a fixed moment) or a standing rule (a condition watched continuously), a scheduled task re-runs on a clock schedule and freshly generates its message each time.")]
     public async Task<string> CreateScheduledTaskAsync(Kernel kernel,
         [Description("What to do each run, in plain language, e.g. 'summarize today's calendar events and any urgent emails'.")] string description,
@@ -76,6 +77,7 @@ public class ScheduledTaskPlugin(
     }
 
     [KernelFunction("list_scheduled_tasks")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Lists the user's recurring scheduled tasks, oldest first.")]
     public async Task<ScheduledTask[]> ListScheduledTasksAsync(Kernel kernel)
     {
@@ -84,6 +86,7 @@ public class ScheduledTaskPlugin(
     }
 
     [KernelFunction("pause_scheduled_task")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Pauses a recurring scheduled task so it stops running until resumed. Use list_scheduled_tasks to look up IDs.")]
     public async Task<string> PauseScheduledTaskAsync(Kernel kernel,
         [Description("The scheduled task ID (GUID) to pause.")] string taskId)
@@ -105,6 +108,7 @@ public class ScheduledTaskPlugin(
     }
 
     [KernelFunction("resume_scheduled_task")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Resumes a paused scheduled task, scheduling its next run. Use list_scheduled_tasks to look up IDs.")]
     public async Task<string> ResumeScheduledTaskAsync(Kernel kernel,
         [Description("The scheduled task ID (GUID) to resume.")] string taskId)
@@ -132,6 +136,7 @@ public class ScheduledTaskPlugin(
     }
 
     [KernelFunction("delete_scheduled_task")]
+    [Tool(Grant = ToolGrant.Automation)]
     [Description("Permanently deletes a recurring scheduled task. Use list_scheduled_tasks to look up IDs.")]
     public async Task<string> DeleteScheduledTaskAsync(Kernel kernel,
         [Description("The scheduled task ID (GUID) to delete.")] string taskId)

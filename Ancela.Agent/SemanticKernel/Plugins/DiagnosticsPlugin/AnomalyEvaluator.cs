@@ -78,6 +78,8 @@ public static class AnomalyEvaluator
         var accessChanges = new List<string>();
         if (activity.InviteCount > 0) accessChanges.Add($"{activity.InviteCount} invite(s)");
         if (activity.RevokeCount > 0) accessChanges.Add($"{activity.RevokeCount} revoke(s)");
+        if (activity.GrantCount > 0) accessChanges.Add($"{activity.GrantCount} grant(s)");
+        if (activity.UngrantCount > 0) accessChanges.Add($"{activity.UngrantCount} ungrant(s)");
         if (activity.DeregisterCount > 0) accessChanges.Add($"{activity.DeregisterCount} deregistration(s)");
         if (accessChanges.Count > 0)
             findings.Add(new AnomalyFinding
