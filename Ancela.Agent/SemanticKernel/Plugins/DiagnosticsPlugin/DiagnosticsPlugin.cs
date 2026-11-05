@@ -6,14 +6,15 @@ namespace Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
 
 /// <summary>
 /// Owner-only self-check functions: on-demand service reachability probes and an audit-log
-/// anomaly scan. Both names are in <see cref="KernelProfilePolicy"/>'s owner-only set and in
-/// neither autonomous allow-list, so they are owner-initiated Chat-profile tools only.
+/// anomaly scan. Both are declared (<see cref="ToolAttribute"/>) with no grant and no autonomous
+/// profile, so they are owner-initiated Chat-profile tools only.
 /// </summary>
 public class DiagnosticsPlugin(IServiceHealthChecker _healthChecker, IAuditAnomalyScanner _anomalyScanner)
 {
     private const int MaxWindowHours = 720; // 30 days
 
     [KernelFunction("check_services")]
+    [Tool]
     [Description("Self-check (owner only): probes every connected service — Cosmos DB, Service Bus " +
         "dead-letter queues, Twilio, Microsoft Graph, the OneDrive folder grant, YNAB, Tavily web search, Google Health, " +
         "reMarkable, and the UniFi network — and reports per-service status, latency, and any failures. Use when the owner " +
@@ -24,6 +25,7 @@ public class DiagnosticsPlugin(IServiceHealthChecker _healthChecker, IAuditAnoma
     }
 
     [KernelFunction("check_anomalies")]
+    [Tool]
     [Description("Self-check (owner only): scans the audit log for anomalous activity — messages from " +
         "unknown numbers, failed owner step-up (TOTP) attempts, blocked tool calls, unusually high " +
         "web-search/SMS/email volume, tool errors, and access changes. Returns a deterministic " +

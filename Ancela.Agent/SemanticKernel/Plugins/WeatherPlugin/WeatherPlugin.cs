@@ -7,6 +7,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.WeatherPlugin;
 public class WeatherPlugin(IWeatherClient _weatherClient)
 {
     [KernelFunction("get_forecast")]
+    [Tool(Grant = ToolGrant.Web, Autonomous = Autonomy.Both)]
     [Description("Gets the weather forecast for a US location from the National Weather Service: "
         + "today's daytime high, tonight's low, conditions, and the next few periods. Prefer this "
         + "over web_search for any weather question — it labels highs and lows explicitly, which "

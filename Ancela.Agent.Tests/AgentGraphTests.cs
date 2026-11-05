@@ -58,33 +58,34 @@ public class AgentGraphTests : AgentTestBase
     }
 
     [Fact]
-    public async Task SaveEmail_WhenTheNamedEmailIsOlderThanTheNewest50_FindsItBySearch()
+    public async Task SendEmailToRemarkable_WhenTheNamedEmailIsOlderThanTheNewest50_FindsItBySearch()
     {
-        // The production bug: the email the owner named was older than the 50 newest, which is all
-        // a plain listing returns, and the model saved the newest email in its place.
+        // The production bug, then with save_email_to_onedrive: the email the owner named was older
+        // than the 50 newest, which is all a plain listing returns, and the model saved the newest
+        // email in its place.
         var named = CreateEmail("named", "noreply@newsletter.example", "An update to your account number", hoursAgo: 28 * 24);
         SetupEmails(search => search?.Contains("newsletter", StringComparison.OrdinalIgnoreCase) == true ? [named] : NewestFifty());
-        SetupSave();
+        SetupRemarkable();
 
-        await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
-            MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
+        await SendUntilAsync("send the email from noreply@newsletter.example to my reMarkable", () =>
+            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
 
-        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
-            Times.Never, "no other email may be saved in its place");
+        MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+            Times.Never, "no other email may be sent in its place");
     }
 
     [Fact]
-    public async Task SaveEmail_WhenTheNamedEmailIsNowhere_SavesNothing()
+    public async Task SendEmailToRemarkable_WhenTheNamedEmailIsNowhere_SendsNothing()
     {
         SetupEmails(search => search is null ? NewestFifty() : []);
-        SetupSave();
+        SetupRemarkable();
 
-        await SendUntilAsync("save the email from noreply@newsletter.example to OneDrive", () =>
+        await SendUntilAsync("send the email from noreply@newsletter.example to my reMarkable", () =>
             MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
                 Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
 
-        MockGraphClient.Verify(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
-            Times.Never, "when the named email can't be found, nothing may be saved in its place");
+        MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+            Times.Never, "when the named email can't be found, nothing may be sent in its place");
     }
 
     [Fact]
@@ -420,18 +421,25 @@ public class AgentGraphTests : AgentTestBase
     }
 
     /// <summary>
-    /// Configures SaveEmailAsPdfAsync to succeed for any email.
+    /// Loads the reMarkable tools, with RenderEmailAsPdfAsync succeeding for any email and the
+    /// tablet accepting every PDF.
     /// </summary>
-    protected void SetupSave()
+    protected void SetupRemarkable()
     {
+        var remarkable = new Mock<IRemarkableService>();
+        remarkable
+            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("doc-id");
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
         MockGraphClient
-            .Setup(g => g.SaveEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
-            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new SavedEmailModel
+            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailPdfModel
             {
-                FileName = $"{id}.pdf",
-                Saved = true,
-                WebUrl = "https://example.com/onedrive/file",
+                Subject = id,
+                ReceivedDateTime = DateTimeOffset.UtcNow,
+                Pdf = "%PDF-1.7"u8.ToArray(),
                 LinkedImages = 0,
+                ImagesMissing = 0,
             });
     }
 

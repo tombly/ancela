@@ -27,7 +27,8 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
     // The guard filter's denial messages (see AutonomousToolGuardFilter) — how a hard-denied
     // invocation is distinguished from an ordinary tool error in the audit log.
     private const string ProfileDenialMarker = "is not permitted in the";
-    private const string OwnerOnlyDenialMarker = "may only be invoked by the owner";
+    private const string OwnerOnlyDenialMarker = "may only be invoked by the owner"; // before grants (2026-11)
+    private const string NotGrantedDenialMarker = AutonomousToolGuardFilter.NotGrantedDenialMarker;
     private const string UntrustedContentDenialMarker = AutonomousToolGuardFilter.UntrustedContentDenialMarker;
     private const string UnreadEmailDenialMarker = AutonomousToolGuardFilter.UnreadEmailDenialMarker;
 
@@ -64,6 +65,8 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
             GuardDenialCount = denialsTask.Result,
             InviteCount = sessionOps.GetValueOrDefault("invite"),
             RevokeCount = sessionOps.GetValueOrDefault("revoke"),
+            GrantCount = sessionOps.GetValueOrDefault("grant"),
+            UngrantCount = sessionOps.GetValueOrDefault("ungrant"),
             DeregisterCount = sessionOps.GetValueOrDefault("deregister"),
             WebSearchCount = volumes.GetValueOrDefault("web_search"),
             SmsSendCount = volumes.GetValueOrDefault("send_sms"),
@@ -134,6 +137,7 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
             WHERE c.agentPhoneNumber = @agent AND c.timestamp >= @cutoff
               AND c.success = false
               AND (CONTAINS(c.error, '{ProfileDenialMarker}') OR CONTAINS(c.error, '{OwnerOnlyDenialMarker}')
+                   OR CONTAINS(c.error, '{NotGrantedDenialMarker}')
                    OR CONTAINS(c.error, '{UntrustedContentDenialMarker}') OR CONTAINS(c.error, '{UnreadEmailDenialMarker}'))
             """)
             .WithParameter("@agent", agentPhoneNumber)
@@ -150,7 +154,7 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
             SELECT c["function"] AS fn, COUNT(1) AS count FROM c
             WHERE c.agentPhoneNumber = @agent AND c.timestamp >= @cutoff
               AND c.category = 'session' AND c.success = true
-              AND c["function"] IN ('invite', 'revoke', 'deregister')
+              AND c["function"] IN ('invite', 'revoke', 'grant', 'ungrant', 'deregister')
             GROUP BY c["function"]
             """)
             .WithParameter("@agent", agentPhoneNumber)

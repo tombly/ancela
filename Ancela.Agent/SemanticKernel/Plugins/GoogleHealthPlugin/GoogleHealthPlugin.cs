@@ -7,11 +7,12 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
 /// <summary>
 /// A Semantic Kernel plugin exposing the owner's health data (activity, sleep, resting heart rate)
 /// from the Google Health API. Responses are mapped to slim models to keep token cost down. These
-/// functions read owner-private health data and are gated owner-only in <c>KernelProfilePolicy</c>.
+/// functions read owner-private health data, so no grant gives them to another user (<see cref="ToolAttribute"/>).
 /// </summary>
 public class GoogleHealthPlugin(GoogleHealthClient _googleHealthClient)
 {
     [KernelFunction("get_daily_activity")]
+    [Tool(Autonomous = Autonomy.ScheduledTask)]
     [Description("Gets step count, distance, calories burned, and active minutes (light/moderate/vigorous) for a date. Defaults to today.")]
     public async Task<DailyActivityModel?> GetDailyActivityAsync(
         [Description("Date in YYYY-MM-DD format, or 'today'. Defaults to today.")] string? date = null)
@@ -20,6 +21,7 @@ public class GoogleHealthPlugin(GoogleHealthClient _googleHealthClient)
     }
 
     [KernelFunction("get_sleep_summary")]
+    [Tool(Autonomous = Autonomy.ScheduledTask)]
     [Description("Gets sleep duration, efficiency, and stage breakdown (deep/light/rem/awake) for a date. Defaults to today.")]
     public async Task<SleepSummaryModel?> GetSleepSummaryAsync(
         [Description("Date in YYYY-MM-DD format, or 'today'. Defaults to today.")] string? date = null)
@@ -28,6 +30,7 @@ public class GoogleHealthPlugin(GoogleHealthClient _googleHealthClient)
     }
 
     [KernelFunction("get_resting_heart_rate")]
+    [Tool(Autonomous = Autonomy.ScheduledTask)]
     [Description("Gets daily resting heart rate over a date range (max 14 days).")]
     public async Task<HeartRateModel[]> GetRestingHeartRateAsync(
         [Description("Start date in YYYY-MM-DD format.")] string startDate,

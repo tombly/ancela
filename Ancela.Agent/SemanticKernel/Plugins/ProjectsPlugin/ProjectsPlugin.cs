@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Linq;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin.Models;
+using Ancela.Agent.Services;
 using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
@@ -9,9 +10,10 @@ namespace Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 /// Functions the model may call to manage projects — workspaces for larger,
 /// longer-lived efforts — and their embedded trackable entries.
 /// </summary>
-public class ProjectsPlugin(IProjectStore _store)
+public class ProjectsPlugin(IProjectStore _store, OwnerService _ownerService)
 {
     [KernelFunction("create_project")]
+    [Tool(Grant = ToolGrant.Projects)]
     [Description("Creates a new project: a workspace for a larger or longer-lived effort (planning a trip, tracking a list until it's complete, collecting feature ideas, etc.). Use a project instead of a to-do when the user wants to capture ideas, plan, or track a list over time. Returns the new project's ID.")]
     public async Task<string> CreateProjectAsync(Kernel kernel,
         [Description("A short name for the project, e.g. 'Backpacking Trip' or 'Verify Account Beneficiaries'.")] string name,
@@ -40,14 +42,18 @@ public class ProjectsPlugin(IProjectStore _store)
     }
 
     [KernelFunction("list_projects")]
+    [Tool(Grant = ToolGrant.Projects)]
     [Description("Lists the user's active (non-archived) projects with their IDs, names, and purposes, oldest first. Use this to resolve a project the user refers to by name.")]
     public async Task<ProjectSummary[]> ListProjectsAsync(Kernel kernel)
     {
         var (agentPhoneNumber, _) = RequireContext(kernel);
-        return await _store.ListAsync(agentPhoneNumber);
+        var projects = await _store.ListAsync(agentPhoneNumber);
+        KernelData.ReadTextBy(kernel, _ownerService, projects.Select(p => p.UserPhoneNumber));
+        return projects;
     }
 
     [KernelFunction("get_project")]
+    [Tool(Grant = ToolGrant.Projects)]
     [Description("Gets a single project's full detail: purpose, freeform notes body, and its (non-deleted) entries. Use list_projects first to resolve a name to an ID.")]
     public async Task<Project> GetProjectAsync(Kernel kernel,
         [Description("The project ID (GUID).")] string projectId)
@@ -64,10 +70,13 @@ public class ProjectsPlugin(IProjectStore _store)
             .Where(e => !e.Deleted)
             .OrderBy(e => string.IsNullOrWhiteSpace(e.Category))
             .ThenBy(e => e.Category, StringComparer.OrdinalIgnoreCase)];
+        KernelData.ReadTextBy(kernel, _ownerService,
+            [project.UserPhoneNumber, .. project.Entries.Select(e => e.AddedBy ?? project.UserPhoneNumber)]);
         return project;
     }
 
     [KernelFunction("update_project")]
+    [Tool]
     [Description("Updates a project's name, purpose, freeform notes body, or archived state. Only the fields you pass change. The notes parameter REPLACES the entire notes body — to edit notes, first read them with get_project, modify the text, then pass the full updated text. Archive a project (isArchived = true) when it is finished or set aside instead of deleting it.")]
     public async Task<string> UpdateProjectAsync(Kernel kernel,
         [Description("The project ID (GUID).")] string projectId,
@@ -83,6 +92,7 @@ public class ProjectsPlugin(IProjectStore _store)
     }
 
     [KernelFunction("add_project_entry")]
+    [Tool(Grant = ToolGrant.Projects)]
     [Description("Adds a trackable entry to a project, e.g. an account to verify, an item to sell, or a packing-list item. Optionally give it a short status label like 'open'/'done'/'sold', and a category label to group it into a named list within the project (e.g. 'packing', 'gear', 'trail-candidate'). Returns the new entry's ID.")]
     public async Task<string> AddProjectEntryAsync(Kernel kernel,
         [Description("The project ID (GUID) to add the entry to.")] string projectId,
@@ -90,7 +100,7 @@ public class ProjectsPlugin(IProjectStore _store)
         [Description("Optional short status label, e.g. 'open' or 'done'.")] string? status = null,
         [Description("Optional category label that groups this entry into a named list within the project, e.g. 'packing' or 'trail-candidate'. Reuse the exact same label for items that belong in the same list.")] string? category = null)
     {
-        var (agentPhoneNumber, _) = RequireContext(kernel);
+        var (agentPhoneNumber, userPhoneNumber) = RequireContext(kernel);
         var pid = ParseId(projectId, nameof(projectId));
         if (string.IsNullOrWhiteSpace(content))
             throw new ArgumentException("content must not be empty.", nameof(content));
@@ -102,12 +112,14 @@ public class ProjectsPlugin(IProjectStore _store)
             Status = string.IsNullOrWhiteSpace(status) ? null : status.Trim(),
             Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
             Deleted = false,
+            AddedBy = userPhoneNumber,
         };
         var ok = await _store.AddEntryAsync(pid, agentPhoneNumber, entry);
         return ok ? $"Added entry {entry.Id} to project {pid}." : $"Project {pid} not found.";
     }
 
     [KernelFunction("update_project_entry")]
+    [Tool]
     [Description("Updates an entry's text, status, and/or category within a project. Use get_project to look up the project and entry IDs.")]
     public async Task<string> UpdateProjectEntryAsync(Kernel kernel,
         [Description("The project ID (GUID) the entry belongs to.")] string projectId,
@@ -124,6 +136,7 @@ public class ProjectsPlugin(IProjectStore _store)
     }
 
     [KernelFunction("delete_project_entry")]
+    [Tool]
     [Description("Removes an entry from a project. Use get_project to look up the project and entry IDs.")]
     public async Task<string> DeleteProjectEntryAsync(Kernel kernel,
         [Description("The project ID (GUID) the entry belongs to.")] string projectId,

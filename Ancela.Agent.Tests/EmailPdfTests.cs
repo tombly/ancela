@@ -7,9 +7,8 @@ using Microsoft.Graph.Models;
 namespace Ancela.Agent.Tests;
 
 /// <summary>
-/// Unit tests for the I/O-free half of turning an email into a PDF: the file name built from a
-/// subject that anyone who emails the owner controls, the HTML page Graph converts, and writing the
-/// email's images into that page. OneDriveLiveTests covers the Graph calls.
+/// Unit tests for the I/O-free half of turning an email into a PDF: the HTML page Graph converts,
+/// and writing the email's images into that page. OneDriveLiveTests covers the Graph calls.
 /// </summary>
 public class EmailPdfTests
 {
@@ -17,56 +16,6 @@ public class EmailPdfTests
 
     // 02:30 UTC on the 14th is 19:30 PDT on the 13th.
     private static readonly DateTimeOffset Received = new(2026, 10, 14, 2, 30, 0, TimeSpan.Zero);
-
-    [Fact]
-    public void FileName_LeadsWithTheUsersLocalDateAndTime()
-    {
-        EmailPdf.FileName("Invoice 42", Received, Pacific)
-            .Should().Be("2026-10-13 1930 Invoice 42.pdf", because: "an evening email must not be filed under tomorrow's UTC date");
-    }
-
-    [Fact]
-    public void FileName_StripsPathAndUrlCharactersFromTheSubject()
-    {
-        var name = EmailPdf.FileName("../../Re: {x} #1 100% <b>a|b</b>?*\"\\", Received, Pacific);
-
-        name.Should().Be("2026-10-13 1930 .. .. Re x 1 100 b a b b.pdf");
-        name.Should().NotContainAny(["/", "\\", ":", "{", "}", "#", "%", "<", ">", "|", "?", "*", "\""]);
-    }
-
-    [Fact]
-    public void FileName_FlattensControlCharactersAndDefusesVti()
-    {
-        EmailPdf.FileName("Line1\r\nLine2\t_vti_bin", Received, Pacific)
-            .Should().Be("2026-10-13 1930 Line1 Line2 _vti bin.pdf", because: "SharePoint refuses names containing _vti_");
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("???")]
-    [InlineData("...")]
-    public void FileName_WithNothingUsableInTheSubject_SaysNoSubject(string? subject)
-    {
-        EmailPdf.FileName(subject, Received, Pacific).Should().Be("2026-10-13 1930 (no subject).pdf");
-    }
-
-    [Fact]
-    public void FileName_TrimsTrailingPeriods()
-    {
-        EmailPdf.FileName("Done...", Received, Pacific).Should().Be("2026-10-13 1930 Done.pdf");
-    }
-
-    [Fact]
-    public void FileName_TruncatesALongSubjectWithoutSplittingAnEmoji()
-    {
-        // 99 letters then an emoji (a surrogate pair) straddling the 100-character cut.
-        var name = EmailPdf.FileName(new string('a', 99) + "😀 and more", Received, Pacific);
-
-        name.Should().Be($"2026-10-13 1930 {new string('a', 99)}.pdf");
-        name.Any(char.IsSurrogate).Should().BeFalse(because: "half a surrogate pair is not valid text");
-    }
 
     [Fact]
     public void Html_EncodesTheSenderControlledHeaders()

@@ -8,6 +8,7 @@ public class GraphPlugin(IGraphClient graphClient)
     #region Calendar
 
     [KernelFunction("get_calendar_events")]
+    [Tool(Grant = ToolGrant.Calendar, Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.MailOrCalendar)]
     [Description("Retrieves calendar events for the user within the specified date range.")]
     public async Task<EventModel[]> GetCalendarEventsAsync(
          [Description("The start date and time of the range to query")]
@@ -19,6 +20,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("create_calendar_event")]
+    [Tool]
     [Description("Creates a new calendar event for the user with the specified details.")]
     public async Task<EventModel> CreateCalendarEventAsync(
          [Description("The subject or title of the event.")]
@@ -42,6 +44,7 @@ public class GraphPlugin(IGraphClient graphClient)
     #region Email
 
     [KernelFunction("get_recent_emails")]
+    [Tool(Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.MailOrCalendar)]
     [Description("Retrieves emails from one of the user's mail folders, newest first, at most 50. Reads the inbox unless the user explicitly asks for sent or deleted mail. Without a search the 50 newest may cover only the last day or two, so to find a particular email, pass search.")]
     public async Task<EmailModel[]> GetRecentEmailsAsync(
          [Description("Which mail folder to read: Inbox, Sent, or Deleted. Defaults to Inbox.")]
@@ -53,6 +56,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("read_email")]
+    [Tool(Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.MailOrCalendar, Email = OneEmail.Reads)]
     [Description("Reads one email in full: sender, recipients, date, the whole body as text and the names of its attachments. get_recent_emails shows only the first few lines of each email, so use this to find out what an email says.")]
     public async Task<EmailContentModel> ReadEmailAsync(
          [Description("The email's id, exactly as returned by get_recent_emails.")]
@@ -62,6 +66,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("read_attachment")]
+    [Tool(Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.MailOrCalendar, Email = OneEmail.Reads)]
     [Description("Reads a text file attached to an email (.txt, .csv, .xml, .json, .ics and the like), unpacking a .zip or .gz first. Doesn't read PDFs, images or Office documents. read_email lists an email's attachments.")]
     public async Task<AttachmentContentModel> ReadAttachmentAsync(
          [Description("The email's id, exactly as returned by get_recent_emails.")]
@@ -73,6 +78,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("mark_email_read")]
+    [Tool(Autonomous = Autonomy.ScheduledTask, Email = OneEmail.Changes)]
     [Description("Marks one email as read, or as unread. Only when the user or the task asks for it.")]
     public async Task<string> MarkEmailReadAsync(
          [Description("The email's id, exactly as returned by get_recent_emails.")]
@@ -84,6 +90,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("trash_email")]
+    [Tool(Autonomous = Autonomy.ScheduledTask, Email = OneEmail.Changes)]
     [Description("Moves one email to Deleted Items, where it can still be read and restored. Only when the user or the task asks for it. The move gives the email a new id, so do anything else to it first, such as marking it read.")]
     public async Task<string> TrashEmailAsync(
          [Description("The email's id, exactly as returned by get_recent_emails.")]
@@ -93,6 +100,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("send_email")]
+    [Tool(OffAfter = UntrustedSource.Any)]
     [Description("Sends an email to the specified recipient.")]
     public async Task<string> SendEmailAsync(
          [Description("The email address of the recipient.")]
@@ -105,27 +113,12 @@ public class GraphPlugin(IGraphClient graphClient)
         return await graphClient.SendEmailAsync(toAddress, subject, body);
     }
 
-    [KernelFunction("save_email_to_onedrive")]
-    [Description("Saves one of the user's emails as a PDF in the Ancela folder of their OneDrive and returns the file's name and link. Only when the user asks.")]
-    public async Task<SavedEmailModel> SaveEmailToOneDriveAsync(
-         Kernel kernel,
-         [Description("The email's id, exactly as returned by get_recent_emails.")]
-         string emailId,
-         [Description(EmailPdf.IncludeLinkedImagesDescription)]
-         bool? includeLinkedImages = null)
-    {
-        if (includeLinkedImages is null && await graphClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
-            return new SavedEmailModel { Saved = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was saved yet.") };
-
-        // The file name leads with the received date, which should be the user's date, not UTC's.
-        return await graphClient.SaveEmailAsPdfAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
-    }
-
     #endregion
 
     #region Contacts
 
     [KernelFunction("get_contacts")]
+    [Tool(Grant = ToolGrant.Contacts, Autonomous = Autonomy.Both)]
     [Description("Retrieves the user's contacts from their address book: names, email addresses and phone numbers. What the user asked you to remember about someone is saved knowledge (get_knowledge), not a contact.")]
     public async Task<ContactModel[]> GetContactsAsync(
          [Description("The maximum number of contacts to retrieve.")]
@@ -135,6 +128,7 @@ public class GraphPlugin(IGraphClient graphClient)
     }
 
     [KernelFunction("get_contact_by_name")]
+    [Tool(Grant = ToolGrant.Contacts, Autonomous = Autonomy.Both)]
     [Description("Searches for and retrieves a specific contact by their name (searches display name, first name, and last name).")]
     public async Task<ContactModel?> GetContactByNameAsync(
          [Description("The name to search for.")]

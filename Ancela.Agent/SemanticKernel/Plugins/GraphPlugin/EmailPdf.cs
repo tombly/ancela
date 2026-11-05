@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -9,22 +8,14 @@ using Microsoft.Graph.Models;
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
-/// The I/O-free parts of turning an email into a PDF: naming the file, rendering the email as one
-/// HTML page, and writing its images into that page. <see cref="GraphClient"/> does the Graph calls.
+/// The I/O-free parts of turning an email into a PDF: rendering the email as one HTML page, and
+/// writing its images into that page. <see cref="GraphClient"/> does the Graph calls.
 /// </summary>
 public static class EmailPdf
 {
     /// <summary>Graph converts files to PDF only up to this size (documented limit).</summary>
     public const int ConversionLimitBytes = 2 * 1024 * 1024;
 
-    private const int MaxTitleLength = 100;
-
-    // OneDrive rejects " * : < > ? / \ |. Braces, # and % are legal there but are dropped too: a
-    // subject is written by whoever sent the email, and these are the characters that mean
-    // something in a URL or a URL template.
-    private static readonly SearchValues<char> UnsafeNameChars = SearchValues.Create("\"*:<>?/\\|{}#%");
-
-    private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex BodyTag = new(@"<body\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ImgTag = new(@"<img\b[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     // The whitespace before src keeps data-src and the like from matching.
@@ -43,41 +34,6 @@ public static class EmailPdf
         $"{notDone} The email links to {count} image{(count == 1 ? "" : "s")} on the sender's servers, and downloading "
         + "them lets the sender see that the email was opened. Ask the user whether to include them, then call again "
         + "with includeLinkedImages set to their answer.";
-
-    /// <summary>
-    /// "2026-10-13 0915 Subject.pdf". The local received time leads so the folder sorts by date, and
-    /// goes to the minute so two same-day emails with one subject (receipts, alerts) don't overwrite
-    /// each other. Saving the same email twice yields the same name, and the upload replaces it.
-    /// </summary>
-    public static string FileName(string? subject, DateTimeOffset received, TimeZoneInfo timeZone)
-    {
-        var local = TimeZoneInfo.ConvertTime(received, timeZone);
-        return $"{local.ToString("yyyy-MM-dd HHmm", CultureInfo.InvariantCulture)} {Title(subject)}.pdf";
-    }
-
-    private static string Title(string? subject)
-    {
-        var cleaned = new StringBuilder();
-        foreach (var c in subject ?? string.Empty)
-            cleaned.Append(char.IsControl(c) || UnsafeNameChars.Contains(c) ? ' ' : c);
-
-        // SharePoint, which stores OneDrive for Business, refuses any name containing "_vti_".
-        var title = Whitespace.Replace(cleaned.ToString(), " ")
-            .Replace("_vti_", "_vti ", StringComparison.OrdinalIgnoreCase)
-            .Trim();
-
-        if (title.Length > MaxTitleLength)
-        {
-            var cut = MaxTitleLength;
-            if (char.IsHighSurrogate(title[cut - 1]))
-                cut--; // don't split an emoji's surrogate pair
-            title = title[..cut];
-        }
-
-        // A trailing period would read as "Subject..pdf".
-        title = title.TrimEnd('.', ' ');
-        return title.Length == 0 ? "(no subject)" : title;
-    }
 
     /// <summary>
     /// The email as one HTML page: a From/Sent/To/Cc/Subject block like the one Graph prints for an

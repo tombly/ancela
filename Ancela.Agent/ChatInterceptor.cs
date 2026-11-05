@@ -1,3 +1,4 @@
+using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Logging;
 
@@ -36,6 +37,18 @@ public class ChatInterceptor(
                 if (deny != null)
                     return deny;
                 return await HandleRevoke(target, userPhoneNumber, agentPhoneNumber);
+            }
+
+            // Only with a number first: "Grant called about dinner" is a message, not a command.
+            foreach (var (command, add) in new[] { ("grant", true), ("ungrant", false) })
+            {
+                if (TryParseCommand(trimmed, command, out var grantArg) && grantArg.StartsWith('+'))
+                {
+                    var (deny, rest) = await CheckStepUpAsync(command, grantArg, userPhoneNumber, agentPhoneNumber, "<number> <grants>");
+                    if (deny != null)
+                        return deny;
+                    return await HandleGrant(rest, add, userPhoneNumber, agentPhoneNumber);
+                }
             }
         }
 
@@ -140,13 +153,63 @@ public class ChatInterceptor(
         return $"Revoked access for {target}.";
     }
 
-    // Owner step-up: the access-management commands (invite/revoke) require a current 6-digit TOTP
+    // grant/ungrant <number> <grants…>: what another user may do (ToolGrant). Changes nothing
+    // unless every word is a grant, so a typo can't leave half a change. Only for someone already
+    // invited, and never the owner, who has every tool.
+    private async Task<string> HandleGrant(string argument, bool add, string ownerPhoneNumber, string agentPhoneNumber)
+    {
+        _correlation.New();
+
+        // The number is every leading word without a letter, so "+1 555 123 4567 todos" works too.
+        var words = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var numberWords = words.TakeWhile(w => !w.Any(char.IsLetter)).ToArray();
+        var names = words.Skip(numberWords.Length).Select(w => w.Trim(',')).Where(w => w.Length > 0).ToArray();
+
+        var target = NormalizePhoneNumber(string.Concat(numberWords));
+        if (target is null)
+            return "Couldn't read that number. Use international format, e.g. +15551234567.";
+
+        if (_ownerService.IsOwner(target))
+            return "You have every tool already.";
+
+        var available = string.Join(", ", ToolGrants.Grantable.Select(ToolGrants.Name));
+        if (names.Length == 0)
+            return $"Name the grants too: {available}.";
+
+        var unknown = names.Where(n => !ToolGrants.TryParse(n, out _)).ToArray();
+        if (unknown.Length > 0)
+            return $"Not a grant: {string.Join(", ", unknown)}. Nothing changed. The grants are {available}.";
+
+        var existing = await _userService.GetAsync(agentPhoneNumber, target);
+        if (existing == null)
+            return $"{target} doesn't have access. Invite them first.";
+
+        var held = ToolGrants.Of(existing.Grants).ToHashSet();
+        foreach (var name in names)
+        {
+            ToolGrants.TryParse(name, out var grant);
+            if (add)
+                held.Add(grant);
+            else
+                held.Remove(grant);
+        }
+
+        var now = held.Order().Select(ToolGrants.Name).ToList();
+        await _userService.SetGrantsAsync(agentPhoneNumber, target, now);
+        var command = add ? "grant" : "ungrant";
+        await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, command, success: true, error: null,
+            target: $"{target} {string.Join(" ", names.Select(n => n.ToLowerInvariant()))}");
+        _logger.LogInformation("Owner ran {Command} for {Target}", command, target);
+        return now.Count == 0 ? $"{target} now has no grants." : $"{target} now has: {string.Join(", ", now)}.";
+    }
+
+    // Owner step-up: the access-management commands (invite/revoke/grant/ungrant) require a current 6-digit TOTP
     // code as their last token — a second factor on top of the (spoofable) SMS sender number.
     // Returns a deny message to send back, or null to proceed along with the argument minus the
     // code. Step-up is REQUIRED: if no secret is configured the command is refused (fail-closed),
     // so the gate can never be bypassed by simply leaving OWNER_TOTP_SECRET unset.
     private async Task<(string? Deny, string Argument)> CheckStepUpAsync(
-        string command, string argument, string ownerPhoneNumber, string agentPhoneNumber)
+        string command, string argument, string ownerPhoneNumber, string agentPhoneNumber, string usage = "<number>")
     {
         if (!_totp.IsConfigured)
         {
@@ -159,7 +222,7 @@ public class ChatInterceptor(
         if (code is null)
         {
             await LogSessionAsync(ownerPhoneNumber, agentPhoneNumber, command, success: false, error: "step-up code missing");
-            return ($"That command needs your authenticator code. Resend as: {command} <number> <code>.", argument);
+            return ($"That command needs your authenticator code. Resend as: {command} {usage} <code>.", argument);
         }
 
         if (!_totp.VerifyOwnerCode(code))

@@ -19,6 +19,7 @@ public class InstructionsPlugin(IUserService _userService)
     public const int MaxLength = 300;
 
     [KernelFunction("remember_instruction")]
+    [Tool(Grant = ToolGrant.Always, OffAfter = UntrustedSource.Any)]
     [Description("Saves an instruction the user wants you to follow in every conversation with them from now on: a persona or tone (\"talk like HAL 9000\"), what to call them, or a lasting preference (\"use metric units\"). Only when the user asks you to behave a certain way from now on; facts go in save_knowledge and tasks in save_todo. Up to 10 per user, 300 characters each.")]
     public async Task<string> RememberInstructionAsync(Kernel kernel,
         [Description("The instruction, in the user's own words where possible.")] string text)
@@ -58,6 +59,7 @@ public class InstructionsPlugin(IUserService _userService)
     }
 
     [KernelFunction("forget_instruction")]
+    [Tool(Grant = ToolGrant.Always, OffAfter = UntrustedSource.Any)]
     [Description("Removes one of the user's saved instructions, by the id listed in Current context. Use when the user asks you to stop doing something they told you to do from now on.")]
     public async Task<string> ForgetInstructionAsync(Kernel kernel,
         [Description("The instruction's id (GUID), as listed in Current context.")] string instructionId)

@@ -14,6 +14,7 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClien
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
 
     [KernelFunction("send_to_remarkable")]
+    [Tool]
     [Description("Sends text content to the user's reMarkable tablet by converting it to a PDF and uploading it to their reMarkable cloud library. For an email, use send_email_to_remarkable.")]
     public async Task SendToRemarkableAsync(
         [Description("Document title shown on the reMarkable device.")] string title,
@@ -28,6 +29,7 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IGraphClien
     /// than the model had: on 2026-10-18 two emails arrived as their title and one line each.
     /// </remarks>
     [KernelFunction("send_email_to_remarkable")]
+    [Tool]
     [Description("Sends one of the user's emails, whole, to their reMarkable tablet as a PDF titled with its subject. Only when the user asks.")]
     public async Task<SentEmailModel> SendEmailToRemarkableAsync(
         Kernel kernel,

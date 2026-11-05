@@ -10,6 +10,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 public class SmsPlugin(SmsService _smsService)
 {
     [KernelFunction("send_sms")]
+    [Tool(OffAfter = UntrustedSource.Any)]
     [Description("Sends an SMS message to one or more comma-separated phone numbers.")]
     public async Task SendSmsAsync(
       [Description("Comma-separated list of destination phone numbers in E.164 format.")] string phoneNumbers,

@@ -13,7 +13,7 @@ across the real-world services it's connected to.
 
 You interact entirely over SMS. Under the hood the assistant has a set of capabilities:
 
-- **Calendar & email** — read your calendar, create events, read your inbox (text attachments too, such as a CSV export or a DMARC report), mark emails read and move them to the trash, and send mail (via Microsoft Graph). The owner can also save an email as a PDF to one OneDrive folder.
+- **Calendar & email** — read your calendar, create events, read your inbox (text attachments too, such as a CSV export or a DMARC report), mark emails read and move them to the trash, and send mail (via Microsoft Graph).
 - **Contacts** — look up people's details from your address book.
 - **Money** — check account balances and recent transactions (via YNAB).
 - **Memory** — remember facts about you and keep a shared list of to-dos. It also keeps instructions for how to behave with you from now on (a persona, what to call you, a preference).
@@ -22,7 +22,7 @@ You interact entirely over SMS. Under the hood the assistant has a set of capabi
 - **Standing rules** — watch a recurring condition on a timer and notify you when it's met.
 - **Scheduled tasks** — run a recurring action on a clock schedule and report back (e.g. a daily calendar summary).
 - **Web** — search the web and fetch page content to answer questions, and look up who holds an IP address in the internet registries.
-- **reMarkable** — send a document to your reMarkable tablet (owner only).
+- **reMarkable** — send a document, or a whole email as a PDF, to your reMarkable tablet (owner only).
 
 ### Example prompts
 
@@ -76,27 +76,42 @@ credentials reach only the owner's mailbox and one OneDrive folder, not the whol
 (see [step 1](#1-configure-microsoft-graph-access) of the setup).
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
-the agent over SMS. Those users act *through* the agent and can therefore reach the
-owner's connected data — read the calendar, contacts and finances. **This is
-intentional.** Email is the exception: only the owner can read it, so other users see no
-email content at all, and sending (SMS and email) and creating calendar events are
-owner-only too. Authorized users are trusted
+the agent over SMS. They start with nothing but their own saved instructions, and the
+owner grants them named parts by text, `grant <number> <grants…> <code>` (`ungrant` takes
+one away):
+
+| Grant | Gives |
+| --- | --- |
+| `todos`, `knowledge`, `projects` | read the shared list, facts or projects, and add to them |
+| `budget` | read the owner's finances (YNAB) |
+| `calendar` | read the owner's calendar |
+| `contacts` | read the owner's address book |
+| `web` | search the web, fetch a page, the forecast, IP lookups |
+| `reminders` | their own reminders |
+| `automation` | their own standing rules and scheduled tasks |
+
+A grant reaches the owner's data *through* the agent: `budget` reads the owner's
+finances. **This is intentional.** Some things are never granted: email (other users see
+no email content at all), sending SMS or email, creating calendar events, the reMarkable,
+health data, the self-check, the home network, and changing or deleting shared data. Each
+tool declares who may use it (`[Tool]`, read by `KernelProfilePolicy`), so a new tool is
+the owner's until a grant names it. Authorized users are trusted
 principals invited by the owner; they are not mutually-isolated tenants, and the
 agent is not a multi-tenant SaaS. Reviewers should treat cross-user access to the
-owner's data as by-design, not as a vulnerability.
+owner's data that a grant gives as by-design, not as a vulnerability.
 
 Data model implications:
 - All Cosmos containers partition on `/agentPhoneNumber` (one value per instance).
-- **Knowledge, to-dos, and projects are shared** across the instance's authorized
-  users — it is one shared memory, by design.
+- **Knowledge, to-dos, and projects are shared** with every user granted them — it is
+  one shared memory, by design.
 - **Chat history is per-user** (filtered by `userPhoneNumber`).
 - Reminders, standing rules, and scheduled tasks are created and listed per-user.
 
 Access boundary: only the owner self-registers; everyone else must be `invite`d by
 the owner (by phone number) before `hello ancela` does anything, and the owner can
 `revoke` them. Identity, though, still rests on the SMS sender number, which is
-spoofable — so the highest-value privilege (the owner's own `invite`/`revoke`) is the
-weakest point if someone spoofs the owner's number.
+spoofable — so the highest-value privilege (the owner's own `invite`, `revoke` and
+`grant`) is the weakest point if someone spoofs the owner's number.
 
 `ancela chat` is the one way in besides SMS. It puts messages on the same `chat-messages`
 queue, and the queue takes each message's sender number at face value, so being able to send
@@ -105,7 +120,7 @@ checks Twilio's request signature, and the owner's own Entra account, which sign
 `az login` and holds the Azure Service Bus Data Sender role on that one queue. The namespace
 accepts no connection-string keys.
 
-**Owner step-up (TOTP), required.** `invite`/`revoke` require a second factor: the
+**Owner step-up (TOTP), required.** `invite`, `revoke`, `grant` and `ungrant` require a second factor: the
 owner appends a current 6-digit authenticator code (e.g. `invite +15551234567 408291`),
 verified server-side via RFC 6238. This binds access-management to *possession of the
 secret*, not just the claimed number. The gate **fails closed**: `OWNER_TOTP_SECRET`
@@ -113,7 +128,7 @@ must be set, and if it is missing (or malformed) access-management is refused ra
 than falling back to number-only — it cannot be bypassed by leaving the secret unset.
 Run `ancela enroll` to mint a secret and scan its QR into an authenticator app, then
 set `OWNER_TOTP_SECRET`. (Self-registration and normal chat are unaffected, so a fresh
-instance still runs; only `invite`/`revoke` are gated. If the owner loses their
+instance still runs; only `invite`, `revoke`, `grant` and `ungrant` are gated. If the owner loses their
 authenticator, re-run `ancela enroll` and reset the secret.) Caveat — the code travels
 in the SMS body, which Twilio and the carriers can see, so this defends against number
 spoofing, not against an attacker who can read the owner's texts or the application
@@ -165,28 +180,31 @@ it.
 act on text an outsider wrote before that person sees anything. So once a message has read
 email (attachments included) or calendar content, sending (SMS and email), `web_fetch` (a URL can carry data out)
 and saving or removing instructions are switched off for the rest of that message. After a
-web search, a fetch or an IP lookup, sending and instructions are switched off. An IP lookup
+web search, a fetch, an IP lookup, or a read of to-dos, facts or project entries another user
+saved, sending and instructions are switched off. An IP lookup
 asks the internet registries, not the address's own DNS server (a reverse lookup), so the
 addresses Ancela looks up after reading email never reach a server an outsider runs. The same guard filter
 enforces this in code. Ancela says what it was about to do, and the user confirms in their
 next message, which starts with nothing read, so replying to an email takes two texts.
-Saving an email to OneDrive, marking one read, moving one to Deleted Items and creating a calendar event stay
-on, since they touch only the owner's own folder, mailbox and calendar. Images an email links to are downloaded, for a PDF
+Sending an email to the reMarkable, marking one read, moving one to Deleted Items and creating a calendar event stay
+on, since they touch only the owner's own tablet, mailbox and calendar. Images an email links to are downloaded, for a PDF
 of it, only when the owner says yes, since downloading them tells the sender the email was
 opened; the download goes only to public addresses, so a planted link can't reach anything
 inside Azure. This doesn't cover everything: text from a read
-can carry over in Ancela's reply, which is kept in history, and knowledge or to-dos saved
-after a read aren't marked when they're read back later.
+can carry over in Ancela's reply, which is kept in history, and knowledge or to-dos a user
+saved after a read aren't marked when that user reads them back later.
 
 **Shared memory and memory laundering.** Ancela's memory is shared across the
 instance, so a malicious user could try to smuggle instructions into later runs by
-storing them as knowledge or to-dos. We mitigate that in two ways. First, saved memory
-keeps provenance metadata about who created it (`userPhoneNumber`), so entries are not
-treated as anonymous facts. Second, autonomous profiles explicitly treat retrieved
-memory content — like web pages, email bodies, and calendar text — as untrusted data,
-not instructions to follow. This provenance tagging does not make stored content
-*trusted*; it mainly reduces memory laundering risk by preserving where a memory came
-from and making it auditable when the model encounters it again.
+storing them as knowledge, to-dos or project entries. We mitigate that in three ways.
+First, saved memory keeps who created it (`userPhoneNumber`, and `addedBy` on a project
+entry). Second, a read that returns something another user saved counts as outside text:
+in the owner's message, sending and instructions are switched off for the rest of it, as
+after reading an email. The owner's own entries, and the reader's, don't count. Third,
+autonomous profiles explicitly treat retrieved memory content — like web pages, email
+bodies, and calendar text — as untrusted data, not instructions to follow. The active
+projects listed in every Chat prompt leave out projects another user created, which
+`list_projects` still shows (and marks).
 
 **What's kept, and for how long.**
 
@@ -256,7 +274,8 @@ effect. Afterwards, `check_services` and the live mailbox tests (`MailSearchLive
 that everything still works; `TrashEmail_MovesAnEmailToDeletedItems` passes only through
 Exchange, since Entra never granted `Mail.ReadWrite`.
 
-To save emails as PDFs (`save_email_to_onedrive`), add the *Application* permission
+To send emails to the reMarkable as PDFs (`send_email_to_remarkable`), which Graph converts in
+one OneDrive folder, add the *Application* permission
 `Files.SelectedOperations.Selected` under **API permissions** and grant admin consent: the only
 permission granted in Entra. On its own it grants nothing;
 you then give the app write access to **one folder**. Don't use `Files.ReadWrite.All`
@@ -298,7 +317,7 @@ dotnet user-secrets set Parameters:graph-onedrive-folder-id "..."   # the grante
 dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
 ```
 
-To use owner step-up (`invite`/`revoke`), also set `OWNER_TOTP_SECRET` to the value
+To use owner step-up (`invite`, `revoke`, `grant`, `ungrant`), also set `OWNER_TOTP_SECRET` to the value
 produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).
 
 ### 3. Set resource-naming environment variables

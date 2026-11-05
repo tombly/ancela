@@ -7,6 +7,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
 public class WebPlugin(ITavilyClient _tavilyClient)
 {
     [KernelFunction("web_search")]
+    [Tool(Grant = ToolGrant.Web, Autonomous = Autonomy.Both, Reads = UntrustedSource.Web)]
     [Description("Search the web for current information. Returns results with URLs, titles, and content excerpts.")]
     public async Task<SearchResult[]> SearchAsync(
         [Description("The search query.")] string query,
@@ -17,6 +18,7 @@ public class WebPlugin(ITavilyClient _tavilyClient)
     }
 
     [KernelFunction("web_fetch")]
+    [Tool(Grant = ToolGrant.Web, Reads = UntrustedSource.Web, OffAfter = UntrustedSource.MailOrCalendar)]
     [Description("Fetch and extract the text content of a specific URL. Use when the user provides a URL or when you need the full content of a page found via web_search.")]
     public async Task<string> FetchAsync(
         [Description("The URL to fetch.")] string url)
