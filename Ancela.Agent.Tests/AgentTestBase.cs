@@ -5,13 +5,13 @@ using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.ProjectsPlugin.Models;
+using Ancela.Agent.SemanticKernel.Plugins.ScheduledTaskPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.SmsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.YnabPlugin;
 using Ancela.Agent.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Moq;
 using OpenAI;
 
@@ -68,7 +68,7 @@ public abstract class AgentTestBase
                 "OpenAI API key not found. Set it via user secrets (Parameters:openai-api-key) or environment variable (OPENAI_API_KEY).");
 
         // Create real OpenAI client
-        OpenAIClient = new OpenAIClient(apiKey);
+        OpenAIClient = LiveTestUsage.CreateOpenAIClient(apiKey);
 
         // Setup mocked services with default behaviors
         MockHistoryService = new Mock<IHistoryService>();
@@ -127,7 +127,7 @@ public abstract class AgentTestBase
         var ynabPlugin = new YnabPlugin(ynabClient);
 
         // Create kernel with real OpenAI and plugins with mocked clients
-        var chatCompletionService = new OpenAIChatCompletionService("gpt-6-luna", OpenAIClient);
+        var chatCompletionService = LiveTestUsage.CreateChatService(OpenAIClient);
 
         // Build a factory that hands out a fresh kernel (with the test plugins) per call. The
         // real guard runs on it, as in production, so the model meets the same denials.
@@ -147,6 +147,7 @@ public abstract class AgentTestBase
                     pluginCollection.AddFromObject(extra);
                 var kernel = new Kernel(plugins: pluginCollection);
                 kernel.Data["profile"] = profile;
+                kernel.FunctionInvocationFilters.Add(new LiveTestUsage.ToolRecorder());
                 kernel.FunctionInvocationFilters.Add(
                     new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));
                 kernel.FunctionInvocationFilters.Add(new EmptyResultFilter());
@@ -180,9 +181,29 @@ public abstract class AgentTestBase
     /// <summary>
     /// Sends a message to the agent and returns the response.
     /// </summary>
-    protected Task<string> SendMessageAsync(string message)
+    protected Task<string> SendMessageAsync(string message) =>
+        Timed(() => Agent.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestUser, []));
+
+    /// <summary>Runs a scheduled task as the test user, timed for the usage log.</summary>
+    protected Task<string> RunScheduledTaskAsync(ScheduledTask task) =>
+        Timed(() => Agent.PerformScheduledTask(task, TestUser));
+
+    // The usage log's record of each reply: which test, and how long it took (LiveTestUsage).
+    private static async Task<string> Timed(Func<Task<string>> reply)
     {
-        return Agent.Chat(message, UserPhoneNumber, AgentPhoneNumber, TestUser, []);
+        LiveTestUsage.CurrentTest.Value ??= LiveTestUsage.TestNameFromStack();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var ok = false;
+        try
+        {
+            var text = await reply();
+            ok = true;
+            return text;
+        }
+        finally
+        {
+            LiveTestUsage.Write(new { kind = "reply", test = LiveTestUsage.CurrentTest.Value, effort = LiveTestUsage.Effort, ms = clock.ElapsedMilliseconds, ok });
+        }
     }
 
     /// <summary>
@@ -205,6 +226,7 @@ public abstract class AgentTestBase
     /// </summary>
     protected async Task<string> SendUntilAsync(string message, Action<string> verify, int attempts = 3, Action? reset = null)
     {
+        LiveTestUsage.CurrentTest.Value ??= LiveTestUsage.TestNameFromStack();
         Exception? lastFailure = null;
         for (var attempt = 0; attempt < attempts; attempt++)
         {
@@ -213,6 +235,7 @@ public abstract class AgentTestBase
                 reset?.Invoke();
                 var response = await SendMessageAsync(message);
                 verify(response);
+                LiveTestUsage.Write(new { kind = "attempt", test = LiveTestUsage.CurrentTest.Value, effort = LiveTestUsage.Effort, attempt = attempt + 1, passed = true });
                 return response;
             }
             catch (Exception ex)
@@ -220,6 +243,7 @@ public abstract class AgentTestBase
                 // Either the model took a different path this run, or a transient API error —
                 // retry. The last failure is rethrown if every attempt misses.
                 lastFailure = ex;
+                LiveTestUsage.Write(new { kind = "attempt", test = LiveTestUsage.CurrentTest.Value, effort = LiveTestUsage.Effort, attempt = attempt + 1, passed = false });
             }
         }
 

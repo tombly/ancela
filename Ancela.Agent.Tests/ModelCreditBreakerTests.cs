@@ -1,3 +1,5 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Net;
 using System.Runtime.CompilerServices;
 using Ancela.Agent.Services;
@@ -78,6 +80,38 @@ public class ModelCreditBreakerTests
 
     [Fact]
     public void Classifier_IgnoresNull() => CreditAlertService.IsCreditExhausted(null).Should().BeFalse();
+
+    // On the Responses API (ChatModel) the OpenAI SDK's exception arrives unwrapped (tried 2026-11-04
+    // with a 404, whose code was in both the message and the body).
+
+    [Fact]
+    public void Classifier_RecognizesTheResponsesApiException() =>
+        CreditAlertService.IsCreditExhausted(new ClientResultException(
+            "HTTP 429 (insufficient_quota: insufficient_quota)",
+            new FakeResponse(429, """{"error":{"code":"insufficient_quota"}}"""))).Should().BeTrue();
+
+    [Fact]
+    public void Classifier_RecognizesTheResponsesApiException_ByItsBodyAlone() =>
+        CreditAlertService.IsCreditExhausted(new ClientResultException(
+            "HTTP 429", new FakeResponse(429, """{"error":{"code":"insufficient_quota"}}"""))).Should().BeTrue();
+
+    [Fact]
+    public void Classifier_IgnoresAResponsesApiRateLimit() =>
+        CreditAlertService.IsCreditExhausted(new ClientResultException(
+            "HTTP 429 (rate_limit_exceeded)", new FakeResponse(429, """{"error":{"code":"rate_limit_exceeded"}}"""))).Should().BeFalse();
+
+    private sealed class FakeResponse(int status, string body) : PipelineResponse
+    {
+        private readonly BinaryData _content = BinaryData.FromString(body);
+        public override int Status => status;
+        public override string ReasonPhrase => string.Empty;
+        public override Stream? ContentStream { get => _content.ToStream(); set { } }
+        public override BinaryData Content => _content;
+        protected override PipelineResponseHeaders HeadersCore => throw new NotSupportedException();
+        public override BinaryData BufferContent(CancellationToken cancellationToken = default) => _content;
+        public override ValueTask<BinaryData> BufferContentAsync(CancellationToken cancellationToken = default) => new(_content);
+        public override void Dispose() { }
+    }
 
     // ---- One text per outage, regardless of how much autonomy is configured ----
 

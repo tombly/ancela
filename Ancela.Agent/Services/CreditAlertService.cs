@@ -1,3 +1,4 @@
+using System.ClientModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
@@ -55,6 +56,11 @@ public class CreditAlertService(
             // Semantic Kernel keeps the provider's raw body here; the marker is not always promoted
             // into the exception message.
             if (ex is HttpOperationException http && ContainsMarker(http.ResponseContent))
+                return true;
+
+            // On the Responses API (ChatModel) the OpenAI SDK's own exception arrives unwrapped. Its
+            // message carried the error code when tried (2026-11-04), but the body is what OpenAI sent.
+            if (ex is ClientResultException result && ContainsMarker(result.GetRawResponse()?.Content?.ToString()))
                 return true;
         }
 
