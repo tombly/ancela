@@ -73,7 +73,11 @@ Ancela is a **single-owner** assistant. Each deployed instance is wired to exact
 one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
 contacts) and one YNAB token — using app-only credentials held by the instance. Those
 credentials reach only the owner's mailbox and one OneDrive folder, not the whole tenant
-(see [step 1](#1-configure-microsoft-graph-access) of the setup).
+(see [step 1](#1-configure-microsoft-graph-access) of the setup). Mail can come from iCloud
+instead (`MAIL_PROVIDER` in `AppHost.cs`), over IMAP and SMTP with an app-specific password.
+That password is not scoped: it reaches all of the owner's iCloud mail, calendar and contacts,
+which the owner chose (2026-10-30); the tools still read only Inbox, Sent and Deleted, and the
+guards are the same.
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. They start with nothing but their own saved instructions, and the
@@ -315,7 +319,16 @@ dotnet user-secrets set Parameters:graph-client-secret "..."
 dotnet user-secrets set Parameters:graph-onedrive-drive-id  "..."   # the granted folder's driveId
 dotnet user-secrets set Parameters:graph-onedrive-folder-id "..."   # the granted folder's id
 dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
+dotnet user-secrets set Parameters:icloud-username     "..."   # the iCloud Mail address (…@icloud.com)
+dotnet user-secrets set Parameters:icloud-app-password "..."   # an app-specific password
 ```
+
+The iCloud username is the iCloud Mail address, not the Apple Account email when that is another
+address: iCloud's IMAP server refuses the latter. Make the app-specific password at
+account.apple.com (Sign-In and Security → App-Specific Passwords). Changing the Apple Account
+password revokes it, and `check_services` then reports `icloud-mail` failing. Ancela reads iCloud
+mail only once `MAIL_PROVIDER` in `AppHost.cs` is `"icloud"`; until then both values are only
+carried along.
 
 To use owner step-up (`invite`, `revoke`, `grant`, `ungrant`), also set `OWNER_TOTP_SECRET` to the value
 produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).

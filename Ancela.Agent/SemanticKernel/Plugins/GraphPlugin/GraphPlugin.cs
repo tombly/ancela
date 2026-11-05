@@ -3,7 +3,11 @@ using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
-public class GraphPlugin(IGraphClient graphClient)
+/// <summary>
+/// Calendar, contacts and email. Email goes through <paramref name="mailClient"/>: Microsoft 365 or
+/// iCloud, as MAIL_PROVIDER says (DependencyModule); the calendar and contacts are still Graph's.
+/// </summary>
+public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
 {
     #region Calendar
 
@@ -52,7 +56,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("Finds particular emails anywhere in the folder: a sender's address or name, or words from the subject or body, e.g. 'from:someone@example.com' or 'invoice march'.")]
          string? search = null)
     {
-        return await graphClient.GetUserEmailsAsync(folder, search);
+        return await mailClient.GetUserEmailsAsync(folder, search);
     }
 
     [KernelFunction("read_email")]
@@ -62,7 +66,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("The email's id, exactly as returned by get_recent_emails.")]
          string emailId)
     {
-        return await graphClient.GetEmailAsync(emailId);
+        return await mailClient.GetEmailAsync(emailId);
     }
 
     [KernelFunction("read_attachment")]
@@ -74,7 +78,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("The attachment's file name, exactly as read_email lists it.")]
          string name)
     {
-        return await graphClient.GetAttachmentAsync(emailId, name);
+        return await mailClient.GetAttachmentAsync(emailId, name);
     }
 
     [KernelFunction("mark_email_read")]
@@ -86,7 +90,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("True to mark it read, false to mark it unread.")]
          bool read = true)
     {
-        return await graphClient.MarkReadAsync(emailId, read);
+        return await mailClient.MarkReadAsync(emailId, read);
     }
 
     [KernelFunction("trash_email")]
@@ -96,7 +100,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("The email's id, exactly as returned by get_recent_emails.")]
          string emailId)
     {
-        return await graphClient.MoveToDeletedItemsAsync(emailId);
+        return await mailClient.MoveToDeletedItemsAsync(emailId);
     }
 
     [KernelFunction("send_email")]
@@ -110,7 +114,7 @@ public class GraphPlugin(IGraphClient graphClient)
          [Description("The body content of the email.")]
          string body)
     {
-        return await graphClient.SendEmailAsync(toAddress, subject, body);
+        return await mailClient.SendEmailAsync(toAddress, subject, body);
     }
 
     #endregion

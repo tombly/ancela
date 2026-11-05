@@ -198,7 +198,7 @@ public class AgentGraphTests : AgentTestBase
         // No tool knows what DMARC is. A scheduled summary has to find the reports, list each one's
         // attachments, read them, look up who holds each rejected address, and mark read and trash
         // what it read: six general tools the model combines by itself, with reasoning off.
-        var (registries, markedRead) = SetupDmarcReports();
+        var (registries, markedRead, _) = SetupDmarcReports();
 
         var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
             reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Mailchimp", StringComparison.OrdinalIgnoreCase));
@@ -221,7 +221,7 @@ public class AgentGraphTests : AgentTestBase
     {
         // "After successful processing": Yahoo's attachment can't be read, so that report stays in the
         // inbox for next time, and the summary says so rather than leaving it out.
-        var (_, markedRead) = SetupDmarcReports(yahooAttachmentFails: true);
+        var (_, markedRead, _) = SetupDmarcReports(yahooAttachmentFails: true);
 
         var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
             reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Yahoo", StringComparison.OrdinalIgnoreCase));
@@ -230,6 +230,22 @@ public class AgentGraphTests : AgentTestBase
         MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.Never, "its report was never read");
         markedRead.Should().NotContain("yahoo", because: "an unread report stays unread, for the owner to notice");
         reply.Should().ContainEquivalentOf("Yahoo", because: $"the summary must say a report couldn't be read; the reply was: {reply}");
+    }
+
+    [Fact]
+    public async Task DmarcSummary_WithImapIds_TrashesEachReport()
+    {
+        // The other DMARC tests name emails "google" and "yahoo". On Graph's 152-character ids the
+        // model copied one wrong in a quarter of runs (2026-11-03 in production, 15 of 20 on a test of
+        // it, 2026-11-04). iCloud's are a folder and a UID, and the UIDs of emails that arrived together
+        // are close: inbox-48213 and inbox-48217. One run, no retries, so the pass rate is the rate.
+        var (_, markedRead, ids) = SetupDmarcReports(imapIds: true);
+
+        await RunScheduledTaskAsync(DmarcSummaryTask());
+
+        markedRead.Should().BeEquivalentTo([ids.Google, ids.Yahoo]);
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync(ids.Google), Times.Once, "each report is trashed");
+        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync(ids.Yahoo), Times.Once, "each report is trashed");
     }
 
     private ScheduledTask DmarcSummaryTask() => new()
@@ -264,8 +280,11 @@ public class AgentGraphTests : AgentTestBase
     /// answers for the rejected addresses: a spoofer on DigitalOcean (6) and Mailchimp (3). Also the
     /// emails marked read: as in Graph, a moved email's old id no longer works.
     /// </summary>
-    private (Mock<IRdapClient> Registries, HashSet<string> MarkedRead) SetupDmarcReports(bool yahooAttachmentFails = false)
+    private (Mock<IRdapClient> Registries, HashSet<string> MarkedRead, (string Google, string Yahoo) Ids) SetupDmarcReports(
+        bool yahooAttachmentFails = false, bool imapIds = false)
     {
+        // As iCloud gives them (ImapSearch.EmailId): the folder and UIDs a few apart.
+        string Id(string email) => !imapIds ? email : email switch { "google" => "inbox-48213", "yahoo" => "inbox-48217", _ => "inbox-48221" };
         var yesterday = DateTimeOffset.UtcNow.Date.AddDays(-1);
         var (begin, end) = (new DateTimeOffset(yesterday).ToUnixTimeSeconds(), new DateTimeOffset(yesterday).ToUnixTimeSeconds() + 86399);
         string Report(string org, params (string Ip, int Count, string Disposition, string Result)[] rows) =>
@@ -277,16 +296,16 @@ public class AgentGraphTests : AgentTestBase
                 + $"<dkim>{r.Result}</dkim><spf>{r.Result}</spf></policy_evaluated></row><identifiers><header_from>example.com</header_from></identifiers></record>\n"))
             + "</feedback>\n";
 
-        var google = CreateEmail("google", "noreply-dmarc-support@google.com", "Report domain: example.com Submitter: google.com Report-ID: 4931150279366017725", hoursAgo: 5);
-        var yahoo = CreateEmail("yahoo", "noreply@dmarc.yahoo.com", "Report Domain: example.com Submitter: yahoo.com Report-ID: <1700000000.123456>", hoursAgo: 3);
-        EmailModel[] inbox = [CreateEmail("sale", "news@shop.example", "Fall sale ends tonight", hoursAgo: 1), yahoo, google];
+        var google = CreateEmail(Id("google"), "noreply-dmarc-support@google.com", "Report domain: example.com Submitter: google.com Report-ID: 4931150279366017725", hoursAgo: 5);
+        var yahoo = CreateEmail(Id("yahoo"), "noreply@dmarc.yahoo.com", "Report Domain: example.com Submitter: yahoo.com Report-ID: <1700000000.123456>", hoursAgo: 3);
+        EmailModel[] inbox = [CreateEmail(Id("sale"), "news@shop.example", "Fall sale ends tonight", hoursAgo: 1), yahoo, google];
         SetupEmails(_ => inbox);
         SetupReport(google, body: "", $"google.com!example.com!{begin}!{end}.zip", Report("google.com",
             ("209.85.220.41", 14, "none", "pass"), ("203.0.113.50", 6, "reject", "fail")));
         SetupReport(yahoo, body: "This is an aggregate DMARC report from Yahoo for your domain \"example.com\".", $"yahoo.com!example.com!{begin}!{end}.xml.gz",
             Report("Yahoo", ("198.51.100.7", 3, "reject", "fail"), ("209.85.220.69", 5, "none", "pass")));
         if (yahooAttachmentFails)
-            MockGraphClient.Setup(g => g.GetAttachmentAsync("yahoo", It.IsAny<string>()))
+            MockGraphClient.Setup(g => g.GetAttachmentAsync(yahoo.Id, It.IsAny<string>()))
                 .ThrowsAsync(new InvalidDataException("The archive entry was compressed using an unsupported compression method."));
         var (moved, markedRead) = (new HashSet<string>(), new HashSet<string>());
         MockGraphClient.Setup(g => g.MoveToDeletedItemsAsync(It.IsAny<string>())).ReturnsAsync((string id) =>
@@ -313,7 +332,7 @@ public class AgentGraphTests : AgentTestBase
             _ => Registration(ip, "GOOGLE", "Google LLC"),
         });
         ExtraPlugins.Add(new IpLookupPlugin(registries.Object));
-        return (registries, markedRead);
+        return (registries, markedRead, (google.Id, yahoo.Id));
     }
 
     /// <summary>
