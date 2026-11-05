@@ -23,7 +23,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI;
 using QuestPDF.Infrastructure;
 
@@ -150,9 +149,9 @@ public static class DependencyModule
         // chat, onboarding, standing rules and scheduled tasks in one place.
         builder.Services.AddSingleton<IChatCompletionService>(sp =>
         {
-            var openAI = new OpenAIChatCompletionService("gpt-6-luna", sp.GetRequiredService<OpenAIClient>());
+            var model = ChatModel.Create(sp.GetRequiredService<OpenAIClient>());
             return new CreditAwareChatCompletionService(
-                openAI,
+                model,
                 sp.GetRequiredService<ModelAvailability>(),
                 sp.GetRequiredService<ICreditAlertService>());
         });

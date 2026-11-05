@@ -139,7 +139,7 @@ public class AgentTodoTests : AgentTestBase
         string? reply = null;
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            reply = await Agent.PerformScheduledTask(briefing, TestUser);
+            reply = await RunScheduledTaskAsync(briefing);
             if (reply.Contains("tags", StringComparison.OrdinalIgnoreCase) && reply.Contains('5'))
                 break;
         }

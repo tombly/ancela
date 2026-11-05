@@ -252,7 +252,7 @@ public class AgentGraphTests : AgentTestBase
         var reply = string.Empty;
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            reply = await Agent.PerformScheduledTask(task, TestUser);
+            reply = await RunScheduledTaskAsync(task);
             if (passes(reply))
                 break;
         }
