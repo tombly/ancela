@@ -61,6 +61,7 @@
     <!-- Microsoft Graph package -->
     <PackageVersion Include="Microsoft.Graph" Version="6.2.0" />
     <!-- 4.18.1 rather than 4.18.2 (2026-10-23), which was under two weeks old when this was added. -->
+    <PackageVersion Include="Ical.Net" Version="5.2.4" />
     <PackageVersion Include="MailKit" Version="4.18.1" />
     <!-- Graph 6.2.0 -> Graph.Core 4.0.1 requires Kiota.Abstractions >= 2.0.0. -->
     <PackageVersion Include="Microsoft.Kiota.Abstractions" Version="2.0.0" />

@@ -30,6 +30,8 @@ public class ServiceHealthChecker(
     ServiceBusClient _serviceBusClient,
     IGraphClient _graphClient,
     IMailClient _mailClient,
+    ICalendarClient _calendarClient,
+    IContactsClient _contactsClient,
     YnabClient _ynabClient,
     ITavilyClient _tavilyClient,
     GoogleHealthClient _googleHealthClient,
@@ -53,8 +55,14 @@ public class ServiceHealthChecker(
             ProbeAsync("twilio", ProbeTwilioAsync),
             ProbeAsync("microsoft-graph", ProbeGraphAsync),
             ProbeAsync("onedrive-folder", ProbeOneDriveAsync),
-            // Only when the email tools read iCloud (MAIL_PROVIDER); Graph's mail is the Graph probe's.
+            // Only for what the tools read from iCloud (the *_PROVIDER settings); the rest is the Graph probe's.
             .. _mailClient is ImapMailClient imap ? [ProbeAsync("icloud-mail", () => ProbeICloudMailAsync(imap))] : (Task<ServiceProbeResult>[])[],
+            .. _calendarClient is CalDavCalendarClient calDav
+                ? [ProbeAsync("icloud-calendar", async () => ("ok", $"Signed in to iCloud Calendar; {await calDav.CheckAsync()} calendars of events."))]
+                : (Task<ServiceProbeResult>[])[],
+            .. _contactsClient is CardDavContactsClient cardDav
+                ? [ProbeAsync("icloud-contacts", async () => ("ok", $"Signed in to iCloud Contacts; {await cardDav.CheckAsync()} contacts."))]
+                : (Task<ServiceProbeResult>[])[],
             ProbeAsync("ynab", ProbeYnabAsync),
             ProbeAsync("tavily-web-search", ProbeTavilyAsync),
             ProbeAsync("google-health", ProbeGoogleHealthAsync),

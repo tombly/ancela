@@ -37,8 +37,12 @@ var icloudAppPassword = builder.AddParameter("icloud-app-password", true);
 // so it is set with the others rather than written here.
 var icloudFromAddress = builder.AddParameter("icloud-from-address");
 // Whose mail the email tools read: "icloud" since the owner's mail moved (2026-11-11), "graph"
-// (Microsoft 365) before. The calendar and contacts stay on Graph either way, for now.
+// (Microsoft 365) before.
 const string mailProvider = "icloud";
+// The calendar and contacts likewise, both iCloud's since 2026-11-11. The owner uses only the
+// iCloud calendar shared with them, where new events go too.
+const string calendarProvider = "icloud";
+const string contactsProvider = "icloud";
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
 // Site Manager API key from unifi.ui.com (Settings -> API Keys); reads the home UniFi console
@@ -113,6 +117,8 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("GRAPH_ONEDRIVE_DRIVE_ID", graphOneDriveDriveId)
     .WithEnvironment("GRAPH_ONEDRIVE_FOLDER_ID", graphOneDriveFolderId)
     .WithEnvironment("MAIL_PROVIDER", mailProvider)
+    .WithEnvironment("CALENDAR_PROVIDER", calendarProvider)
+    .WithEnvironment("CONTACTS_PROVIDER", contactsProvider)
     .WithEnvironment("ICLOUD_USERNAME", icloudUsername)
     .WithEnvironment("ICLOUD_APP_PASSWORD", icloudAppPassword)
     .WithEnvironment("ICLOUD_FROM_ADDRESS", icloudFromAddress)

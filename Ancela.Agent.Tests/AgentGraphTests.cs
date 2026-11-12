@@ -38,7 +38,8 @@ public class AgentGraphTests : AgentTestBase
             MockGraphClient.Verify(
                 g => g.GetUserEventsAsync(
                     It.Is<DateTimeOffset>(d => d.Date == todayStart.Date),
-                    It.Is<DateTimeOffset>(d => d.Date == todayEnd.Date || d.Date == todayStart.Date)),
+                    It.Is<DateTimeOffset>(d => d.Date == todayEnd.Date || d.Date == todayStart.Date),
+                    It.IsAny<TimeZoneInfo>()),
                 Times.AtLeastOnce));
     }
 
@@ -51,7 +52,8 @@ public class AgentGraphTests : AgentTestBase
             MockGraphClient.Verify(
                 g => g.GetUserEventsAsync(
                     It.IsAny<DateTimeOffset>(),
-                    It.IsAny<DateTimeOffset>()),
+                    It.IsAny<DateTimeOffset>(),
+                    It.IsAny<TimeZoneInfo>()),
                 Times.AtLeastOnce));
 
         Assert.NotNull(response);
@@ -412,7 +414,7 @@ public class AgentGraphTests : AgentTestBase
     protected void SetupCalendarEvents(params EventModel[] events)
     {
         MockGraphClient
-            .Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()))
+            .Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()))
             .ReturnsAsync(events);
     }
 

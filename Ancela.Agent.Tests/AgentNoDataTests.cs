@@ -27,12 +27,12 @@ public class AgentNoDataTests : AgentTestBase
     [Fact]
     public async Task EmptyCalendar_IsReportedAsNothing_NotAsAFailure()
     {
-        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()))
+        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()))
             .ReturnsAsync([]);
 
         await SendEveryTimeAsync("what's on my calendar today?", reply =>
         {
-            MockGraphClient.Verify(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
             SoundsLikeNothingScheduled.IsMatch(reply).Should().BeTrue($"the calendar was read and had nothing, but the reply was: {reply}");
             SoundsLikeAFailure.IsMatch(reply).Should().BeFalse($"nothing failed, but the reply was: {reply}");
         });
@@ -50,12 +50,12 @@ public class AgentNoDataTests : AgentTestBase
             new HistoryEntry { Id = Guid.NewGuid(), UserPhoneNumber = UserPhoneNumber, MessageType = MessageType.Agent, Timestamp = earlier,
                 Content = "One issue: Microsoft Graph is failing, so your calendar is disconnected and needs attention. Everything else looks healthy." },
         ]);
-        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()))
+        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()))
             .ReturnsAsync([]);
 
         await SendEveryTimeAsync("what's on my calendar today?", reply =>
         {
-            MockGraphClient.Verify(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()), Times.AtLeastOnce);
             SoundsLikeAFailure.IsMatch(reply).Should().BeFalse($"the calendar was read and had nothing, but the reply was: {reply}");
         });
     }
@@ -130,7 +130,7 @@ public class AgentNoDataTests : AgentTestBase
     [Fact]
     public async Task FailedCalendarRead_IsReportedAsAFailure_NotAsNothing()
     {
-        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>()))
+        MockGraphClient.Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()))
             .ThrowsAsync(new HttpRequestException("Graph calendarView request failed with 503: Service Unavailable"));
 
         await SendEveryTimeAsync("what's on my calendar today?", reply =>

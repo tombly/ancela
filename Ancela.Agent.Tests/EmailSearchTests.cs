@@ -73,7 +73,7 @@ public class EmailSearchTests
         graph.Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
             .ReturnsAsync([]);
         var plugins = new KernelPluginCollection();
-        plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object));
+        plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
         return (new Kernel(plugins: plugins), graph);
     }
 }

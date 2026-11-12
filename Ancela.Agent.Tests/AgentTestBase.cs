@@ -116,7 +116,7 @@ public abstract class AgentTestBase
 
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
-        var graphPlugin = new GraphPlugin(MockGraphClient.Object, MockGraphClient.Object);
+        var graphPlugin = new GraphPlugin(MockGraphClient.Object, MockGraphClient.Object, MockGraphClient.Object);
         var projectsPlugin = new ProjectsPlugin(MockProjectStore.Object, ownerService);
         var instructionsPlugin = new InstructionsPlugin(MockUserService.Object);
 

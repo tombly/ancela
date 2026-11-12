@@ -78,7 +78,10 @@ credentials reach only the owner's mailbox and one OneDrive folder, not the whol
 app-specific password. That password is not scoped: it reaches all of the owner's iCloud mail,
 calendar and contacts, which the owner chose (2026-10-30); the tools still read only Inbox, Sent
 and Deleted, and the guards are the same. Ancela sends only from the owner's own domain address,
-never from the iCloud address it signs in with.
+never from the iCloud address it signs in with. The calendar and contacts can come from iCloud
+too, over CalDAV and CardDAV with the same password (`CALENDAR_PROVIDER`, `CONTACTS_PROVIDER`). A
+new event goes on the calendar shared with the owner, the one they use, which everyone it is
+shared with sees.
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. They start with nothing but their own saved instructions, and the
@@ -332,7 +335,10 @@ password revokes it, and `check_services` then reports `icloud-mail` failing. Th
 is your own domain's address on iCloud (Custom Email Domain): Ancela never sends from an iCloud
 address (icloud.com, me.com, mac.com), so with none set, or an iCloud one, sending is off and
 `check_services` reports `icloud-mail` degraded. Set `MAIL_PROVIDER` in `AppHost.cs` to `"graph"`
-to read Microsoft 365 mail instead; the iCloud values are then only carried along.
+to read Microsoft 365 mail instead. `CALENDAR_PROVIDER` and `CONTACTS_PROVIDER` there do the same
+for the calendar and contacts (`"icloud"` reads them with the same two values, and `check_services`
+then probes `icloud-calendar` and `icloud-contacts`); with all three on `"graph"`, the iCloud values
+are only carried along.
 
 To use owner step-up (`invite`, `revoke`, `grant`, `ungrant`), also set `OWNER_TOTP_SECRET` to the value
 produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).
