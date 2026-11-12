@@ -4,10 +4,10 @@ using Microsoft.SemanticKernel;
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
-/// Calendar, contacts and email. Email goes through <paramref name="mailClient"/>: Microsoft 365 or
-/// iCloud, as MAIL_PROVIDER says (DependencyModule); the calendar and contacts are still Graph's.
+/// Calendar, contacts and email, each Microsoft 365's or iCloud's as CALENDAR_PROVIDER, MAIL_PROVIDER
+/// and CONTACTS_PROVIDER say (DependencyModule).
 /// </summary>
-public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
+public class GraphPlugin(ICalendarClient calendarClient, IMailClient mailClient, IContactsClient contactsClient)
 {
     #region Calendar
 
@@ -15,18 +15,20 @@ public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
     [Tool(Grant = ToolGrant.Calendar, Autonomous = Autonomy.ScheduledTask, Reads = UntrustedSource.MailOrCalendar)]
     [Description("Retrieves calendar events for the user within the specified date range.")]
     public async Task<EventModel[]> GetCalendarEventsAsync(
+         Kernel kernel,
          [Description("The start date and time of the range to query")]
          DateTimeOffset start,
          [Description("The end date and time of the range to query")]
          DateTimeOffset end)
     {
-        return await graphClient.GetUserEventsAsync(start, end);
+        return await calendarClient.GetUserEventsAsync(start, end, KernelData.UserTimeZone(kernel));
     }
 
     [KernelFunction("create_calendar_event")]
     [Tool]
     [Description("Creates a new calendar event for the user with the specified details.")]
     public async Task<EventModel> CreateCalendarEventAsync(
+         Kernel kernel,
          [Description("The subject or title of the event.")]
          string subject,
          [Description("The start date of the event 'yyyy-MM-ddTHH:mm:ss'.")]
@@ -40,7 +42,7 @@ public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
          [Description("Whether this is an all-day event (optional, defaults to false).")]
          bool isAllDay = false)
     {
-        return await graphClient.CreateEventAsync(subject, start, end, location, body, isAllDay);
+        return await calendarClient.CreateEventAsync(subject, start, end, KernelData.UserTimeZone(kernel), location, body, isAllDay);
     }
 
     #endregion
@@ -128,7 +130,7 @@ public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
          [Description("The maximum number of contacts to retrieve.")]
          int maxResults = 100)
     {
-        return await graphClient.GetUserContactsAsync(maxResults);
+        return await contactsClient.GetUserContactsAsync(maxResults);
     }
 
     [KernelFunction("get_contact_by_name")]
@@ -138,7 +140,7 @@ public class GraphPlugin(IGraphClient graphClient, IMailClient mailClient)
          [Description("The name to search for.")]
          string name)
     {
-        return await graphClient.GetUserContactByNameAsync(name);
+        return await contactsClient.GetUserContactByNameAsync(name);
     }
 
     #endregion

@@ -70,9 +70,11 @@ public static class DependencyModule
         builder.Services.AddSingleton<GraphPlugin>();
         builder.Services.AddSingleton<IGraphClient, GraphClient>();
         builder.Services.AddSingleton<IPdfConverter>(sp => sp.GetRequiredService<IGraphClient>());
-        // Whose mail the email tools read: Microsoft 365 through Graph, or iCloud over IMAP and SMTP
-        // (V2 step 5). AppHost.cs sets it; the calendar and contacts stay on Graph either way.
-        if (string.Equals(Environment.GetEnvironmentVariable("MAIL_PROVIDER"), "icloud", StringComparison.OrdinalIgnoreCase))
+        // Whose mail, calendar and contacts the tools read: Microsoft 365 through Graph, or iCloud (V2
+        // step 5: IMAP and SMTP, CalDAV, CardDAV). AppHost.cs sets each.
+        static bool OnICloud(string provider) =>
+            string.Equals(Environment.GetEnvironmentVariable(provider), "icloud", StringComparison.OrdinalIgnoreCase);
+        if (OnICloud("MAIL_PROVIDER"))
         {
             builder.Services.AddSingleton<ImapMailClient>();
             builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<ImapMailClient>());
@@ -81,6 +83,14 @@ public static class DependencyModule
         {
             builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<IGraphClient>());
         }
+        if (OnICloud("CALENDAR_PROVIDER"))
+            builder.Services.AddSingleton<ICalendarClient, CalDavCalendarClient>();
+        else
+            builder.Services.AddSingleton<ICalendarClient>(sp => sp.GetRequiredService<IGraphClient>());
+        if (OnICloud("CONTACTS_PROVIDER"))
+            builder.Services.AddSingleton<IContactsClient, CardDavContactsClient>();
+        else
+            builder.Services.AddSingleton<IContactsClient>(sp => sp.GetRequiredService<IGraphClient>());
         builder.Services.AddSingleton<ILinkedImageFetcher, LinkedImageFetcher>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();

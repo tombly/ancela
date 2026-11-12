@@ -188,7 +188,7 @@ public class ReadAttachmentTests
         graph.Setup(g => g.GetAttachmentAsync("email-1", "report.xml.gz"))
             .ReturnsAsync(AttachmentText.Read("report.xml.gz", Gzip(DmarcReport)));
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object));
+        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
 
         var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["read_attachment"],
             new() { ["emailId"] = "email-1", ["name"] = "report.xml.gz" });

@@ -12,13 +12,9 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 /// mail while it is still there. Mail is also an <see cref="IMailClient"/>, which iCloud
 /// (<see cref="ImapMailClient"/>) replaces; MAIL_PROVIDER says which one the tools use.
 /// </summary>
-public interface IGraphClient : IMailClient, IPdfConverter
+public interface IGraphClient : IMailClient, IPdfConverter, ICalendarClient, IContactsClient
 {
-    Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
-    Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
     Task<string> GetOneDriveFolderNameAsync();
-    Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
-    Task<ContactModel?> GetUserContactByNameAsync(string name);
 }
 
 /// <summary>
@@ -57,7 +53,7 @@ public class GraphClient : IGraphClient
 
     #region Calendar
 
-    public async Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end)
+    public async Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end, TimeZoneInfo timeZone)
     {
         var startDate = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
         var endDate = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -83,7 +79,7 @@ public class GraphClient : IGraphClient
                 config.QueryParameters.StartDateTime = startDate;
                 config.QueryParameters.EndDateTime = endDate;
                 // Request specific properties.
-                config.QueryParameters.Select = ["subject", "start", "end", "organizer"];
+                config.QueryParameters.Select = ["subject", "start", "end", "organizer", "isAllDay"];
                 // Get at most 50 results per calendar.
                 config.QueryParameters.Top = 50;
                 // Sort by start time.
@@ -103,7 +99,8 @@ public class GraphClient : IGraphClient
             {
                 Description = e.Subject ?? string.Empty,
                 Start = ParseGraphUtc(e.Start!.DateTime!),
-                End = ParseGraphUtc(e.End!.DateTime!)
+                End = ParseGraphUtc(e.End!.DateTime!),
+                IsAllDay = e.IsAllDay == true,
             })
             .OrderBy(e => e.Start)
             .ToArray();
@@ -121,20 +118,23 @@ public class GraphClient : IGraphClient
     /// Creates a new calendar event. The start/end dates must be in the format:
     /// "yyyy-MM-ddTHH:mm:ss" and if isAllDay is true then the time value must be
     /// midnight.
-    public async Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false)
+    public async Task<EventModel> CreateEventAsync(string subject, string start, string end, TimeZoneInfo timeZone, string? location = null, string? body = null, bool isAllDay = false)
     {
+        // The times are on the user's clock. This was TimeZoneInfo.Local, the server's, which is UTC,
+        // until 2026-11-11. Graph takes Windows names ("Pacific Standard Time").
+        var zone = TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZone.Id, out var windowsId) ? windowsId : timeZone.Id;
         var newEvent = new Event
         {
             Subject = subject,
             Start = new DateTimeTimeZone
             {
                 DateTime = start,
-                TimeZone = TimeZoneInfo.Local.Id
+                TimeZone = zone
             },
             End = new DateTimeTimeZone
             {
                 DateTime = end,
-                TimeZone = TimeZoneInfo.Local.Id
+                TimeZone = zone
             },
             IsAllDay = isAllDay
         };
@@ -627,7 +627,7 @@ public class GraphClient : IGraphClient
         var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
         {
             // Request specific properties.
-            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "companyName", "jobTitle"];
+            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "homePhones", "companyName", "jobTitle"];
             // Get contacts up to the specified limit.
             config.QueryParameters.Top = maxResults;
             // Sort by display name.
@@ -637,16 +637,7 @@ public class GraphClient : IGraphClient
         if (contacts?.Value == null)
             throw new InvalidOperationException("Graph returned no response for the contact list.");
 
-        return contacts.Value
-            .Select(c => new ContactModel
-            {
-                DisplayName = c.DisplayName ?? string.Empty,
-                EmailAddresses = c.EmailAddresses?.Select(e => e.Address ?? string.Empty).Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [],
-                MobilePhone = c.MobilePhone ?? string.Empty,
-                BusinessPhones = c.BusinessPhones?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [],
-                CompanyName = c.CompanyName ?? string.Empty,
-                JobTitle = c.JobTitle ?? string.Empty
-            }).ToArray();
+        return contacts.Value.Select(ToContact).ToArray();
     }
 
     public async Task<ContactModel?> GetUserContactByNameAsync(string name)
@@ -659,7 +650,7 @@ public class GraphClient : IGraphClient
         var contacts = await _appClient.Users[_entraUserId].Contacts.GetAsync((config) =>
         {
             // Request specific properties.
-            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "companyName", "jobTitle", "givenName", "surname"];
+            config.QueryParameters.Select = ["displayName", "emailAddresses", "mobilePhone", "businessPhones", "homePhones", "companyName", "jobTitle", "givenName", "surname"];
             // Filter by display name, given name, or surname containing the search term.
             config.QueryParameters.Filter = $"startswith(displayName,'{filterTerm}') or startswith(givenName,'{filterTerm}') or startswith(surname,'{filterTerm}')";
             // Get top 10 matches.
@@ -676,18 +667,22 @@ public class GraphClient : IGraphClient
         var exactMatch = contacts.Value.FirstOrDefault(c =>
             c.DisplayName?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true);
 
-        var contact = exactMatch ?? contacts.Value.First();
-
-        return new ContactModel
-        {
-            DisplayName = contact.DisplayName ?? string.Empty,
-            EmailAddresses = contact.EmailAddresses?.Select(e => e.Address ?? string.Empty).Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [],
-            MobilePhone = contact.MobilePhone ?? string.Empty,
-            BusinessPhones = contact.BusinessPhones?.Where(p => !string.IsNullOrEmpty(p)).ToArray() ?? [],
-            CompanyName = contact.CompanyName ?? string.Empty,
-            JobTitle = contact.JobTitle ?? string.Empty
-        };
+        return ToContact(exactMatch ?? contacts.Value.First());
     }
+
+    private static ContactModel ToContact(Contact c) => new()
+    {
+        DisplayName = c.DisplayName ?? string.Empty,
+        EmailAddresses = c.EmailAddresses?.Select(e => e.Address ?? string.Empty).Where(e => !string.IsNullOrEmpty(e)).ToArray() ?? [],
+        Phones =
+        [
+            .. new[] { c.MobilePhone }.Where(p => !string.IsNullOrEmpty(p)).Select(p => new ContactPhone("mobile", p!)),
+            .. (c.BusinessPhones ?? []).Where(p => !string.IsNullOrEmpty(p)).Select(p => new ContactPhone("work", p!)),
+            .. (c.HomePhones ?? []).Where(p => !string.IsNullOrEmpty(p)).Select(p => new ContactPhone("home", p!)),
+        ],
+        CompanyName = c.CompanyName ?? string.Empty,
+        JobTitle = c.JobTitle ?? string.Empty
+    };
 
     #endregion
 }
