@@ -7,18 +7,15 @@ using Microsoft.Graph.Models;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
-public interface IGraphClient
+/// <summary>
+/// Microsoft Graph: the calendar, contacts and the OneDrive folder, and the owner's Microsoft 365
+/// mail while it is still there. Mail is also an <see cref="IMailClient"/>, which iCloud
+/// (<see cref="ImapMailClient"/>) replaces; MAIL_PROVIDER says which one the tools use.
+/// </summary>
+public interface IGraphClient : IMailClient, IPdfConverter
 {
     Task<EventModel[]> GetUserEventsAsync(DateTimeOffset start, DateTimeOffset end);
     Task<EventModel> CreateEventAsync(string subject, string start, string end, string? location = null, string? body = null, bool isAllDay = false);
-    Task<EmailModel[]> GetUserEmailsAsync(MailFolder folder = MailFolder.Inbox, string? search = null);
-    Task<EmailContentModel> GetEmailAsync(string messageId);
-    Task<AttachmentContentModel> GetAttachmentAsync(string messageId, string attachmentName);
-    Task<string> MarkReadAsync(string messageId, bool read);
-    Task<string> MoveToDeletedItemsAsync(string messageId);
-    Task<string> SendEmailAsync(string toAddress, string subject, string body);
-    Task<int> GetLinkedImageCountAsync(string messageId);
-    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
     Task<string> GetOneDriveFolderNameAsync();
     Task<ContactModel[]> GetUserContactsAsync(int maxResults = 100);
     Task<ContactModel?> GetUserContactByNameAsync(string name);
@@ -348,8 +345,11 @@ public class GraphClient : IGraphClient
     /// The result of a change to an email, naming it by subject and sender. The audit log records the
     /// result, and the id in its arguments can't say later which email it was: a move changes it.
     /// </summary>
-    public static string Changed(Message message, string what) =>
-        $"{what}: \"{message.Subject ?? "(no subject)"}\" from {message.From?.EmailAddress?.Address ?? "an unknown sender"}.";
+    public static string Changed(Message message, string what) => Changed(message.Subject, message.From?.EmailAddress?.Address, what);
+
+    /// <inheritdoc cref="Changed(Message, string)"/>
+    public static string Changed(string? subject, string? from, string what) =>
+        $"{what}: \"{(string.IsNullOrEmpty(subject) ? "(no subject)" : subject)}\" from {(string.IsNullOrEmpty(from) ? "an unknown sender" : from)}.";
 
     /// <summary>The email's attachments, pictures in the body aside, without their content.</summary>
     private static async Task<Attachment[]> FileAttachmentsAsync(Microsoft.Graph.Users.Item.Messages.Item.MessageItemRequestBuilder request)
@@ -384,17 +384,7 @@ public class GraphClient : IGraphClient
     /// </summary>
     public static EmailContentModel ToEmailContent(Message message)
     {
-        var body = (message.Body?.Content ?? string.Empty).Replace("\r\n", "\n");
-        body = BlankLines.Replace(TrailingSpaces.Replace(body, "\n"), "\n\n").Trim();
-
-        var truncated = body.Length > EmailBodyCap;
-        if (truncated)
-        {
-            var cut = EmailBodyCap;
-            if (char.IsHighSurrogate(body[cut - 1]))
-                cut--; // don't split an emoji's surrogate pair
-            body = body[..cut];
-        }
+        var (body, truncated) = TidyBody(message.Body?.Content);
 
         return new EmailContentModel
         {
@@ -408,6 +398,26 @@ public class GraphClient : IGraphClient
             Truncated = truncated,
             Attachments = (message.Attachments ?? []).Where(a => a.IsInline != true).Select(a => a.Name ?? "(unnamed)").ToArray(),
         };
+    }
+
+    /// <summary>
+    /// An email body as the model gets it, from either mail client: line breaks as \n, no trailing
+    /// spaces or runs of blank lines, cut to <see cref="EmailBodyCap"/>.
+    /// </summary>
+    public static (string Body, bool Truncated) TidyBody(string? text)
+    {
+        var body = (text ?? string.Empty).Replace("\r\n", "\n");
+        body = BlankLines.Replace(TrailingSpaces.Replace(body, "\n"), "\n\n").Trim();
+
+        var truncated = body.Length > EmailBodyCap;
+        if (truncated)
+        {
+            var cut = EmailBodyCap;
+            if (char.IsHighSurrogate(body[cut - 1]))
+                cut--; // don't split an emoji's surrogate pair
+            body = body[..cut];
+        }
+        return (body, truncated);
     }
 
     private static string[] Addresses(List<Recipient>? recipients) =>
@@ -498,7 +508,6 @@ public class GraphClient : IGraphClient
     public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(messageId);
-        var (driveId, folderId) = OneDriveFolder();
         var message = _appClient.Users[_entraUserId].Messages[messageId];
 
         var email = await message.GetAsync(config =>
@@ -539,18 +548,29 @@ public class GraphClient : IGraphClient
         var (page, written) = EmailPdf.EmbedImages(html, images, EmailPdf.ConversionLimitBytes);
         var wanted = sources.Count(s => EmailPdf.IsEmbedded(s) || (includeLinkedImages && EmailPdf.IsLinked(s)));
 
-        var temporary = await UploadToFolderAsync(driveId, folderId, $"ancela-{Guid.NewGuid():N}.html", EmailPdf.Utf8WithBom(page));
+        return new EmailPdfModel
+        {
+            Subject = email.Subject,
+            ReceivedDateTime = email.ReceivedDateTime ?? DateTimeOffset.UtcNow,
+            Pdf = await ConvertHtmlToPdfAsync(EmailPdf.Utf8WithBom(page)),
+            LinkedImages = sources.Count(EmailPdf.IsLinked),
+            ImagesMissing = wanted - written,
+        };
+    }
+
+    /// <summary>
+    /// Converts one HTML page to a PDF: it goes into the OneDrive folder as a temporary file, Graph
+    /// converts it (<c>?format=pdf</c>), and the file is deleted. iCloud mail uses this too
+    /// (<see cref="IPdfConverter"/>).
+    /// </summary>
+    public async Task<byte[]> ConvertHtmlToPdfAsync(byte[] page)
+    {
+        var (driveId, folderId) = OneDriveFolder();
+        var temporary = await UploadToFolderAsync(driveId, folderId, $"ancela-{Guid.NewGuid():N}.html", page);
         var temporaryId = temporary.Id ?? throw new InvalidOperationException("Graph returned no id for the uploaded email.");
         try
         {
-            return new EmailPdfModel
-            {
-                Subject = email.Subject,
-                ReceivedDateTime = email.ReceivedDateTime ?? DateTimeOffset.UtcNow,
-                Pdf = await ConvertToPdfAsync(driveId, temporaryId),
-                LinkedImages = sources.Count(EmailPdf.IsLinked),
-                ImagesMissing = wanted - written,
-            };
+            return await ConvertToPdfAsync(driveId, temporaryId);
         }
         finally
         {

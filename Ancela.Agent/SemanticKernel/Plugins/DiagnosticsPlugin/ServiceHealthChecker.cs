@@ -29,6 +29,7 @@ public class ServiceHealthChecker(
     CosmosClient _cosmosClient,
     ServiceBusClient _serviceBusClient,
     IGraphClient _graphClient,
+    IMailClient _mailClient,
     YnabClient _ynabClient,
     ITavilyClient _tavilyClient,
     GoogleHealthClient _googleHealthClient,
@@ -45,19 +46,21 @@ public class ServiceHealthChecker(
 
     public async Task<ServiceProbeResult[]> CheckAllAsync()
     {
-        var probes = new[]
-        {
+        Task<ServiceProbeResult>[] probes =
+        [
             ProbeAsync("cosmos-db", ProbeCosmosAsync),
             ProbeAsync("service-bus", ProbeServiceBusAsync),
             ProbeAsync("twilio", ProbeTwilioAsync),
             ProbeAsync("microsoft-graph", ProbeGraphAsync),
             ProbeAsync("onedrive-folder", ProbeOneDriveAsync),
+            // Only when the email tools read iCloud (MAIL_PROVIDER); Graph's mail is the Graph probe's.
+            .. _mailClient is ImapMailClient imap ? [ProbeAsync("icloud-mail", () => ProbeICloudMailAsync(imap))] : (Task<ServiceProbeResult>[])[],
             ProbeAsync("ynab", ProbeYnabAsync),
             ProbeAsync("tavily-web-search", ProbeTavilyAsync),
             ProbeAsync("google-health", ProbeGoogleHealthAsync),
             ProbeAsync("remarkable", ProbeRemarkableAsync),
             ProbeAsync("unifi-network", ProbeUnifiAsync),
-        };
+        ];
 
         var results = await Task.WhenAll(probes);
 
@@ -110,6 +113,22 @@ public class ServiceHealthChecker(
         return string.Equals(status, "active", StringComparison.OrdinalIgnoreCase)
             ? ("ok", "account active")
             : ("degraded", $"account status is '{status}'");
+    }
+
+    private static async Task<(string Status, string Detail)> ProbeICloudMailAsync(ImapMailClient imap)
+    {
+        // Signs in with the app-specific password and opens the Inbox: a revoked password (changing
+        // the Apple Account password revokes them all) fails here.
+        var count = await imap.CheckAsync();
+        try
+        {
+            imap.SendingAddress();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ("degraded", $"Signed in to iCloud Mail; the Inbox holds {count} emails. {ex.Message}");
+        }
+        return ("ok", $"Signed in to iCloud Mail; the Inbox holds {count} emails.");
     }
 
     private async Task<(string Status, string Detail)> ProbeGraphAsync()

@@ -40,19 +40,33 @@ public static class EmailPdf
     /// .eml, the names of any attachments (their contents are never in the PDF, as with an .eml),
     /// then the original HTML body. Header values come from the sender, so every one is HTML-encoded.
     /// </summary>
-    public static string RenderHtml(Message message, IReadOnlyList<string> attachments, TimeZoneInfo timeZone)
+    public static string RenderHtml(Message message, IReadOnlyList<string> attachments, TimeZoneInfo timeZone) =>
+        RenderHtml(new EmailPage(
+            Format(message.From), message.SentDateTime, Format(message.ToRecipients),
+            message.CcRecipients is { Count: > 0 } ? Format(message.CcRecipients) : null,
+            message.Subject, message.Body?.Content ?? string.Empty, BodyIsHtml: message.Body?.ContentType != BodyType.Text),
+            attachments, timeZone);
+
+    /// <summary>
+    /// What the PDF shows of an email, whichever mail client read it. Addresses are as a mail app
+    /// shows them ("Name &lt;address&gt;", several joined with "; ").
+    /// </summary>
+    public sealed record EmailPage(string From, DateTimeOffset? Sent, string To, string? Cc, string? Subject, string Body, bool BodyIsHtml);
+
+    /// <inheritdoc cref="RenderHtml(Message, IReadOnlyList{string}, TimeZoneInfo)"/>
+    public static string RenderHtml(EmailPage email, IReadOnlyList<string> attachments, TimeZoneInfo timeZone)
     {
         var rows = new List<(string Label, string Value)>
         {
-            ("From", Format(message.From)),
-            ("Sent", message.SentDateTime is { } sent
+            ("From", email.From),
+            ("Sent", email.Sent is { } sent
                 ? $"{TimeZoneInfo.ConvertTime(sent, timeZone).ToString("dddd, d MMMM yyyy HH:mm", CultureInfo.InvariantCulture)} ({timeZone.Id})"
                 : string.Empty),
-            ("To", Format(message.ToRecipients)),
+            ("To", email.To),
         };
-        if (message.CcRecipients is { Count: > 0 })
-            rows.Add(("Cc", Format(message.CcRecipients)));
-        rows.Add(("Subject", message.Subject ?? string.Empty));
+        if (!string.IsNullOrEmpty(email.Cc))
+            rows.Add(("Cc", email.Cc));
+        rows.Add(("Subject", email.Subject ?? string.Empty));
         if (attachments.Count > 0)
             rows.Add(("Attachments", string.Join(", ", attachments)));
 
@@ -63,8 +77,8 @@ public static class EmailPdf
                 .Append(WebUtility.HtmlEncode(value)).Append("</td></tr>");
         header.Append("</table><hr>");
 
-        var body = message.Body?.Content ?? string.Empty;
-        if (message.Body?.ContentType == BodyType.Text)
+        var body = email.Body;
+        if (!email.BodyIsHtml)
             body = $"<pre style=\"white-space:pre-wrap;font-family:inherit\">{WebUtility.HtmlEncode(body)}</pre>";
 
         // Keep the email's own <head> (its styles) by inserting just inside <body>; wrap a fragment.
