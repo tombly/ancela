@@ -73,11 +73,12 @@ Ancela is a **single-owner** assistant. Each deployed instance is wired to exact
 one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
 contacts) and one YNAB token — using app-only credentials held by the instance. Those
 credentials reach only the owner's mailbox and one OneDrive folder, not the whole tenant
-(see [step 1](#1-configure-microsoft-graph-access) of the setup). Mail can come from iCloud
-instead (`MAIL_PROVIDER` in `AppHost.cs`), over IMAP and SMTP with an app-specific password.
-That password is not scoped: it reaches all of the owner's iCloud mail, calendar and contacts,
-which the owner chose (2026-10-30); the tools still read only Inbox, Sent and Deleted, and the
-guards are the same.
+(see [step 1](#1-configure-microsoft-graph-access) of the setup). Mail comes from iCloud
+(`MAIL_PROVIDER` in `AppHost.cs`; Graph's until 2026-11-11), over IMAP and SMTP with an
+app-specific password. That password is not scoped: it reaches all of the owner's iCloud mail,
+calendar and contacts, which the owner chose (2026-10-30); the tools still read only Inbox, Sent
+and Deleted, and the guards are the same. Ancela sends only from the owner's own domain address,
+never from the iCloud address it signs in with.
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. They start with nothing but their own saved instructions, and the
@@ -321,14 +322,17 @@ dotnet user-secrets set Parameters:graph-onedrive-folder-id "..."   # the grante
 dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
 dotnet user-secrets set Parameters:icloud-username     "..."   # the iCloud Mail address (…@icloud.com)
 dotnet user-secrets set Parameters:icloud-app-password "..."   # an app-specific password
+dotnet user-secrets set Parameters:icloud-from-address "..."   # the address Ancela sends from (your own domain)
 ```
 
 The iCloud username is the iCloud Mail address, not the Apple Account email when that is another
 address: iCloud's IMAP server refuses the latter. Make the app-specific password at
 account.apple.com (Sign-In and Security → App-Specific Passwords). Changing the Apple Account
-password revokes it, and `check_services` then reports `icloud-mail` failing. Ancela reads iCloud
-mail only once `MAIL_PROVIDER` in `AppHost.cs` is `"icloud"`; until then both values are only
-carried along.
+password revokes it, and `check_services` then reports `icloud-mail` failing. The from address
+is your own domain's address on iCloud (Custom Email Domain): Ancela never sends from an iCloud
+address (icloud.com, me.com, mac.com), so with none set, or an iCloud one, sending is off and
+`check_services` reports `icloud-mail` degraded. Set `MAIL_PROVIDER` in `AppHost.cs` to `"graph"`
+to read Microsoft 365 mail instead; the iCloud values are then only carried along.
 
 To use owner step-up (`invite`, `revoke`, `grant`, `ungrant`), also set `OWNER_TOTP_SECRET` to the value
 produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).

@@ -9,7 +9,8 @@ namespace Ancela.Agent.Tests;
 
 /// <summary>
 /// The parts of iCloud mail (ImapMailClient) that need no server: email ids, get_recent_emails'
-/// search as IMAP SEARCH, an HTML body as text, and which parts of an email are its attachments.
+/// search as IMAP SEARCH, an HTML body as text, which parts of an email are its attachments, and the
+/// address it sends from.
 /// ICloudMailLiveTests covers the calls against the real account.
 /// </summary>
 public class ImapMailTests
@@ -99,6 +100,26 @@ public class ImapMailTests
 
         ImapMailClient.Attachments(message).Select(a => a.Name).Should().Equal("google.com!example.com!1!2.zip");
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("owner")]
+    public void Sending_WithNoAddressToSendFrom_IsOff(string? from) =>
+        FluentActions.Invoking(() => ImapMailClient.SendingAddress(from))
+            .Should().Throw<InvalidOperationException>().WithMessage("*no address to send from*sending is off*");
+
+    [Theory]
+    [InlineData("owner@icloud.com")]
+    [InlineData("owner@me.com")]
+    [InlineData("Owner <owner@MAC.com>")]
+    public void Sending_FromAnICloudAddress_IsOff(string from) =>
+        FluentActions.Invoking(() => ImapMailClient.SendingAddress(from))
+            .Should().Throw<InvalidOperationException>().WithMessage("*never sends from*");
+
+    [Fact]
+    public void Sending_IsFromTheOwnersDomain() =>
+        ImapMailClient.SendingAddress("owner@example.com").Address.Should().Be("owner@example.com");
 
     /// <summary>The (term, text) of each text query, left to right.</summary>
     private static List<(SearchTerm, string)> Texts(SearchQuery query) => query switch

@@ -20,7 +20,8 @@ namespace Ancela.Agent.Tests;
 ///   dotnet test --filter "FullyQualifiedName~ICloudMailLiveTests"
 /// Each test puts its own email in the Inbox (IMAP APPEND: nothing is sent) and afterwards deletes it,
 /// and only it, for good, from wherever it ended up. Prints no content of any other email.
-/// Sending is tried only with ANCELA_LIVE_SEND=1, and goes to the owner's own address.
+/// Sending is tried only with ANCELA_LIVE_SEND=1 (and Parameters:icloud-from-address), and goes from
+/// and to the owner's own domain address.
 /// </summary>
 [Trait("Category", "Integration")]
 public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
@@ -30,6 +31,7 @@ public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
     private readonly string _token = $"z{Guid.NewGuid():N}"[..13];
     private string Subject => $"Ancela live test {_token}";
     private (string User, string Password)? _account;
+    private string? _from;
     private ImapMailClient? _client;
 
     public Task InitializeAsync()
@@ -40,6 +42,8 @@ public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
             _account = (user, password);
             Environment.SetEnvironmentVariable("ICLOUD_USERNAME", user);
             Environment.SetEnvironmentVariable("ICLOUD_APP_PASSWORD", password);
+            _from = config["Parameters:icloud-from-address"];
+            Environment.SetEnvironmentVariable("ICLOUD_FROM_ADDRESS", _from);
             _client = new ImapMailClient(new LinkedImageFetcher(), Pdf.Object);
         }
         return Task.CompletedTask;
@@ -114,21 +118,26 @@ public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
     [Fact]
     public async Task Send_GoesOut_AndOneCopyLandsInSent()
     {
-        if (_client is null || Environment.GetEnvironmentVariable("ANCELA_LIVE_SEND") != "1")
+        if (_client is null || _from is null || Environment.GetEnvironmentVariable("ANCELA_LIVE_SEND") != "1")
         {
-            _output.WriteLine("Skipped: set ANCELA_LIVE_SEND=1 to send a test email to the owner's own address.");
+            _output.WriteLine("Skipped: set ANCELA_LIVE_SEND=1 and Parameters:icloud-from-address to send a test email to the owner's own address.");
             return;
         }
 
-        var result = await _client.SendEmailAsync(_account!.Value.User, Subject, $"{_token}body sent by ICloudMailLiveTests.");
+        var result = await _client.SendEmailAsync(_from, Subject, $"{_token}body sent by ICloudMailLiveTests.");
 
         result.Should().StartWith("Email sent successfully");
         var (sent, waited) = await FindAsync(_client, MailFolder.Sent, $"subject:\"{Subject}\"");
         _output.WriteLine($"Sent copies after {waited.TotalSeconds:0} s: {sent.Length}");
-        await Task.Delay(TimeSpan.FromSeconds(20));  // time for a second copy, if iCloud also saves one
-        // iCloud keeps no copy of its own (tried 2026-11-05), so Ancela's is the only one. It didn't
-        // deliver the email to the owner's own Inbox within minutes either, so that isn't waited for.
-        (await _client.GetUserEmailsAsync(MailFolder.Sent, $"subject:\"{Subject}\"")).Should().ContainSingle(because: "one copy, not iCloud's and Ancela's");
+        // The copy delivered to the Inbox shows what iCloud sent, where Sent holds the one Ancela wrote.
+        // Sent from and to the owner's domain address, it arrived within the run (2026-11-11); sent to
+        // the old account's own iCloud address, it never had.
+        var (delivered, arrived) = await FindAsync(_client, MailFolder.Inbox, $"subject:\"{Subject}\"");
+        _output.WriteLine($"Delivered after {arrived.TotalSeconds:0} s: {delivered.Length}");
+        delivered.Should().ContainSingle().Which.From.Should().Be(_from, because: "Ancela sends only from the owner's domain, never the iCloud address");
+        // iCloud keeps no copy of its own (tried 2026-11-05), so Ancela's is the only one.
+        (await _client.GetUserEmailsAsync(MailFolder.Sent, $"subject:\"{Subject}\"")).Should().ContainSingle(because: "one copy, not iCloud's and Ancela's")
+            .Which.From.Should().Be(_from);
     }
 
     /// <summary>Puts this test's email in the Inbox, unread: text, a CSV and an embedded picture.</summary>

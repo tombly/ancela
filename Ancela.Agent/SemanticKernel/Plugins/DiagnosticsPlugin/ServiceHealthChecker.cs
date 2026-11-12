@@ -120,6 +120,14 @@ public class ServiceHealthChecker(
         // Signs in with the app-specific password and opens the Inbox: a revoked password (changing
         // the Apple Account password revokes them all) fails here.
         var count = await imap.CheckAsync();
+        try
+        {
+            imap.SendingAddress();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ("degraded", $"Signed in to iCloud Mail; the Inbox holds {count} emails. {ex.Message}");
+        }
         return ("ok", $"Signed in to iCloud Mail; the Inbox holds {count} emails.");
     }
 

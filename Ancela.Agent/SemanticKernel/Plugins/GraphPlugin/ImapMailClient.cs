@@ -14,7 +14,8 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
 /// The owner's iCloud mail over IMAP (imap.mail.me.com) and SMTP (smtp.mail.me.com), signed in with
-/// an app-specific password (ICLOUD_USERNAME, the full iCloud Mail address, and ICLOUD_APP_PASSWORD).
+/// an app-specific password (ICLOUD_USERNAME, the full iCloud Mail address, and ICLOUD_APP_PASSWORD),
+/// sending from the owner's own domain (ICLOUD_FROM_ADDRESS, <see cref="SendingAddress(string?)"/>).
 /// The same tools and results as Graph's (<see cref="GraphClient"/>), read on 2026-11-05 against the
 /// real account: iCloud has no MOVE or SPECIAL-USE extension, but marks Sent Messages and Deleted
 /// Messages with their LIST attributes and has UIDPLUS. Ids are the folder and the IMAP UID
@@ -36,6 +37,11 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConver
 
     private readonly string _user = Environment.GetEnvironmentVariable("ICLOUD_USERNAME") ?? throw new InvalidOperationException("ICLOUD_USERNAME not set");
     private readonly string _password = Environment.GetEnvironmentVariable("ICLOUD_APP_PASSWORD") ?? throw new InvalidOperationException("ICLOUD_APP_PASSWORD not set");
+
+    // Read when sending, not here, so the reads work without it.
+    private readonly string? _from = Environment.GetEnvironmentVariable("ICLOUD_FROM_ADDRESS");
+
+    private static readonly HashSet<string> ICloudDomains = new(StringComparer.OrdinalIgnoreCase) { "icloud.com", "me.com", "mac.com" };
 
     // One connection, used one call at a time: signing in takes most of a second, and a DMARC run
     // makes a dozen calls. Messages are handled one at a time anyway (host.json).
@@ -159,12 +165,13 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConver
 
     public async Task<string> SendEmailAsync(string toAddress, string subject, string body)
     {
+        var from = SendingAddress();
         // A name the model passed for an address ("Bob") fails here rather than at iCloud.
         if (!MailboxAddress.TryParse(toAddress, out var to) || !to.Address.Contains('@'))
             throw new InvalidOperationException($"'{toAddress}' isn't an email address.");
 
         var message = new MimeMessage();
-        message.From.Add(MailboxAddress.Parse(_user));
+        message.From.Add(from);
         message.To.Add(to);
         message.Subject = subject;
         message.Body = new TextPart(TextFormat.Plain) { Text = body };
@@ -249,6 +256,24 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConver
     /// <summary>Signs in and selects the Inbox: what check_services reports as "icloud-mail".</summary>
     public Task<int> CheckAsync() =>
         InFolderAsync(MailFolder.Inbox, FolderAccess.ReadOnly, listing: true, mailbox => Task.FromResult(mailbox.Count));
+
+    /// <summary>The address this client sends from, or why it sends nothing (<see cref="SendingAddress(string?)"/>).</summary>
+    public MailboxAddress SendingAddress() => SendingAddress(_from);
+
+    /// <summary>
+    /// The address to send from: ICLOUD_FROM_ADDRESS, the owner's own domain. The owner sends only
+    /// from that address, never from the iCloud address Ancela signs in with (2026-11-11), so with
+    /// none set, or an iCloud one (icloud.com, me.com, mac.com), sending is refused rather than
+    /// falling back to the sign-in address.
+    /// </summary>
+    public static MailboxAddress SendingAddress(string? from)
+    {
+        if (!MailboxAddress.TryParse(from ?? string.Empty, out var address) || !address.Address.Contains('@'))
+            throw new InvalidOperationException("There's no address to send from (ICLOUD_FROM_ADDRESS holds no email address), so sending is off.");
+        if (ICloudDomains.Contains(address.Domain))
+            throw new InvalidOperationException("The address to send from (ICLOUD_FROM_ADDRESS) is an iCloud address, which Ancela never sends from, so sending is off.");
+        return address;
+    }
 
     /// <summary>
     /// Runs <paramref name="work"/> in one of the three folders the tools read, signing in first if
