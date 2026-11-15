@@ -1,8 +1,7 @@
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
-/// The owner's calendar, as the calendar tools use it: Microsoft 365 through Graph (<see cref="GraphClient"/>)
-/// or iCloud over CalDAV (<see cref="CalDavCalendarClient"/>), as CALENDAR_PROVIDER says (DependencyModule).
+/// The owner's calendar, as the calendar tools use it: iCloud over CalDAV (<see cref="CalDavCalendarClient"/>).
 /// </summary>
 public interface ICalendarClient
 {

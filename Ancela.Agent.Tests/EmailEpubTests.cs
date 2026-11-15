@@ -16,12 +16,12 @@ public class EmailEpubTests
     private static readonly TimeZoneInfo Pacific = TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles");
     private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3];
 
-    private static EmailPdf.EmailPage Email(string body, string? subject = "Fall newsletter", bool html = true) => new(
+    private static EmailEpub.EmailPage Email(string body, string? subject = "Fall newsletter", bool html = true) => new(
         "\"YGC Wealth\" <news@ygc.example>", new DateTimeOffset(2026, 10, 2, 12, 30, 0, TimeSpan.Zero),
         "tom@example.com", Cc: null, subject, body, BodyIsHtml: html);
 
     private static (ZipArchive Zip, string Page, EmailEpub.Book Book) Build(
-        EmailPdf.EmailPage email, IReadOnlyDictionary<string, MediaItem>? images = null, IReadOnlyList<string>? attachments = null,
+        EmailEpub.EmailPage email, IReadOnlyDictionary<string, MediaItem>? images = null, IReadOnlyList<string>? attachments = null,
         bool linkedImagesWanted = true)
     {
         var book = EmailEpub.Build(email, attachments ?? [], images ?? new Dictionary<string, MediaItem>(), linkedImagesWanted, Pacific);

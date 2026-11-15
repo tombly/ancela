@@ -5,7 +5,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
 /// The owner's iCloud contacts over CardDAV (<see cref="ICloudDav"/>): the same tools and results as
-/// Graph's (<see cref="GraphClient"/>). iCloud keeps each contact as a vCard 3.0 (probed 2026-11-11:
+/// Microsoft Graph's, which this replaced on 2026-11-11. iCloud keeps each contact as a vCard 3.0 (probed 2026-11-11:
 /// 53 cards, one address book, under 1 KB each), all of them read on each call, about two seconds.
 /// Every phone number is given with its label: 13 of those contacts had only a home or other number,
 /// which a result of mobile and work numbers alone would have hidden.

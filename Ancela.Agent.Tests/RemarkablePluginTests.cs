@@ -15,7 +15,7 @@ public class RemarkablePluginTests
 {
     private static readonly byte[] Epub = "PK the whole email as an EPUB"u8.ToArray();
 
-    private readonly Mock<IGraphClient> _graph = new();
+    private readonly Mock<IOwnerAccounts> _graph = new();
     private readonly Mock<IRemarkableService> _remarkable = new();
     private readonly List<(string Title, byte[] Epub)> _uploads = [];
 

@@ -4,8 +4,10 @@ using Microsoft.SemanticKernel;
 namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 
 /// <summary>
-/// Calendar, contacts and email, each Microsoft 365's or iCloud's as CALENDAR_PROVIDER, MAIL_PROVIDER
-/// and CONTACTS_PROVIDER say (DependencyModule).
+/// Calendar, contacts and email, all the owner's iCloud account (<see cref="CalDavCalendarClient"/>,
+/// <see cref="CardDavContactsClient"/>, <see cref="ImapMailClient"/>). The name is from when they were
+/// Microsoft 365's, through Graph, until 2026-11; it is the tools' plugin name, which the model and the
+/// audit log see.
 /// </summary>
 public class GraphPlugin(ICalendarClient calendarClient, IMailClient mailClient, IContactsClient contactsClient)
 {

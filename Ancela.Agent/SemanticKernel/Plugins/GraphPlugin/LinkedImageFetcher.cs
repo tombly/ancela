@@ -29,7 +29,7 @@ public class LinkedImageFetcher : ILinkedImageFetcher
     private static readonly TimeSpan PerImageTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(30);
 
-    // The types Graph's PDF converter is known to show. WebP and SVG are not asked for or kept.
+    // The types every EPUB reader shows (EmailEpub). WebP and SVG are not asked for or kept.
     private static readonly HashSet<string> ImageTypes = new(StringComparer.OrdinalIgnoreCase) { "image/png", "image/jpeg", "image/gif" };
 
     private readonly HttpClient _http;

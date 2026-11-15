@@ -70,29 +70,14 @@ public static class DependencyModule
         // that they can be re-used by multiple kernels. 
         builder.Services.AddSingleton<SmsPlugin>();
         builder.Services.AddSingleton<GraphPlugin>();
-        builder.Services.AddSingleton<IGraphClient, GraphClient>();
-        builder.Services.AddSingleton<IPdfConverter>(sp => sp.GetRequiredService<IGraphClient>());
-        // Whose mail, calendar and contacts the tools read: Microsoft 365 through Graph, or iCloud (V2
-        // step 5: IMAP and SMTP, CalDAV, CardDAV). AppHost.cs sets each.
-        static bool OnICloud(string provider) =>
-            string.Equals(Environment.GetEnvironmentVariable(provider), "icloud", StringComparison.OrdinalIgnoreCase);
-        if (OnICloud("MAIL_PROVIDER"))
-        {
-            builder.Services.AddSingleton<ImapMailClient>();
-            builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<ImapMailClient>());
-        }
-        else
-        {
-            builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<IGraphClient>());
-        }
-        if (OnICloud("CALENDAR_PROVIDER"))
-            builder.Services.AddSingleton<ICalendarClient, CalDavCalendarClient>();
-        else
-            builder.Services.AddSingleton<ICalendarClient>(sp => sp.GetRequiredService<IGraphClient>());
-        if (OnICloud("CONTACTS_PROVIDER"))
-            builder.Services.AddSingleton<IContactsClient, CardDavContactsClient>();
-        else
-            builder.Services.AddSingleton<IContactsClient>(sp => sp.GetRequiredService<IGraphClient>());
+        // The owner's mail, calendar and contacts, all iCloud's (IMAP and SMTP, CalDAV, CardDAV) since
+        // 2026-11-11; Microsoft 365's, through Graph, before. The self-check probes each concrete client.
+        builder.Services.AddSingleton<ImapMailClient>();
+        builder.Services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<ImapMailClient>());
+        builder.Services.AddSingleton<CalDavCalendarClient>();
+        builder.Services.AddSingleton<ICalendarClient>(sp => sp.GetRequiredService<CalDavCalendarClient>());
+        builder.Services.AddSingleton<CardDavContactsClient>();
+        builder.Services.AddSingleton<IContactsClient>(sp => sp.GetRequiredService<CardDavContactsClient>());
         builder.Services.AddSingleton<ILinkedImageFetcher, LinkedImageFetcher>();
         builder.Services.AddSingleton<MemoryPlugin>();
         builder.Services.AddSingleton<IMemoryClient, MemoryClient>();

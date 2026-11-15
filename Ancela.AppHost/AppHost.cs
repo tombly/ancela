@@ -18,31 +18,15 @@ var twilioPhoneNumberParameter = builder.AddParameter("twilio-phone-number", tru
 var ownerPhoneNumberParameter = builder.AddParameter("owner-phone-number", true);
 var twilioAccountSidParameter = builder.AddParameter("twilio-account-sid", true);
 var twilioAuthTokenParameter = builder.AddParameter("twilio-auth-token", true);
-var graphUserIdParameter = builder.AddParameter("graph-user-id", true);
-var graphTenantIdParameter = builder.AddParameter("graph-tenant-id", true);
-var graphClientIdParameter = builder.AddParameter("graph-client-id", true);
-var graphClientSecretParameter = builder.AddParameter("graph-client-secret", true);
-// The one OneDrive folder the app may write to, where an email is turned into a PDF for the
-// reMarkable (send_email_to_remarkable). The app holds Files.SelectedOperations.Selected plus a
-// per-folder grant, so these must name that folder.
-var graphOneDriveDriveId = builder.AddParameter("graph-onedrive-drive-id", true);
-var graphOneDriveFolderId = builder.AddParameter("graph-onedrive-folder-id", true);
-// iCloud Mail (V2 step 5): the full iCloud Mail address (…@icloud.com, not the Apple Account email)
-// and an app-specific password, which reaches all of the owner's iCloud mail, calendar and contacts.
-// Changing the Apple Account password revokes it.
+// The owner's mail, calendar and contacts are iCloud's (V2 step 5; Microsoft 365's, through Graph,
+// until 2026-11): the full iCloud Mail address (…@icloud.com, not the Apple Account email) and an
+// app-specific password, which reaches all three. Changing the Apple Account password revokes it.
 var icloudUsername = builder.AddParameter("icloud-username", true);
 var icloudAppPassword = builder.AddParameter("icloud-app-password", true);
 // The address Ancela sends from: the owner's own domain, never the iCloud address above (the
 // owner's rule; ImapMailClient refuses to send without it). Not a secret, but the owner's address,
 // so it is set with the others rather than written here.
 var icloudFromAddress = builder.AddParameter("icloud-from-address");
-// Whose mail the email tools read: "icloud" since the owner's mail moved (2026-11-11), "graph"
-// (Microsoft 365) before.
-const string mailProvider = "icloud";
-// The calendar and contacts likewise, both iCloud's since 2026-11-11. The owner uses only the
-// iCloud calendar shared with them, where new events go too.
-const string calendarProvider = "icloud";
-const string contactsProvider = "icloud";
 var ynabAccessToken = builder.AddParameter("ynab-access-token", true);
 var tavilyApiKey = builder.AddParameter("tavily-api-key", true);
 // Site Manager API key from unifi.ui.com (Settings -> API Keys); reads the home UniFi console
@@ -110,15 +94,6 @@ var functionApp = builder.AddAzureFunctionsProject<Projects.Ancela_FunctionApp>(
     .WithEnvironment("OWNER_PHONE_NUMBER", ownerPhoneNumberParameter)
     .WithEnvironment("TWILIO_ACCOUNT_SID", twilioAccountSidParameter)
     .WithEnvironment("TWILIO_AUTH_TOKEN", twilioAuthTokenParameter)
-    .WithEnvironment("GRAPH_USER_ID", graphUserIdParameter)
-    .WithEnvironment("GRAPH_TENANT_ID", graphTenantIdParameter)
-    .WithEnvironment("GRAPH_CLIENT_ID", graphClientIdParameter)
-    .WithEnvironment("GRAPH_CLIENT_SECRET", graphClientSecretParameter)
-    .WithEnvironment("GRAPH_ONEDRIVE_DRIVE_ID", graphOneDriveDriveId)
-    .WithEnvironment("GRAPH_ONEDRIVE_FOLDER_ID", graphOneDriveFolderId)
-    .WithEnvironment("MAIL_PROVIDER", mailProvider)
-    .WithEnvironment("CALENDAR_PROVIDER", calendarProvider)
-    .WithEnvironment("CONTACTS_PROVIDER", contactsProvider)
     .WithEnvironment("ICLOUD_USERNAME", icloudUsername)
     .WithEnvironment("ICLOUD_APP_PASSWORD", icloudAppPassword)
     .WithEnvironment("ICLOUD_FROM_ADDRESS", icloudFromAddress)

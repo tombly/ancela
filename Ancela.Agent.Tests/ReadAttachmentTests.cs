@@ -9,7 +9,7 @@ namespace Ancela.Agent.Tests;
 
 /// <summary>
 /// Unit tests for read_attachment: how an attachment's bytes become text (AttachmentText), and that
-/// the tool passes its arguments through. MailSearchLiveTests covers the Graph calls.
+/// the tool passes its arguments through. ICloudMailLiveTests covers the IMAP calls.
 /// </summary>
 public class ReadAttachmentTests
 {
@@ -184,7 +184,7 @@ public class ReadAttachmentTests
     [Fact]
     public async Task ReadAttachment_PassesTheIdAndNameThrough()
     {
-        var graph = new Mock<IGraphClient>();
+        var graph = new Mock<IOwnerAccounts>();
         graph.Setup(g => g.GetAttachmentAsync("email-1", "report.xml.gz"))
             .ReturnsAsync(AttachmentText.Read("report.xml.gz", Gzip(DmarcReport)));
         var kernel = new Kernel();

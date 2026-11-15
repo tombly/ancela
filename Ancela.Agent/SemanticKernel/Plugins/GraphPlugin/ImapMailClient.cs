@@ -16,7 +16,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 /// The owner's iCloud mail over IMAP (imap.mail.me.com) and SMTP (smtp.mail.me.com), signed in with
 /// an app-specific password (ICLOUD_USERNAME, the full iCloud Mail address, and ICLOUD_APP_PASSWORD),
 /// sending from the owner's own domain (ICLOUD_FROM_ADDRESS, <see cref="SendingAddress(string?)"/>).
-/// The same tools and results as Graph's (<see cref="GraphClient"/>), read on 2026-11-05 against the
+/// The same tools and results as Microsoft Graph's, which this replaced on 2026-11-11; read on 2026-11-05 against the
 /// real account: iCloud has no MOVE or SPECIAL-USE extension, but marks Sent Messages and Deleted
 /// Messages with their LIST attributes and has UIDPLUS. Ids are the folder and the IMAP UID
 /// (<see cref="ImapSearch.EmailId"/>).
@@ -87,7 +87,7 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
         {
             var summary = await SummaryAsync(mailbox, uid, MessageSummaryItems.InternalDate);
             var message = await mailbox.GetMessageAsync(uid);  // BODY.PEEK: reading doesn't mark it read
-            var (body, truncated) = GraphClient.TidyBody(message.TextBody ?? HtmlText(message.HtmlBody));
+            var (body, truncated) = MailText.TidyBody(message.TextBody ?? HtmlText(message.HtmlBody));
             return new EmailContentModel
             {
                 Id = messageId,
@@ -199,7 +199,7 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
         {
             await SummaryAsync(mailbox, uid, MessageSummaryItems.UniqueId);
             var message = await mailbox.GetMessageAsync(uid);
-            return EmailPdf.ImageSources(message.HtmlBody ?? string.Empty).Count(EmailPdf.IsLinked);
+            return EmailImages.ImageSources(message.HtmlBody ?? string.Empty).Count(EmailImages.IsLinked);
         });
     }
 
@@ -217,11 +217,11 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
             return await mailbox.GetMessageAsync(uid);
         });
 
-        var email = new EmailPdf.EmailPage(
+        var email = new EmailEpub.EmailPage(
             Addresses(message.From), message.Date == DateTimeOffset.MinValue ? null : message.Date, Addresses(message.To),
             message.Cc.Count > 0 ? Addresses(message.Cc) : null, message.Subject,
             message.HtmlBody ?? message.TextBody ?? string.Empty, BodyIsHtml: message.HtmlBody is not null);
-        var sources = email.BodyIsHtml ? EmailPdf.ImageSources(email.Body) : [];
+        var sources = email.BodyIsHtml ? EmailImages.ImageSources(email.Body) : [];
 
         var images = new Dictionary<string, MediaItem>();
         foreach (var part in message.BodyParts.OfType<MimePart>().Where(p => p.ContentId is not null && p.ContentType.MediaType == "image"))
@@ -229,11 +229,11 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
             using var bytes = new MemoryStream();
             await part.Content.DecodeToAsync(bytes);
             if (bytes.Length <= EmailEpub.ImageLimitBytes)
-                images[EmailPdf.EmbeddedSource(part.ContentId)] = new MediaItem(bytes.ToArray(), part.ContentType.MimeType.ToLowerInvariant());
+                images[EmailImages.EmbeddedSource(part.ContentId)] = new MediaItem(bytes.ToArray(), part.ContentType.MimeType.ToLowerInvariant());
         }
         if (includeLinkedImages)
         {
-            foreach (var (url, image) in await _imageFetcher.FetchAsync(sources.Where(EmailPdf.IsLinked)))
+            foreach (var (url, image) in await _imageFetcher.FetchAsync(sources.Where(EmailImages.IsLinked)))
                 images[url] = image;
         }
 
@@ -242,7 +242,7 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
         {
             Subject = message.Subject,
             Epub = book.Epub,
-            LinkedImages = sources.Count(EmailPdf.IsLinked),
+            LinkedImages = sources.Count(EmailImages.IsLinked),
             ImagesMissing = book.ImagesMissing,
         };
     }
@@ -353,7 +353,7 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailCli
         ?? throw new InvalidOperationException($"There's no email with that id in {mailbox.FullName}: it may have been moved or deleted. List the emails again.");
 
     private static string Changed(IMessageSummary summary, string what) =>
-        GraphClient.Changed(summary.Envelope?.Subject, summary.Envelope?.From.Mailboxes.FirstOrDefault()?.Address, what);
+        MailText.Changed(summary.Envelope?.Subject, summary.Envelope?.From.Mailboxes.FirstOrDefault()?.Address, what);
 
     /// <summary>
     /// The email's attachments, as Graph lists them: every file part but the pictures its body shows
