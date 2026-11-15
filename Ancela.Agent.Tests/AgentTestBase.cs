@@ -147,6 +147,7 @@ public abstract class AgentTestBase
                     pluginCollection.AddFromObject(extra);
                 var kernel = new Kernel(plugins: pluginCollection);
                 kernel.Data["profile"] = profile;
+                kernel.FunctionInvocationFilters.Add(new ToolArgumentFilter());
                 kernel.FunctionInvocationFilters.Add(new LiveTestUsage.ToolRecorder());
                 kernel.FunctionInvocationFilters.Add(
                     new AutonomousToolGuardFilter(NullLogger<AutonomousToolGuardFilter>.Instance));

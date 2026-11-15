@@ -91,6 +91,19 @@ public class AgentGraphTests : AgentTestBase
     }
 
     [Fact]
+    public async Task AskingAboutSentMail_ReadsTheSentFolder()
+    {
+        // The production bug (2026-11-05 to 2026-11-15): on the Responses API a folder the model
+        // named reached get_recent_emails as JSON, which Semantic Kernel couldn't convert to
+        // MailFolder, so the call failed before reaching the mailbox and Ancela said email wasn't
+        // working. ToolArgumentFilter hands tools their arguments as text.
+        SetupEmails(_ => NewestFifty());
+
+        await SendUntilAsync("what was the last email I sent?", () =>
+            MockGraphClient.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, It.IsAny<string?>()), Times.AtLeastOnce));
+    }
+
+    [Fact]
     public async Task SendEmailsToRemarkable_SendsEachWholeEmail_NotTextTheModelWrote()
     {
         // The production bug: asked to send two emails to the reMarkable, the model had only their

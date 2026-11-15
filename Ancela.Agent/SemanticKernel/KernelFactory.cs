@@ -85,8 +85,8 @@ public sealed class KernelFactory(
                 break;
         }
 
-        // The constructor attaches the IFunctionInvocationFilters registered in _sp (AuditFilter,
-        // AutonomousToolGuardFilter). Adding them again ran each twice, so every tool call was
+        // The constructor attaches the IFunctionInvocationFilters registered in _sp (ToolArgumentFilter,
+        // AuditFilter, AutonomousToolGuardFilter, EmptyResultFilter). Adding them again ran each twice, so every tool call was
         // audited twice.
         var kernel = new Kernel(_sp, plugins);
         kernel.Data["profile"] = profile;
