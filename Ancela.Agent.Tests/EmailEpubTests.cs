@@ -187,6 +187,6 @@ public class EmailEpubTests
         var (zip, _, _) = Build(Email("<p>x</p>"));
 
         var css = new StreamReader(zip.GetEntry("OEBPS/style.css")!.Open()).ReadToEnd();
-        css.Should().Contain("font-size: 78%; line-height: 1.1;").And.Contain("h1 { font-size: 1.3em; line-height: 1;");
+        css.Should().Contain("font-size: 78%; line-height: 1;").And.Contain("h1 { font-size: 1.3em; line-height: 1;").And.Contain("text-align: left");
     }
 }

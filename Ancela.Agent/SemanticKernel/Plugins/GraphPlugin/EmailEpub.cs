@@ -31,10 +31,10 @@ public static class EmailEpub
 
     /// <summary>The text size and spacing the owner settled on, on the tablet, 2026-11-15.</summary>
     public const string Stylesheet = """
-        body { font-family: serif; font-size: 78%; line-height: 1.1; }
+        body { font-family: serif; font-size: 78%; line-height: 1; }
         p { margin: 0.3em 0; }
-        h1 { font-size: 1.3em; line-height: 1; margin: 0 0 0.2em 0; }
-        .meta { font-size: 0.85em; line-height: 1.1; margin: 0 0 0.3em 0; }
+        h1 { font-size: 1.3em; line-height: 1; margin: 0 0 0.2em 0; text-align: left; }
+        .meta { font-size: 0.85em; line-height: 1.1; margin: 0 0 0.3em 0; text-align: left; }
         hr { margin: 0.3em 0 0.6em 0; }
         img { max-width: 100%; height: auto; }
         a { color: inherit; }
