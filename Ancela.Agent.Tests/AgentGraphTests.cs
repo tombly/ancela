@@ -70,9 +70,9 @@ public class AgentGraphTests : AgentTestBase
         SetupRemarkable();
 
         await SendUntilAsync("send the email from noreply@newsletter.example to my reMarkable", () =>
-            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
+            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
 
-        MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+        MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "no other email may be sent in its place");
     }
 
@@ -86,7 +86,7 @@ public class AgentGraphTests : AgentTestBase
             MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
                 Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
 
-        MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+        MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "when the named email can't be found, nothing may be sent in its place");
     }
 
@@ -110,7 +110,7 @@ public class AgentGraphTests : AgentTestBase
         // 255-character previews and passed send_to_remarkable a one-line summary of each.
         var remarkable = new Mock<IRemarkableService>();
         remarkable
-            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
         ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
         EmailModel[] fromTheOffice =
@@ -120,20 +120,19 @@ public class AgentGraphTests : AgentTestBase
         ];
         SetupEmails(search => search is null ? [.. fromTheOffice, .. NewestFifty()[..48]] : fromTheOffice);
         MockGraphClient
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
-            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailPdfModel
+            .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailEpubModel
             {
                 Subject = id,
-                ReceivedDateTime = DateTimeOffset.UtcNow,
-                Pdf = "%PDF-1.7"u8.ToArray(),
+                Epub = "PK epub"u8.ToArray(),
                 LinkedImages = 0,
                 ImagesMissing = 0,
             });
 
         await SendUntilAsync("send the two emails from the school office to my reMarkable", () =>
         {
-            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("trip", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
-            MockGraphClient.Verify(g => g.RenderEmailAsPdfAsync("lunch", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("trip", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
+            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("lunch", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
         });
 
         remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -147,7 +146,7 @@ public class AgentGraphTests : AgentTestBase
         // downloaded until the user says yes, which comes in their next message.
         var remarkable = new Mock<IRemarkableService>();
         remarkable
-            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
         ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
         var history = UseRecordedHistory();
@@ -155,13 +154,12 @@ public class AgentGraphTests : AgentTestBase
         MockGraphClient.Setup(g => g.GetLinkedImageCountAsync("catalog")).ReturnsAsync(12);
         var renders = new List<bool>();
         MockGraphClient
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .Callback<string, TimeZoneInfo, bool>((_, _, include) => renders.Add(include))
-            .ReturnsAsync((string id, TimeZoneInfo _, bool include) => new EmailPdfModel
+            .ReturnsAsync((string id, TimeZoneInfo _, bool include) => new EmailEpubModel
             {
                 Subject = "Fall catalog",
-                ReceivedDateTime = DateTimeOffset.UtcNow,
-                Pdf = "%PDF-1.7"u8.ToArray(),
+                Epub = "PK epub"u8.ToArray(),
                 LinkedImages = 12,
                 ImagesMissing = 0,
             });
@@ -455,23 +453,22 @@ public class AgentGraphTests : AgentTestBase
     }
 
     /// <summary>
-    /// Loads the reMarkable tools, with RenderEmailAsPdfAsync succeeding for any email and the
-    /// tablet accepting every PDF.
+    /// Loads the reMarkable tools, with RenderEmailAsEpubAsync succeeding for any email and the
+    /// tablet accepting every EPUB.
     /// </summary>
     protected void SetupRemarkable()
     {
         var remarkable = new Mock<IRemarkableService>();
         remarkable
-            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
         ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
         MockGraphClient
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
-            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailPdfModel
+            .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailEpubModel
             {
                 Subject = id,
-                ReceivedDateTime = DateTimeOffset.UtcNow,
-                Pdf = "%PDF-1.7"u8.ToArray(),
+                Epub = "PK epub"u8.ToArray(),
                 LinkedImages = 0,
                 ImagesMissing = 0,
             });

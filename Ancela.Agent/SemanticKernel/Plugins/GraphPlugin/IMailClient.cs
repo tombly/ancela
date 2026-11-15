@@ -15,12 +15,12 @@ public interface IMailClient
     Task<string> MoveToDeletedItemsAsync(string messageId);
     Task<string> SendEmailAsync(string toAddress, string subject, string body);
     Task<int> GetLinkedImageCountAsync(string messageId);
-    Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
+    Task<EmailEpubModel> RenderEmailAsEpubAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages);
 }
 
 /// <summary>
-/// Turns one HTML page into a PDF. Graph does it in the OneDrive folder (<see cref="GraphClient"/>);
-/// iCloud mail uses that too until Ancela has its own renderer (V2 step 5, owner, 2026-11-05).
+/// Turns one HTML page into a PDF, in the OneDrive folder (<see cref="GraphClient"/>). Emails go to
+/// the reMarkable as EPUBs now (<see cref="EmailEpub"/>); this goes with the rest of Graph's mail.
 /// </summary>
 public interface IPdfConverter
 {

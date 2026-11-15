@@ -7,26 +7,26 @@ using Moq;
 namespace Ancela.Agent.Tests;
 
 /// <summary>
-/// send_email_to_remarkable sends the PDF Graph renders, not text the model passes: with only
+/// send_email_to_remarkable sends the EPUB the mail client makes of the whole email, not text the model passes: with only
 /// get_recent_emails' 255-character previews to go on, two emails sent with send_to_remarkable
 /// arrived as their title and one line each.
 /// </summary>
 public class RemarkablePluginTests
 {
-    private static readonly byte[] Pdf = "%PDF-1.7 the whole email"u8.ToArray();
+    private static readonly byte[] Epub = "PK the whole email as an EPUB"u8.ToArray();
 
     private readonly Mock<IGraphClient> _graph = new();
     private readonly Mock<IRemarkableService> _remarkable = new();
-    private readonly List<(string Title, byte[] Pdf)> _uploads = [];
+    private readonly List<(string Title, byte[] Epub)> _uploads = [];
 
     public RemarkablePluginTests()
     {
         _remarkable
-            .Setup(r => r.SendPdfAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Stream, CancellationToken>((title, pdf, _) =>
+            .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Stream, CancellationToken>((title, epub, _) =>
             {
                 using var copy = new MemoryStream();
-                pdf.CopyTo(copy);
+                epub.CopyTo(copy);
                 _uploads.Add((title, copy.ToArray()));
             })
             .ReturnsAsync("doc-1");
@@ -36,18 +36,17 @@ public class RemarkablePluginTests
 
     private void SetupEmail(string? subject, int imagesMissing = 0) =>
         _graph
-            .Setup(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
-            .ReturnsAsync(new EmailPdfModel
+            .Setup(g => g.RenderEmailAsEpubAsync("email-1", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ReturnsAsync(new EmailEpubModel
             {
                 Subject = subject,
-                ReceivedDateTime = DateTimeOffset.UtcNow,
-                Pdf = Pdf,
+                Epub = Epub,
                 LinkedImages = 0,
                 ImagesMissing = imagesMissing,
             });
 
     [Fact]
-    public async Task SendEmail_UploadsGraphsPdf_TitledWithTheSubject()
+    public async Task SendEmail_UploadsTheEmailsEpub_TitledWithTheSubject()
     {
         SetupEmail("Field trip\r\n  permission form ");
 
@@ -55,10 +54,10 @@ public class RemarkablePluginTests
 
         var upload = _uploads.Should().ContainSingle().Subject;
         upload.Title.Should().Be("Field trip permission form");
-        upload.Pdf.Should().Equal(Pdf);
+        upload.Epub.Should().Equal(Epub);
         sent.Sent.Should().BeTrue();
         sent.Title.Should().Be("Field trip permission form");
-        _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), false),
+        _graph.Verify(g => g.RenderEmailAsEpubAsync("email-1", It.IsAny<TimeZoneInfo>(), false),
             Times.Once, "an email with no linked images has nothing to ask about");
         _remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -85,7 +84,7 @@ public class RemarkablePluginTests
 
         var sent = await Plugin.SendEmailToRemarkableAsync(kernel, "email-1");
 
-        _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1",
+        _graph.Verify(g => g.RenderEmailAsEpubAsync("email-1",
             It.Is<TimeZoneInfo>(tz => tz.HasSameRules(TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles"))), false));
         sent.ImagesMissing.Should().Be(2);
     }
@@ -101,7 +100,7 @@ public class RemarkablePluginTests
         sent.Sent.Should().BeFalse();
         sent.LinkedImages.Should().Be(12);
         sent.Note.Should().StartWith("Nothing was sent yet. The email links to 12 images");
-        _graph.Verify(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.Never);
+        _graph.Verify(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.Never);
         _uploads.Should().BeEmpty();
     }
 
@@ -116,7 +115,7 @@ public class RemarkablePluginTests
         var sent = await Plugin.SendEmailToRemarkableAsync(new Kernel(), "email-1", includeLinkedImages: include);
 
         sent.Sent.Should().BeTrue();
-        _graph.Verify(g => g.RenderEmailAsPdfAsync("email-1", It.IsAny<TimeZoneInfo>(), include), Times.Once);
+        _graph.Verify(g => g.RenderEmailAsEpubAsync("email-1", It.IsAny<TimeZoneInfo>(), include), Times.Once);
         _graph.Verify(g => g.GetLinkedImageCountAsync(It.IsAny<string>()), Times.Never);
         _uploads.Should().ContainSingle();
     }
@@ -125,8 +124,8 @@ public class RemarkablePluginTests
     public async Task SendEmail_WhenTheEmailCantBeRendered_SendsNothing()
     {
         _graph
-            .Setup(g => g.RenderEmailAsPdfAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
-            .ThrowsAsync(new InvalidOperationException("Graph returned no email for that id."));
+            .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
+            .ThrowsAsync(new InvalidOperationException("The email couldn't be written as an EPUB page."));
 
         var act = () => Plugin.SendEmailToRemarkableAsync(new Kernel(), "email-1");
 

@@ -11,7 +11,7 @@ public class SentEmailModel
     /// <summary>Images the email links to on other servers.</summary>
     public required int LinkedImages { get; init; }
 
-    /// <summary>Images that should be in the PDF and aren't.</summary>
+    /// <summary>Images that should be in the book and aren't.</summary>
     public int ImagesMissing { get; init; }
 
     /// <summary>When nothing was sent, what to ask the user.</summary>

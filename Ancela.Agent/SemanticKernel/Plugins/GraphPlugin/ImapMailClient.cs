@@ -21,7 +21,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 /// Messages with their LIST attributes and has UIDPLUS. Ids are the folder and the IMAP UID
 /// (<see cref="ImapSearch.EmailId"/>).
 /// </summary>
-public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConverter _pdfConverter) : IMailClient, IAsyncDisposable
+public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher) : IMailClient, IAsyncDisposable
 {
     private const string ImapHost = "imap.mail.me.com";
     private const string SmtpHost = "smtp.mail.me.com";
@@ -204,35 +204,31 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConver
     }
 
     /// <summary>
-    /// The email as one HTML page, as Graph's (<see cref="EmailPdf"/>): embedded pictures written in,
-    /// linked ones only with <paramref name="includeLinkedImages"/>, the owner's yes, since downloading
-    /// them tells the sender the email was opened. The page becomes a PDF in the OneDrive folder
-    /// (<see cref="IPdfConverter"/>) until Ancela has its own renderer.
+    /// The email as an EPUB for the reMarkable (<see cref="EmailEpub"/>): embedded pictures always,
+    /// linked ones only with <paramref name="includeLinkedImages"/>, the owner's yes, since
+    /// downloading them tells the sender the email was opened.
     /// </summary>
-    public async Task<EmailPdfModel> RenderEmailAsPdfAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
+    public async Task<EmailEpubModel> RenderEmailAsEpubAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages)
     {
         var (folder, uid) = ImapSearch.ParseEmailId(messageId);
-        var (message, received) = await InFolderAsync(folder, FolderAccess.ReadOnly, listing: false, async mailbox =>
+        var message = await InFolderAsync(folder, FolderAccess.ReadOnly, listing: false, async mailbox =>
         {
-            var summary = await SummaryAsync(mailbox, uid, MessageSummaryItems.InternalDate);
-            return (await mailbox.GetMessageAsync(uid), summary.InternalDate ?? DateTimeOffset.UtcNow);
+            await SummaryAsync(mailbox, uid, MessageSummaryItems.UniqueId);
+            return await mailbox.GetMessageAsync(uid);
         });
 
-        var html = EmailPdf.RenderHtml(new EmailPdf.EmailPage(
-                Addresses(message.From), message.Date, Addresses(message.To),
-                message.Cc.Count > 0 ? Addresses(message.Cc) : null, message.Subject,
-                message.HtmlBody ?? message.TextBody ?? string.Empty, BodyIsHtml: message.HtmlBody is not null),
-            [.. Attachments(message).Select(a => a.Name)], timeZone);
-        if (EmailPdf.Utf8WithBom(html).Length > EmailPdf.ConversionLimitBytes)
-            throw new InvalidOperationException("This email is over the 2 MB PDF conversion limit even without its images and attachments, so it can't be made into a PDF.");
+        var email = new EmailPdf.EmailPage(
+            Addresses(message.From), message.Date == DateTimeOffset.MinValue ? null : message.Date, Addresses(message.To),
+            message.Cc.Count > 0 ? Addresses(message.Cc) : null, message.Subject,
+            message.HtmlBody ?? message.TextBody ?? string.Empty, BodyIsHtml: message.HtmlBody is not null);
+        var sources = email.BodyIsHtml ? EmailPdf.ImageSources(email.Body) : [];
 
-        var sources = EmailPdf.ImageSources(html);
         var images = new Dictionary<string, MediaItem>();
         foreach (var part in message.BodyParts.OfType<MimePart>().Where(p => p.ContentId is not null && p.ContentType.MediaType == "image"))
         {
             using var bytes = new MemoryStream();
             await part.Content.DecodeToAsync(bytes);
-            if (bytes.Length <= EmailPdf.ConversionLimitBytes)
+            if (bytes.Length <= EmailEpub.ImageLimitBytes)
                 images[EmailPdf.EmbeddedSource(part.ContentId)] = new MediaItem(bytes.ToArray(), part.ContentType.MimeType.ToLowerInvariant());
         }
         if (includeLinkedImages)
@@ -241,15 +237,13 @@ public sealed class ImapMailClient(ILinkedImageFetcher _imageFetcher, IPdfConver
                 images[url] = image;
         }
 
-        var (page, written) = EmailPdf.EmbedImages(html, images, EmailPdf.ConversionLimitBytes);
-        var wanted = sources.Count(s => EmailPdf.IsEmbedded(s) || (includeLinkedImages && EmailPdf.IsLinked(s)));
-        return new EmailPdfModel
+        var book = EmailEpub.Build(email, [.. Attachments(message).Select(a => a.Name)], images, includeLinkedImages, timeZone);
+        return new EmailEpubModel
         {
             Subject = message.Subject,
-            ReceivedDateTime = received,
-            Pdf = await _pdfConverter.ConvertHtmlToPdfAsync(EmailPdf.Utf8WithBom(page)),
+            Epub = book.Epub,
             LinkedImages = sources.Count(EmailPdf.IsLinked),
-            ImagesMissing = wanted - written,
+            ImagesMissing = book.ImagesMissing,
         };
     }
 
