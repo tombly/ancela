@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Xml.Linq;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Xunit.Abstractions;

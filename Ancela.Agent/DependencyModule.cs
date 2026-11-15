@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -69,7 +69,7 @@ public static class DependencyModule
         // Register Semantic Kernel plugins. The plugins are registered as singletons so
         // that they can be re-used by multiple kernels. 
         builder.Services.AddSingleton<SmsPlugin>();
-        builder.Services.AddSingleton<GraphPlugin>();
+        builder.Services.AddSingleton<ICloudPlugin>();
         // The owner's mail, calendar and contacts, all iCloud's (IMAP and SMTP, CalDAV, CardDAV) since
         // 2026-11-11; Microsoft 365's, through Graph, before. The self-check probes each concrete client.
         builder.Services.AddSingleton<ImapMailClient>();

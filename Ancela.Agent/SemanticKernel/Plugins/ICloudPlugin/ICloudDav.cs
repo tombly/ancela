@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Xml.Linq;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// One of iCloud's WebDAV servers: the calendar (CalDAV, caldav.icloud.com) or the contacts (CardDAV,

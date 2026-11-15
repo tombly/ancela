@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// An email's pictures: where each comes from (embedded in the email, or linked from the sender's

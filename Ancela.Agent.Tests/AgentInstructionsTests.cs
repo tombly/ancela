@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Moq;

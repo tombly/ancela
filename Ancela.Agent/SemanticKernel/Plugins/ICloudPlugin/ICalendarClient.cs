@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's calendar, as the calendar tools use it: iCloud over CalDAV (<see cref="CalDavCalendarClient"/>).

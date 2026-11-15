@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Xml;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 

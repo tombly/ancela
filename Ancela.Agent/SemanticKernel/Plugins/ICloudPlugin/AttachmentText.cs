@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// Turns an attachment's bytes into text for read_attachment. A text file is read as it is, a gzip

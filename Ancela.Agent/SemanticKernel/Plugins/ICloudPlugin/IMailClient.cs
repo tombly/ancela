@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's mail, as the email tools use it: iCloud over IMAP and SMTP (<see cref="ImapMailClient"/>).

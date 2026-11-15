@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using FluentAssertions;
 using Microsoft.SemanticKernel;

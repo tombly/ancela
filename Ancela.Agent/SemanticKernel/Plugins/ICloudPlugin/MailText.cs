@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// How an email's text reaches the model: its body tidied and capped, and the result of a change

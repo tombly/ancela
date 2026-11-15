@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using Microsoft.SemanticKernel;
 using Moq;
@@ -188,9 +188,9 @@ public class ReadAttachmentTests
         graph.Setup(g => g.GetAttachmentAsync("email-1", "report.xml.gz"))
             .ReturnsAsync(AttachmentText.Read("report.xml.gz", Gzip(DmarcReport)));
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
+        kernel.Plugins.AddFromObject(new ICloudPlugin(graph.Object, graph.Object, graph.Object));
 
-        var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["read_attachment"],
+        var result = await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["read_attachment"],
             new() { ["emailId"] = "email-1", ["name"] = "report.xml.gz" });
 
         result.GetValue<AttachmentContentModel>()!.Files[0].Text.Should().Contain("203.0.113.50");

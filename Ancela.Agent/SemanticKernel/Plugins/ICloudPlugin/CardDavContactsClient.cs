@@ -1,7 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's iCloud contacts over CardDAV (<see cref="ICloudDav"/>): the same tools and results as

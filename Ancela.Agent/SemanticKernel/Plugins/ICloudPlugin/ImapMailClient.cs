@@ -10,7 +10,7 @@ using MailKit.Security;
 using MimeKit;
 using MimeKit.Text;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's iCloud mail over IMAP (imap.mail.me.com) and SMTP (smtp.mail.me.com), signed in with

@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>One email in full, as read_email returns it.</summary>
 public class EmailContentModel

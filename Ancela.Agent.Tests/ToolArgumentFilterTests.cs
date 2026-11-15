@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using Microsoft.SemanticKernel;
 using Moq;
@@ -22,7 +22,7 @@ public class ToolArgumentFilterTests
         var mail = new Mock<IMailClient>();
         mail.Setup(m => m.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>())).ReturnsAsync([]);
         var plugins = new KernelPluginCollection();
-        plugins.AddFromObject(new GraphPlugin(Mock.Of<ICalendarClient>(), mail.Object, Mock.Of<IContactsClient>()));
+        plugins.AddFromObject(new ICloudPlugin(Mock.Of<ICalendarClient>(), mail.Object, Mock.Of<IContactsClient>()));
         var kernel = new Kernel(plugins: plugins);
         if (withFilter)
             kernel.FunctionInvocationFilters.Add(new ToolArgumentFilter());
@@ -34,7 +34,7 @@ public class ToolArgumentFilterTests
     {
         var (kernel, _) = GraphKernel(withFilter: false);
 
-        var call = () => kernel.InvokeAsync("GraphPlugin", "get_recent_emails",
+        var call = () => kernel.InvokeAsync("ICloudPlugin", "get_recent_emails",
             new KernelArguments { ["folder"] = Json("\"Inbox\"") });
 
         (await call.Should().ThrowAsync<Exception>()).Which.ToString().Should().Contain("MailFolder");
@@ -48,7 +48,7 @@ public class ToolArgumentFilterTests
     {
         var (kernel, mail) = GraphKernel(withFilter: true);
 
-        await kernel.InvokeAsync("GraphPlugin", "get_recent_emails",
+        await kernel.InvokeAsync("ICloudPlugin", "get_recent_emails",
             new KernelArguments { ["folder"] = Json(folder), ["search"] = Json("\"invoice march\"") });
 
         mail.Verify(m => m.GetUserEmailsAsync(expected, "invoice march"), Times.Once);
@@ -59,7 +59,7 @@ public class ToolArgumentFilterTests
     {
         var (kernel, mail) = GraphKernel(withFilter: true);
 
-        await kernel.InvokeAsync("GraphPlugin", "get_recent_emails",
+        await kernel.InvokeAsync("ICloudPlugin", "get_recent_emails",
             new KernelArguments { ["folder"] = Json("null"), ["search"] = Json("null") });
 
         mail.Verify(m => m.GetUserEmailsAsync(MailFolder.Inbox, null), Times.Once);

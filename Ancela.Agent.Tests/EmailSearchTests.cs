@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using Microsoft.SemanticKernel;
 using Moq;
@@ -16,7 +16,7 @@ public class EmailSearchTests
     {
         var (kernel, graph) = Build();
 
-        await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"],
+        await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["get_recent_emails"],
             new() { ["search"] = "from:someone@example.com" });
 
         graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, "from:someone@example.com"));
@@ -29,7 +29,7 @@ public class EmailSearchTests
         // emails, and the model passed one unasked. A model that still sends one is ignored.
         var (kernel, _) = Build();
 
-        kernel.Plugins["GraphPlugin"]["get_recent_emails"].Metadata.Parameters.Select(p => p.Name)
+        kernel.Plugins["ICloudPlugin"]["get_recent_emails"].Metadata.Parameters.Select(p => p.Name)
             .Should().Equal("folder", "search");
     }
 
@@ -38,7 +38,7 @@ public class EmailSearchTests
     {
         var (kernel, graph) = Build();
 
-        await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"]);
+        await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["get_recent_emails"]);
 
         graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Inbox, null));
     }
@@ -49,7 +49,7 @@ public class EmailSearchTests
         // Tool-call arguments arrive as strings; the enum still has to bind.
         var (kernel, graph) = Build();
 
-        await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["get_recent_emails"],
+        await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["get_recent_emails"],
             new() { ["folder"] = "Sent", ["search"] = "invoice" });
 
         graph.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, "invoice"));
@@ -61,7 +61,7 @@ public class EmailSearchTests
         graph.Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
             .ReturnsAsync([]);
         var plugins = new KernelPluginCollection();
-        plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
+        plugins.AddFromObject(new ICloudPlugin(graph.Object, graph.Object, graph.Object));
         return (new Kernel(plugins: plugins), graph);
     }
 }

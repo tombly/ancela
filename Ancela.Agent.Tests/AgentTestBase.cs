@@ -1,5 +1,5 @@
 using Ancela.Agent.SemanticKernel;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
@@ -116,7 +116,7 @@ public abstract class AgentTestBase
 
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
-        var graphPlugin = new GraphPlugin(MockAccounts.Object, MockAccounts.Object, MockAccounts.Object);
+        var icloudPlugin = new ICloudPlugin(MockAccounts.Object, MockAccounts.Object, MockAccounts.Object);
         var projectsPlugin = new ProjectsPlugin(MockProjectStore.Object, ownerService);
         var instructionsPlugin = new InstructionsPlugin(MockUserService.Object);
 
@@ -137,7 +137,7 @@ public abstract class AgentTestBase
             .Returns((KernelProfile profile) =>
             {
                 var pluginCollection = new KernelPluginCollection();
-                pluginCollection.AddFromObject(graphPlugin);
+                pluginCollection.AddFromObject(icloudPlugin);
                 pluginCollection.AddFromObject(memoryPlugin);
                 pluginCollection.AddFromObject(projectsPlugin);
                 pluginCollection.AddFromObject(ynabPlugin);

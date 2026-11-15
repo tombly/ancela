@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;

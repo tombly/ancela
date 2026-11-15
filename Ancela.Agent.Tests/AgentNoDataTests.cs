@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin.Models;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Microsoft.SemanticKernel;

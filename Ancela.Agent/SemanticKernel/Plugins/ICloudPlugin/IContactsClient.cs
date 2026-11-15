@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's address book, as the contact tools use it: iCloud over CardDAV (<see cref="CardDavContactsClient"/>).

@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
@@ -16,7 +16,7 @@ namespace Ancela.Agent.Tests;
 /// <see cref="AgentTestBase.SendUntilAsync"/>) to absorb non-deterministic tool selection.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AgentGraphTests : AgentTestBase
+public class AgentICloudTests : AgentTestBase
 {
     [Fact]
     public async Task GetCalendarEvents_WhenUserAsksAboutToday_QueriesTodaysDateRange()

@@ -9,7 +9,7 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using AngleSharp.Xhtml;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// Makes an email an EPUB for the reMarkable, without I/O: the mail client reads the email and its

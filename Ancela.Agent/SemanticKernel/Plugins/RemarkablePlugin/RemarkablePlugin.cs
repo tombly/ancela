@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;

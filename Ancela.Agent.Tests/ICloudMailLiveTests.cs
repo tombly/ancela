@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using MailKit;
 using MailKit.Net.Imap;
@@ -8,7 +8,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Configuration;
 using MimeKit;
 using Xunit.Abstractions;
-using MailFolder = Ancela.Agent.SemanticKernel.Plugins.GraphPlugin.MailFolder;
+using MailFolder = Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin.MailFolder;
 
 namespace Ancela.Agent.Tests;
 

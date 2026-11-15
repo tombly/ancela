@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using Microsoft.SemanticKernel;
 using Moq;
@@ -71,9 +71,9 @@ public class ReadEmailTests
         var graph = new Mock<IOwnerAccounts>();
         graph.Setup(g => g.MoveToDeletedItemsAsync("email-1")).ReturnsAsync("Moved to Deleted Items.");
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
+        kernel.Plugins.AddFromObject(new ICloudPlugin(graph.Object, graph.Object, graph.Object));
 
-        var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["trash_email"], new() { ["emailId"] = "email-1" });
+        var result = await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["trash_email"], new() { ["emailId"] = "email-1" });
 
         result.GetValue<string>().Should().Be("Moved to Deleted Items.");
         graph.Verify(g => g.MoveToDeletedItemsAsync("email-1"), Times.Once);
@@ -87,12 +87,12 @@ public class ReadEmailTests
         var graph = new Mock<IOwnerAccounts>();
         graph.Setup(g => g.MarkReadAsync("email-1", expected)).ReturnsAsync("Marked.");
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
+        kernel.Plugins.AddFromObject(new ICloudPlugin(graph.Object, graph.Object, graph.Object));
         var arguments = new KernelArguments { ["emailId"] = "email-1" };
         if (read is { } flag)
             arguments["read"] = flag;
 
-        var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["mark_email_read"], arguments);
+        var result = await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["mark_email_read"], arguments);
 
         result.GetValue<string>().Should().Be("Marked.");
         graph.Verify(g => g.MarkReadAsync("email-1", expected), Times.Once);
@@ -104,9 +104,9 @@ public class ReadEmailTests
         var graph = new Mock<IOwnerAccounts>();
         graph.Setup(g => g.GetEmailAsync("email-1")).ReturnsAsync(new EmailContentModel { Id = "email-1", Subject = "Finish setting up your account", From = "support@example.com", To = ["owner@example.com"], Cc = [], ReceivedDateTime = DateTimeOffset.UtcNow, Body = "Step 1", Truncated = false, Attachments = [] });
         var kernel = new Kernel();
-        kernel.Plugins.AddFromObject(new GraphPlugin(graph.Object, graph.Object, graph.Object));
+        kernel.Plugins.AddFromObject(new ICloudPlugin(graph.Object, graph.Object, graph.Object));
 
-        var result = await kernel.InvokeAsync(kernel.Plugins["GraphPlugin"]["read_email"], new() { ["emailId"] = "email-1" });
+        var result = await kernel.InvokeAsync(kernel.Plugins["ICloudPlugin"]["read_email"], new() { ["emailId"] = "email-1" });
 
         result.GetValue<EmailContentModel>()!.Body.Should().Be("Step 1");
         graph.Verify(g => g.GetEmailAsync("email-1"), Times.Once);

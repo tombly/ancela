@@ -6,7 +6,7 @@ using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
 using Calendar = Ical.Net.Calendar;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's iCloud calendars over CalDAV (<see cref="ICloudDav"/>): the same tools and results as

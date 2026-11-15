@@ -1,6 +1,6 @@
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -81,7 +81,7 @@ public class SecurityTests
         services.AddSingleton<SmsService, SpySmsService>();
         services.AddSingleton<OwnerService>();
         services.AddSingleton<YnabClient>();
-        services.AddSingleton<GraphPlugin>();
+        services.AddSingleton<ICloudPlugin>();
         services.AddSingleton<MemoryPlugin>();
         services.AddSingleton<SmsPlugin>();
         services.AddSingleton<YnabPlugin>();

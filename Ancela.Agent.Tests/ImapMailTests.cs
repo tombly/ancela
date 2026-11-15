@@ -1,9 +1,9 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using FluentAssertions;
 using MailKit;
 using MailKit.Search;
 using MimeKit;
-using MailFolder = Ancela.Agent.SemanticKernel.Plugins.GraphPlugin.MailFolder;
+using MailFolder = Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin.MailFolder;
 
 namespace Ancela.Agent.Tests;
 
