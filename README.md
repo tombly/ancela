@@ -282,7 +282,9 @@ effect. Afterwards, `check_services` and the live mailbox tests (`MailSearchLive
 that everything still works; `TrashEmail_MovesAnEmailToDeletedItems` passes only through
 Exchange, since Entra never granted `Mail.ReadWrite`.
 
-To send emails to the reMarkable as PDFs (`send_email_to_remarkable`), which Graph converts in
+Emails now go to the reMarkable as EPUBs that Ancela makes itself (2026-11), so nothing uses this
+folder any more; it goes with the rest of Microsoft 365. Until then: to send emails to the
+reMarkable as PDFs (`send_email_to_remarkable`), which Graph converts in
 one OneDrive folder, add the *Application* permission
 `Files.SelectedOperations.Selected` under **API permissions** and grant admin consent: the only
 permission granted in Entra. On its own it grants nothing;

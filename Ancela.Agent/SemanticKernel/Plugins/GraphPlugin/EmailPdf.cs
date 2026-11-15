@@ -99,7 +99,7 @@ public static class EmailPdf
             .Where(tag => !IsTrackingPixel(tag.Value))
             .Select(tag => SrcAttribute.Match(tag.Value))
             .Where(src => src.Success)
-            .Select(src => Normalize(src.Groups["v"].Value))
+            .Select(src => Source(src.Groups["v"].Value))
             .ToList();
 
     public static bool IsEmbedded(string source) => source.StartsWith("cid:", StringComparison.OrdinalIgnoreCase);
@@ -123,7 +123,7 @@ public static class EmailPdf
         var result = ImgTag.Replace(html, tag =>
         {
             var src = SrcAttribute.Match(tag.Value);
-            if (!src.Success || IsTrackingPixel(tag.Value) || !images.TryGetValue(Normalize(src.Groups["v"].Value), out var image))
+            if (!src.Success || IsTrackingPixel(tag.Value) || !images.TryGetValue(Source(src.Groups["v"].Value), out var image))
                 return tag.Value;
 
             var attribute = $"src=\"data:{image.ContentType};base64,{Convert.ToBase64String(image.Bytes)}\"";
@@ -150,8 +150,11 @@ public static class EmailPdf
         return width <= 2 && height <= 2;
     }
 
-    // Attribute values are HTML-encoded (&amp; in a query string), and a cid: may be percent-encoded.
-    private static string Normalize(string src)
+    /// <summary>
+    /// An image's source as <see cref="ImageSources"/> keys it. Attribute values are HTML-encoded
+    /// (&amp;amp; in a query string), and a cid: may be percent-encoded.
+    /// </summary>
+    public static string Source(string src)
     {
         var decoded = WebUtility.HtmlDecode(src).Trim();
         return IsEmbedded(decoded) ? EmbeddedSource(Uri.UnescapeDataString(decoded[4..])) : decoded;

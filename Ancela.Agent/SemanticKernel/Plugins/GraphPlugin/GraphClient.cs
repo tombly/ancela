@@ -559,6 +559,13 @@ public class GraphClient : IGraphClient
     }
 
     /// <summary>
+    /// Not on Microsoft 365 mail: production reads iCloud (MAIL_PROVIDER), and Graph's mail is the
+    /// next to go (V2 step 5).
+    /// </summary>
+    public Task<EmailEpubModel> RenderEmailAsEpubAsync(string messageId, TimeZoneInfo timeZone, bool includeLinkedImages) =>
+        throw new NotSupportedException("Sending an email to the reMarkable works only with iCloud mail (MAIL_PROVIDER=icloud).");
+
+    /// <summary>
     /// Converts one HTML page to a PDF: it goes into the OneDrive folder as a temporary file, Graph
     /// converts it (<c>?format=pdf</c>), and the file is deleted. iCloud mail uses this too
     /// (<see cref="IPdfConverter"/>).

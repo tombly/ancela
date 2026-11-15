@@ -15,6 +15,7 @@
     <PackageReference Include="Twilio" />
     <PackageReference Include="Ical.Net" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="AngleSharp" />
     <PackageReference Include="Microsoft.Graph" />
     <PackageReference Include="Ynab.Api.Client" />
     <PackageReference Include="Ynab.Api.Client.Extensions" />

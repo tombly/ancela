@@ -9,8 +9,11 @@ public interface IRemarkableService
 {
     Task<string> SendTextAsync(string visibleName, string text, CancellationToken cancellationToken = default);
 
-    /// <summary>Uploads a PDF that is already rendered, such as a whole email.</summary>
+    /// <summary>Uploads a PDF that is already rendered.</summary>
     Task<string> SendPdfAsync(string visibleName, Stream pdf, CancellationToken cancellationToken = default);
+
+    /// <summary>Uploads an EPUB, such as a whole email (<c>EmailEpub</c>), which the tablet reflows.</summary>
+    Task<string> SendEpubAsync(string visibleName, Stream epub, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Verifies the device token by minting (or reusing) a session token, without uploading
@@ -50,6 +53,17 @@ public sealed class RemarkableService(IHttpClientFactory _httpClientFactory) : I
         var sessionToken = await GetSessionTokenAsync(client, cancellationToken).ConfigureAwait(false);
 
         var result = await client.UploadPdfAsync(sessionToken, visibleName, pdf, cancellationToken).ConfigureAwait(false);
+        return result.DocumentId;
+    }
+
+    public async Task<string> SendEpubAsync(string visibleName, Stream epub, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(visibleName);
+
+        var client = new RemarkableClient(_httpClientFactory.CreateClient("remarkable"));
+        var sessionToken = await GetSessionTokenAsync(client, cancellationToken).ConfigureAwait(false);
+
+        var result = await client.UploadEpubAsync(sessionToken, visibleName, epub, cancellationToken).ConfigureAwait(false);
         return result.DocumentId;
     }
 

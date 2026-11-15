@@ -24,13 +24,14 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IMailClient
     }
 
     /// <remarks>
-    /// The email goes from Graph to the tablet without passing through the model. get_recent_emails
+    /// The email goes from the mailbox to the tablet without passing through the model, as an EPUB
+    /// (<see cref="EmailEpub"/>) that the tablet reflows; Graph made it a PDF until 2026-11. get_recent_emails
     /// returns only the first 255 characters of each body, so send_to_remarkable could send no more
     /// than the model had: on 2026-10-18 two emails arrived as their title and one line each.
     /// </remarks>
     [KernelFunction("send_email_to_remarkable")]
     [Tool]
-    [Description("Sends one of the user's emails, whole, to their reMarkable tablet as a PDF titled with its subject. Only when the user asks.")]
+    [Description("Sends one of the user's emails, whole, to their reMarkable tablet as an ebook titled with its subject, to read later. Only when the user asks.")]
     public async Task<SentEmailModel> SendEmailToRemarkableAsync(
         Kernel kernel,
         [Description("The email's id, exactly as returned by get_recent_emails.")] string emailId,
@@ -39,11 +40,11 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IMailClient
         if (includeLinkedImages is null && await _mailClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
             return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
 
-        var email = await _mailClient.RenderEmailAsPdfAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
+        var email = await _mailClient.RenderEmailAsEpubAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
         var title = string.IsNullOrWhiteSpace(email.Subject) ? "(no subject)" : Whitespace.Replace(email.Subject, " ").Trim();
 
-        using var pdf = new MemoryStream(email.Pdf);
-        await _remarkableService.SendPdfAsync(title, pdf);
+        using var epub = new MemoryStream(email.Epub);
+        await _remarkableService.SendEpubAsync(title, epub);
         return new SentEmailModel
         {
             Sent = true,

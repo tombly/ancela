@@ -7,7 +7,6 @@ using MailKit.Search;
 using MailKit.Security;
 using Microsoft.Extensions.Configuration;
 using MimeKit;
-using Moq;
 using Xunit.Abstractions;
 using MailFolder = Ancela.Agent.SemanticKernel.Plugins.GraphPlugin.MailFolder;
 
@@ -44,12 +43,11 @@ public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
             Environment.SetEnvironmentVariable("ICLOUD_APP_PASSWORD", password);
             _from = config["Parameters:icloud-from-address"];
             Environment.SetEnvironmentVariable("ICLOUD_FROM_ADDRESS", _from);
-            _client = new ImapMailClient(new LinkedImageFetcher(), Pdf.Object);
+            _client = new ImapMailClient(new LinkedImageFetcher());
         }
         return Task.CompletedTask;
     }
 
-    private Mock<IPdfConverter> Pdf { get; } = new();
 
     [Fact]
     public async Task AWordInTheBody_FindsTheEmail_AndSoDoesItsSender()
@@ -101,18 +99,19 @@ public class ICloudMailLiveTests(ITestOutputHelper _output) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RenderEmail_WritesItsEmbeddedPictureIntoThePage()
+    public async Task RenderEmail_PutsItsEmbeddedPictureInTheBook()
     {
         if (await AppendAsync() is not { } client) return;
         var id = (await FindAsync(client, MailFolder.Inbox, $"subject:\"{Subject}\"")).Emails.Single().Id;
-        byte[]? page = null;
-        Pdf.Setup(p => p.ConvertHtmlToPdfAsync(It.IsAny<byte[]>())).Callback<byte[]>(b => page = b).ReturnsAsync("%PDF-1.7"u8.ToArray());
 
-        var pdf = await client.RenderEmailAsPdfAsync(id, TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles"), includeLinkedImages: false);
+        var book = await client.RenderEmailAsEpubAsync(id, TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles"), includeLinkedImages: false);
 
-        var html = System.Text.Encoding.UTF8.GetString(page!);
-        html.Should().Contain(Subject).And.Contain("data:image/png;base64,", because: "the cid: picture is written into the page");
-        pdf.ImagesMissing.Should().Be(0);
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(book.Epub));
+        using var reader = new StreamReader(zip.GetEntry("OEBPS/email.xhtml")!.Open());
+        var page = await reader.ReadToEndAsync();
+        page.Should().Contain(Subject).And.Contain("src=\"images/image1.png\"", because: "the cid: picture is a file in the book");
+        zip.GetEntry("OEBPS/images/image1.png").Should().NotBeNull();
+        book.ImagesMissing.Should().Be(0);
     }
 
     [Fact]
