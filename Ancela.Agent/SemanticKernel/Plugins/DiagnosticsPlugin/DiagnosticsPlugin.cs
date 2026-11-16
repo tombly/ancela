@@ -16,7 +16,7 @@ public class DiagnosticsPlugin(IServiceHealthChecker _healthChecker, IAuditAnoma
     [KernelFunction("check_services")]
     [Tool]
     [Description("Self-check (owner only): probes every connected service — Cosmos DB, Service Bus " +
-        "dead-letter queues, Twilio, Microsoft Graph, the OneDrive folder grant, YNAB, Tavily web search, Google Health, " +
+        "dead-letter queues, Twilio, iCloud mail, calendar and contacts, YNAB, Tavily web search, Google Health, " +
         "reMarkable, and the UniFi network — and reports per-service status, latency, and any failures. Use when the owner " +
         "asks how you are, whether everything is working, or to verify a deployment.")]
     public async Task<ServiceProbeResult[]> CheckServicesAsync()

@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>One email in full, as read_email returns it.</summary>
 public class EmailContentModel
@@ -10,7 +10,7 @@ public class EmailContentModel
     public required string[] Cc { get; init; }
     public required DateTimeOffset ReceivedDateTime { get; init; }
 
-    /// <summary>The body as text (Graph converts HTML), at most <see cref="GraphClient.EmailBodyCap"/> characters.</summary>
+    /// <summary>The body as text (an HTML-only email's converted, <c>ImapMailClient.HtmlText</c>), at most <see cref="MailText.BodyCap"/> characters.</summary>
     public required string Body { get; init; }
 
     /// <summary>True when the body was longer than the cap and the rest is missing.</summary>

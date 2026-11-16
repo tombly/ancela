@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
@@ -11,12 +11,12 @@ namespace Ancela.Agent.Tests;
 
 /// <summary>
 /// Integration tests verifying that calendar and email prompts trigger the correct
-/// IGraphClient function calls via the AI's function calling capability. These hit a live
+/// mail, calendar and contacts client calls via the AI's function calling capability. These hit a live
 /// model, so they are gated under the "Integration" category and retried (via
 /// <see cref="AgentTestBase.SendUntilAsync"/>) to absorb non-deterministic tool selection.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AgentGraphTests : AgentTestBase
+public class AgentICloudTests : AgentTestBase
 {
     [Fact]
     public async Task GetCalendarEvents_WhenUserAsksAboutToday_QueriesTodaysDateRange()
@@ -35,7 +35,7 @@ public class AgentGraphTests : AgentTestBase
 
         // Act + Assert: the model must translate "today" into the correct date range.
         await SendUntilAsync("what's on my calendar today?", () =>
-            MockGraphClient.Verify(
+            MockAccounts.Verify(
                 g => g.GetUserEventsAsync(
                     It.Is<DateTimeOffset>(d => d.Date == todayStart.Date),
                     It.Is<DateTimeOffset>(d => d.Date == todayEnd.Date || d.Date == todayStart.Date),
@@ -49,7 +49,7 @@ public class AgentGraphTests : AgentTestBase
         SetupCalendarEvents(); // Empty events
 
         var response = await SendUntilAsync("what meetings do I have today?", () =>
-            MockGraphClient.Verify(
+            MockAccounts.Verify(
                 g => g.GetUserEventsAsync(
                     It.IsAny<DateTimeOffset>(),
                     It.IsAny<DateTimeOffset>(),
@@ -70,9 +70,9 @@ public class AgentGraphTests : AgentTestBase
         SetupRemarkable();
 
         await SendUntilAsync("send the email from noreply@newsletter.example to my reMarkable", () =>
-            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
+            MockAccounts.Verify(g => g.RenderEmailAsEpubAsync("named", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce));
 
-        MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+        MockAccounts.Verify(g => g.RenderEmailAsEpubAsync(It.Is<string>(id => id != "named"), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "no other email may be sent in its place");
     }
 
@@ -83,10 +83,10 @@ public class AgentGraphTests : AgentTestBase
         SetupRemarkable();
 
         await SendUntilAsync("send the email from noreply@newsletter.example to my reMarkable", () =>
-            MockGraphClient.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
+            MockAccounts.Verify(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsNotNull<string>()),
                 Times.AtLeastOnce, "the model has to search before concluding the email isn't there"));
 
-        MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
+        MockAccounts.Verify(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()),
             Times.Never, "when the named email can't be found, nothing may be sent in its place");
     }
 
@@ -100,7 +100,7 @@ public class AgentGraphTests : AgentTestBase
         SetupEmails(_ => NewestFifty());
 
         await SendUntilAsync("what was the last email I sent?", () =>
-            MockGraphClient.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, It.IsAny<string?>()), Times.AtLeastOnce));
+            MockAccounts.Verify(g => g.GetUserEmailsAsync(MailFolder.Sent, It.IsAny<string?>()), Times.AtLeastOnce));
     }
 
     [Fact]
@@ -112,14 +112,14 @@ public class AgentGraphTests : AgentTestBase
         remarkable
             .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
-        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockAccounts.Object));
         EmailModel[] fromTheOffice =
         [
             CreateEmail("trip", "office@school.example", "Field trip permission form", hoursAgo: 3),
             CreateEmail("lunch", "office@school.example", "Lunch menu changes", hoursAgo: 5),
         ];
         SetupEmails(search => search is null ? [.. fromTheOffice, .. NewestFifty()[..48]] : fromTheOffice);
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailEpubModel
             {
@@ -131,8 +131,8 @@ public class AgentGraphTests : AgentTestBase
 
         await SendUntilAsync("send the two emails from the school office to my reMarkable", () =>
         {
-            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("trip", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
-            MockGraphClient.Verify(g => g.RenderEmailAsEpubAsync("lunch", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
+            MockAccounts.Verify(g => g.RenderEmailAsEpubAsync("trip", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
+            MockAccounts.Verify(g => g.RenderEmailAsEpubAsync("lunch", It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()), Times.AtLeastOnce);
         });
 
         remarkable.Verify(r => r.SendTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -148,12 +148,12 @@ public class AgentGraphTests : AgentTestBase
         remarkable
             .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
-        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockAccounts.Object));
         var history = UseRecordedHistory();
         SetupEmails(_ => [CreateEmail("catalog", "news@shop.example", "Fall catalog", hoursAgo: 2)]);
-        MockGraphClient.Setup(g => g.GetLinkedImageCountAsync("catalog")).ReturnsAsync(12);
+        MockAccounts.Setup(g => g.GetLinkedImageCountAsync("catalog")).ReturnsAsync(12);
         var renders = new List<bool>();
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .Callback<string, TimeZoneInfo, bool>((_, _, include) => renders.Add(include))
             .ReturnsAsync((string id, TimeZoneInfo _, bool include) => new EmailEpubModel
@@ -166,7 +166,7 @@ public class AgentGraphTests : AgentTestBase
 
         await SendUntilAsync("send the fall catalog email from the shop to my reMarkable", reply =>
         {
-            MockGraphClient.Verify(g => g.GetLinkedImageCountAsync("catalog"), Times.AtLeastOnce);
+            MockAccounts.Verify(g => g.GetLinkedImageCountAsync("catalog"), Times.AtLeastOnce);
             renders.Should().BeEmpty(because: $"nothing is sent before the user answers; the reply was: {reply}");
             reply.Should().ContainEquivalentOf("image");
         }, reset: () => { history.Clear(); renders.Clear(); });
@@ -190,7 +190,7 @@ public class AgentGraphTests : AgentTestBase
             ReceivedDateTime = DateTimeOffset.UtcNow.AddHours(-4), BodyPreview = steps[..255], IsRead = false,
         };
         SetupEmails(_ => [setup]);
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.GetEmailAsync("setup"))
             .ReturnsAsync(new EmailContentModel
             {
@@ -200,7 +200,7 @@ public class AgentGraphTests : AgentTestBase
 
         await SendUntilAsync("what's the last step in the account setup email from my bank?", reply =>
         {
-            MockGraphClient.Verify(g => g.GetEmailAsync("setup"), Times.AtLeastOnce);
+            MockAccounts.Verify(g => g.GetEmailAsync("setup"), Times.AtLeastOnce);
             reply.Should().ContainEquivalentOf("two-factor", because: $"step 7 is only in the full email; the reply was: {reply}");
         });
     }
@@ -216,16 +216,16 @@ public class AgentGraphTests : AgentTestBase
         var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
             reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Mailchimp", StringComparison.OrdinalIgnoreCase));
 
-        MockGraphClient.Verify(g => g.GetAttachmentAsync("google", It.IsAny<string>()), Times.AtLeastOnce);
-        MockGraphClient.Verify(g => g.GetAttachmentAsync("yahoo", It.IsAny<string>()), Times.AtLeastOnce);
+        MockAccounts.Verify(g => g.GetAttachmentAsync("google", It.IsAny<string>()), Times.AtLeastOnce);
+        MockAccounts.Verify(g => g.GetAttachmentAsync("yahoo", It.IsAny<string>()), Times.AtLeastOnce);
         registries.Verify(r => r.LookupAsync("203.0.113.50"), Times.AtLeastOnce);
         registries.Verify(r => r.LookupAsync("198.51.100.7"), Times.AtLeastOnce);
         reply.Should().ContainEquivalentOf("DigitalOcean", because: $"203.0.113.50 was rejected; the reply was: {reply}")
             .And.ContainEquivalentOf("Mailchimp", because: "198.51.100.7 was rejected")
             .And.Contain("6").And.Contain("3");
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.AtLeastOnce);
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("sale"), Times.Never, "only the reports were processed");
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.AtLeastOnce);
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync("sale"), Times.Never, "only the reports were processed");
         markedRead.Should().BeEquivalentTo(["google", "yahoo"], because: "each report is marked read before the move changes its id");
     }
 
@@ -239,8 +239,8 @@ public class AgentGraphTests : AgentTestBase
         var reply = await PerformUntilAsync(DmarcSummaryTask(), reply =>
             reply.Contains("DigitalOcean", StringComparison.OrdinalIgnoreCase) && reply.Contains("Yahoo", StringComparison.OrdinalIgnoreCase));
 
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.Never, "its report was never read");
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync("google"), Times.AtLeastOnce);
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync("yahoo"), Times.Never, "its report was never read");
         markedRead.Should().NotContain("yahoo", because: "an unread report stays unread, for the owner to notice");
         reply.Should().ContainEquivalentOf("Yahoo", because: $"the summary must say a report couldn't be read; the reply was: {reply}");
     }
@@ -257,8 +257,8 @@ public class AgentGraphTests : AgentTestBase
         await RunScheduledTaskAsync(DmarcSummaryTask());
 
         markedRead.Should().BeEquivalentTo([ids.Google, ids.Yahoo]);
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync(ids.Google), Times.Once, "each report is trashed");
-        MockGraphClient.Verify(g => g.MoveToDeletedItemsAsync(ids.Yahoo), Times.Once, "each report is trashed");
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync(ids.Google), Times.Once, "each report is trashed");
+        MockAccounts.Verify(g => g.MoveToDeletedItemsAsync(ids.Yahoo), Times.Once, "each report is trashed");
     }
 
     private ScheduledTask DmarcSummaryTask() => new()
@@ -318,16 +318,16 @@ public class AgentGraphTests : AgentTestBase
         SetupReport(yahoo, body: "This is an aggregate DMARC report from Yahoo for your domain \"example.com\".", $"yahoo.com!example.com!{begin}!{end}.xml.gz",
             Report("Yahoo", ("198.51.100.7", 3, "reject", "fail"), ("209.85.220.69", 5, "none", "pass")));
         if (yahooAttachmentFails)
-            MockGraphClient.Setup(g => g.GetAttachmentAsync(yahoo.Id, It.IsAny<string>()))
+            MockAccounts.Setup(g => g.GetAttachmentAsync(yahoo.Id, It.IsAny<string>()))
                 .ThrowsAsync(new InvalidDataException("The archive entry was compressed using an unsupported compression method."));
         var (moved, markedRead) = (new HashSet<string>(), new HashSet<string>());
-        MockGraphClient.Setup(g => g.MoveToDeletedItemsAsync(It.IsAny<string>())).ReturnsAsync((string id) =>
+        MockAccounts.Setup(g => g.MoveToDeletedItemsAsync(It.IsAny<string>())).ReturnsAsync((string id) =>
         {
             var email = inbox.Single(e => e.Id == id);
             moved.Add(id);
             return $"Moved to Deleted Items: \"{email.Subject}\" from {email.From}.";
         });
-        MockGraphClient.Setup(g => g.MarkReadAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync((string id, bool read) =>
+        MockAccounts.Setup(g => g.MarkReadAsync(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync((string id, bool read) =>
         {
             if (moved.Contains(id))
                 throw new InvalidOperationException("The specified object was not found in the store.");
@@ -354,13 +354,13 @@ public class AgentGraphTests : AgentTestBase
     /// </summary>
     private void SetupReport(EmailModel email, string body, string attachment, string xml)
     {
-        MockGraphClient.Setup(g => g.GetEmailAsync(email.Id)).ReturnsAsync(new EmailContentModel
+        MockAccounts.Setup(g => g.GetEmailAsync(email.Id)).ReturnsAsync(new EmailContentModel
         {
             Id = email.Id, Subject = email.Subject, From = email.From, To = ["dmarc@example.com"], Cc = [],
             ReceivedDateTime = email.ReceivedDateTime, Body = body, Truncated = false, Attachments = [attachment],
         });
         var file = attachment.EndsWith(".gz") ? attachment[..^3] : attachment.Replace(".zip", ".xml");
-        MockGraphClient.Setup(g => g.GetAttachmentAsync(email.Id, It.IsAny<string>())).ReturnsAsync((string _, string name) =>
+        MockAccounts.Setup(g => g.GetAttachmentAsync(email.Id, It.IsAny<string>())).ReturnsAsync((string _, string name) =>
             name == attachment
                 ? new AttachmentContentModel { Name = name, Files = [new AttachmentFileModel { Name = file, Text = xml, Truncated = false }], NotRead = [] }
                 : throw new NotInEmailException($"That email has no attachment named '{name}'. Its attachments: {attachment}."));
@@ -377,21 +377,21 @@ public class AgentGraphTests : AgentTestBase
         // it would send, the user confirms, and the confirming message, having read nothing, sends.
         var history = UseRecordedHistory();
         SetupEmails(_ => [CreateEmail("thursday", "bob@example.com", "Can you make Thursday at 3pm?", hoursAgo: 2)]);
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync("Email sent.");
 
         await SendUntilAsync("Reply to Bob's email saying yes, Thursday at 3 works for me.", () =>
-            MockGraphClient.Verify(
+            MockAccounts.Verify(
                 g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()),
                 Times.AtLeastOnce),
             reset: history.Clear);
-        MockGraphClient.Verify(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
+        MockAccounts.Verify(g => g.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()),
             Times.Never, "nothing may be sent in the message that read the email");
 
         var afterFirst = history.ToList();
         await SendUntilAsync("Yes, send it.", () =>
-            MockGraphClient.Verify(g => g.SendEmailAsync("bob@example.com", It.IsAny<string>(), It.IsAny<string>()),
+            MockAccounts.Verify(g => g.SendEmailAsync("bob@example.com", It.IsAny<string>(), It.IsAny<string>()),
                 Times.AtLeastOnce, "the confirming message sends the reply it was shown"),
             reset: () => { history.Clear(); history.AddRange(afterFirst); });
     }
@@ -424,7 +424,7 @@ public class AgentGraphTests : AgentTestBase
     /// </summary>
     protected void SetupCalendarEvents(params EventModel[] events)
     {
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.GetUserEventsAsync(It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<TimeZoneInfo>()))
             .ReturnsAsync(events);
     }
@@ -447,7 +447,7 @@ public class AgentGraphTests : AgentTestBase
     /// </summary>
     protected void SetupEmails(Func<string?, EmailModel[]> bySearch)
     {
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
             .ReturnsAsync((MailFolder _, string? search) => bySearch(search));
     }
@@ -462,8 +462,8 @@ public class AgentGraphTests : AgentTestBase
         remarkable
             .Setup(r => r.SendEpubAsync(It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("doc-id");
-        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockGraphClient.Object));
-        MockGraphClient
+        ExtraPlugins.Add(new RemarkablePlugin(remarkable.Object, MockAccounts.Object));
+        MockAccounts
             .Setup(g => g.RenderEmailAsEpubAsync(It.IsAny<string>(), It.IsAny<TimeZoneInfo>(), It.IsAny<bool>()))
             .ReturnsAsync((string id, TimeZoneInfo _, bool _) => new EmailEpubModel
             {

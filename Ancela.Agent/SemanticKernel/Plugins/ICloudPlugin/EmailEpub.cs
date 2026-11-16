@@ -9,12 +9,12 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using AngleSharp.Xhtml;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// Makes an email an EPUB for the reMarkable, without I/O: the mail client reads the email and its
-/// images, this writes the book. The tablet reflows an EPUB, so it needs no renderer here: Graph's
-/// PDF converter, in the OneDrive folder, did that until 2026-11 (V2 step 5). The emails sent to
+/// images, this writes the book. The tablet reflows an EPUB, so it needs no renderer here: Microsoft
+/// Graph's PDF converter, in a OneDrive folder, did that until 2026-11. The emails sent to
 /// the tablet are ones to read later, never receipts or statements (owner, 2026-11-15), so the
 /// email's own layout is dropped: its styles, scripts and hidden preview text go, its layout tables
 /// become one column, and the stylesheet is the one the owner chose on the tablet (2026-11-15).
@@ -73,6 +73,12 @@ public static class EmailEpub
     };
 
     /// <summary>
+    /// What the book shows of an email. Addresses are as a mail app shows them ("Name &lt;address&gt;",
+    /// several joined with "; ").
+    /// </summary>
+    public sealed record EmailPage(string From, DateTimeOffset? Sent, string To, string? Cc, string? Subject, string Body, bool BodyIsHtml);
+
+    /// <summary>
     /// The book, and how many pictures should be in it and aren't: embedded ones, or linked ones when
     /// they were wanted, that weren't in the images given, were of a kind an EPUB can't hold, or were
     /// too large. Counted after the hidden parts of the email are gone, since a hidden copy (a
@@ -83,13 +89,13 @@ public static class EmailEpub
     /// <summary>
     /// Writes the email as an EPUB: a header (subject as the title; From, Sent, To, Cc and the
     /// names of its attachments, whose contents are never in it), then the body. Each picture whose
-    /// source is in <paramref name="images"/>, keyed as <see cref="EmailPdf.ImageSources"/> gives
+    /// source is in <paramref name="images"/>, keyed as <see cref="EmailImages.ImageSources"/> gives
     /// them, becomes a file in the book; any other one is replaced by its alt text.
     /// <paramref name="linkedImagesWanted"/> says whether the owner said yes to linked ones, so that a
     /// linked picture left out counts as missing only then. Header values and the body come from the
     /// sender, so all of it is written as escaped text or parsed HTML.
     /// </summary>
-    public static Book Build(EmailPdf.EmailPage email, IReadOnlyList<string> attachments,
+    public static Book Build(EmailPage email, IReadOnlyList<string> attachments,
         IReadOnlyDictionary<string, MediaItem> images, bool linkedImagesWanted, TimeZoneInfo timeZone)
     {
         var parser = new HtmlParser();
@@ -141,7 +147,7 @@ public static class EmailEpub
                 continue;
             }
 
-            var source = EmailPdf.Source(img.GetAttribute("src") ?? string.Empty);
+            var source = EmailImages.Source(img.GetAttribute("src") ?? string.Empty);
             if (!bySource.TryGetValue(source, out var file)
                 && images.TryGetValue(source, out var image)
                 && ImageFiles.TryGetValue(image.ContentType, out var extension)
@@ -156,7 +162,7 @@ public static class EmailEpub
 
             if (file is null)
             {
-                if (EmailPdf.IsEmbedded(source) || (linkedImagesWanted && EmailPdf.IsLinked(source)))
+                if (EmailImages.IsEmbedded(source) || (linkedImagesWanted && EmailImages.IsLinked(source)))
                     missing++;
                 var alt = img.GetAttribute("alt");
                 if (string.IsNullOrWhiteSpace(alt))
@@ -253,7 +259,7 @@ public static class EmailEpub
             || s.EndsWith("max-height:0", StringComparison.Ordinal);
     }
 
-    // Sized 2 pixels or less: there to report that the email was opened, not to be seen (as EmailPdf).
+    // Sized 2 pixels or less: there to report that the email was opened, not to be seen (as EmailImages).
     private static bool IsTrackingPixel(IElement img) =>
         int.TryParse(img.GetAttribute("width"), CultureInfo.InvariantCulture, out var width) && width <= 2
         && int.TryParse(img.GetAttribute("height"), CultureInfo.InvariantCulture, out var height) && height <= 2;
@@ -266,7 +272,7 @@ public static class EmailEpub
         return $"<html><body>{string.Concat(paragraphs)}</body></html>";
     }
 
-    private static string Header(EmailPdf.EmailPage email, IReadOnlyList<string> attachments, TimeZoneInfo timeZone)
+    private static string Header(EmailPage email, IReadOnlyList<string> attachments, TimeZoneInfo timeZone)
     {
         var lines = new List<string> { $"From: {X(email.From)}" };
         if (email.Sent is { } sent)

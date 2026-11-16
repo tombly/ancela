@@ -6,11 +6,11 @@ using Ical.Net.DataTypes;
 using Ical.Net.Serialization;
 using Calendar = Ical.Net.Calendar;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// The owner's iCloud calendars over CalDAV (<see cref="ICloudDav"/>): the same tools and results as
-/// Graph's (<see cref="GraphClient"/>). Every calendar of events is read, a calendar someone shared
+/// Microsoft Graph's, which this replaced on 2026-11-11. Every calendar of events is read, a calendar someone shared
 /// with the owner too, as Graph's calendar list has them; Reminders' to-do list isn't one. Repeating
 /// events are expanded here (Ical.Net), not by iCloud: on 2026-11-11 its expand left out an
 /// occurrence that had been moved into the range, which the owner's calendar shows.

@@ -1,4 +1,4 @@
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.Services;
 using FluentAssertions;
 using Moq;
@@ -62,7 +62,7 @@ public class AgentInstructionsTests : AgentTestBase
     {
         // What the guard is for: text an outsider wrote, aimed at the model. An instruction is
         // repeated into every later prompt, so one planted here would outlive this message.
-        MockGraphClient
+        MockAccounts
             .Setup(g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()))
             .ReturnsAsync([new EmailModel
             {
@@ -77,7 +77,7 @@ public class AgentInstructionsTests : AgentTestBase
             }]);
 
         await SendUntilAsync("What does my newest email say?", () =>
-            MockGraphClient.Verify(
+            MockAccounts.Verify(
                 g => g.GetUserEmailsAsync(It.IsAny<MailFolder>(), It.IsAny<string?>()),
                 Times.AtLeastOnce));
 

@@ -1,5 +1,5 @@
 using Ancela.Agent.SemanticKernel;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin.Models;
@@ -42,7 +42,7 @@ public abstract class AgentTestBase
     /// <summary>Plugins a test adds to the kernel, e.g. a stand-in for one that has no client mock here.</summary>
     protected List<object> ExtraPlugins { get; } = [];
     protected readonly Mock<IMemoryClient> MockMemoryClient;
-    protected readonly Mock<IGraphClient> MockGraphClient;
+    protected readonly Mock<IOwnerAccounts> MockAccounts;
     protected readonly Mock<IProjectStore> MockProjectStore;
     protected readonly Mock<IMediaService> MockMediaService;
     protected readonly Mock<IUserService> MockUserService;
@@ -73,7 +73,7 @@ public abstract class AgentTestBase
         // Setup mocked services with default behaviors
         MockHistoryService = new Mock<IHistoryService>();
         MockMemoryClient = new Mock<IMemoryClient>();
-        MockGraphClient = new Mock<IGraphClient>();
+        MockAccounts = new Mock<IOwnerAccounts>();
         MockProjectStore = new Mock<IProjectStore>();
         MockMediaService = new Mock<IMediaService>();
         MockUserService = new Mock<IUserService>();
@@ -116,7 +116,7 @@ public abstract class AgentTestBase
 
         // Create plugins with mocked clients
         var memoryPlugin = new MemoryPlugin(MockMemoryClient.Object, smsService, ownerService);
-        var graphPlugin = new GraphPlugin(MockGraphClient.Object, MockGraphClient.Object, MockGraphClient.Object);
+        var icloudPlugin = new ICloudPlugin(MockAccounts.Object, MockAccounts.Object, MockAccounts.Object);
         var projectsPlugin = new ProjectsPlugin(MockProjectStore.Object, ownerService);
         var instructionsPlugin = new InstructionsPlugin(MockUserService.Object);
 
@@ -137,7 +137,7 @@ public abstract class AgentTestBase
             .Returns((KernelProfile profile) =>
             {
                 var pluginCollection = new KernelPluginCollection();
-                pluginCollection.AddFromObject(graphPlugin);
+                pluginCollection.AddFromObject(icloudPlugin);
                 pluginCollection.AddFromObject(memoryPlugin);
                 pluginCollection.AddFromObject(projectsPlugin);
                 pluginCollection.AddFromObject(ynabPlugin);

@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin.Models;
 using Ancela.Agent.SemanticKernel.Plugins.GoogleHealthPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
 using Ancela.Agent.SemanticKernel.Plugins.UnifiPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.WebPlugin;
@@ -28,10 +28,9 @@ public interface IServiceHealthChecker
 public class ServiceHealthChecker(
     CosmosClient _cosmosClient,
     ServiceBusClient _serviceBusClient,
-    IGraphClient _graphClient,
-    IMailClient _mailClient,
-    ICalendarClient _calendarClient,
-    IContactsClient _contactsClient,
+    ImapMailClient _mailClient,
+    CalDavCalendarClient _calendarClient,
+    CardDavContactsClient _contactsClient,
     YnabClient _ynabClient,
     ITavilyClient _tavilyClient,
     GoogleHealthClient _googleHealthClient,
@@ -53,16 +52,9 @@ public class ServiceHealthChecker(
             ProbeAsync("cosmos-db", ProbeCosmosAsync),
             ProbeAsync("service-bus", ProbeServiceBusAsync),
             ProbeAsync("twilio", ProbeTwilioAsync),
-            ProbeAsync("microsoft-graph", ProbeGraphAsync),
-            ProbeAsync("onedrive-folder", ProbeOneDriveAsync),
-            // Only for what the tools read from iCloud (the *_PROVIDER settings); the rest is the Graph probe's.
-            .. _mailClient is ImapMailClient imap ? [ProbeAsync("icloud-mail", () => ProbeICloudMailAsync(imap))] : (Task<ServiceProbeResult>[])[],
-            .. _calendarClient is CalDavCalendarClient calDav
-                ? [ProbeAsync("icloud-calendar", async () => ("ok", $"Signed in to iCloud Calendar; {await calDav.CheckAsync()} calendars of events."))]
-                : (Task<ServiceProbeResult>[])[],
-            .. _contactsClient is CardDavContactsClient cardDav
-                ? [ProbeAsync("icloud-contacts", async () => ("ok", $"Signed in to iCloud Contacts; {await cardDav.CheckAsync()} contacts."))]
-                : (Task<ServiceProbeResult>[])[],
+            ProbeAsync("icloud-mail", () => ProbeICloudMailAsync(_mailClient)),
+            ProbeAsync("icloud-calendar", async () => ("ok", $"Signed in to iCloud Calendar; {await _calendarClient.CheckAsync()} calendars of events.")),
+            ProbeAsync("icloud-contacts", async () => ("ok", $"Signed in to iCloud Contacts; {await _contactsClient.CheckAsync()} contacts.")),
             ProbeAsync("ynab", ProbeYnabAsync),
             ProbeAsync("tavily-web-search", ProbeTavilyAsync),
             ProbeAsync("google-health", ProbeGoogleHealthAsync),
@@ -137,20 +129,6 @@ public class ServiceHealthChecker(
             return ("degraded", $"Signed in to iCloud Mail; the Inbox holds {count} emails. {ex.Message}");
         }
         return ("ok", $"Signed in to iCloud Mail; the Inbox holds {count} emails.");
-    }
-
-    private async Task<(string Status, string Detail)> ProbeGraphAsync()
-    {
-        await _graphClient.GetUserContactsAsync(maxResults: 1);
-        return ("ok", "token valid; contacts reachable");
-    }
-
-    private async Task<(string Status, string Detail)> ProbeOneDriveAsync()
-    {
-        // Separate from the Graph probe: the app reaches OneDrive only through a per-folder grant,
-        // which can be removed while the tenant-wide mail/calendar permissions stay intact.
-        var name = await _graphClient.GetOneDriveFolderNameAsync();
-        return ("ok", $"folder grant present ('{name}')");
     }
 
     private async Task<(string Status, string Detail)> ProbeYnabAsync()

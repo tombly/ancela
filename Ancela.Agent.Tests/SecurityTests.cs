@@ -1,6 +1,6 @@
 using Ancela.Agent.SemanticKernel;
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -73,15 +73,15 @@ public class SecurityTests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IGraphClient>(_ => new Mock<IGraphClient>().Object);
-        services.AddSingleton<IMailClient>(sp => sp.GetRequiredService<IGraphClient>());
-        services.AddSingleton<ICalendarClient>(sp => sp.GetRequiredService<IGraphClient>());
-        services.AddSingleton<IContactsClient>(sp => sp.GetRequiredService<IGraphClient>());
+        var accounts = new Mock<IOwnerAccounts>().Object;
+        services.AddSingleton<IMailClient>(accounts);
+        services.AddSingleton<ICalendarClient>(accounts);
+        services.AddSingleton<IContactsClient>(accounts);
         services.AddSingleton<IMemoryClient>(_ => new Mock<IMemoryClient>().Object);
         services.AddSingleton<SmsService, SpySmsService>();
         services.AddSingleton<OwnerService>();
         services.AddSingleton<YnabClient>();
-        services.AddSingleton<GraphPlugin>();
+        services.AddSingleton<ICloudPlugin>();
         services.AddSingleton<MemoryPlugin>();
         services.AddSingleton<SmsPlugin>();
         services.AddSingleton<YnabPlugin>();

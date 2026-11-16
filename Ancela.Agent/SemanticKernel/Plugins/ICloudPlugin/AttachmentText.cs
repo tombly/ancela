@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// Turns an attachment's bytes into text for read_attachment. A text file is read as it is, a gzip
@@ -11,7 +11,7 @@ namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
 public static class AttachmentText
 {
     /// <summary>The most text returned for one attachment, across all its files: read_email's body cap.</summary>
-    public const int TextCap = GraphClient.EmailBodyCap;
+    public const int TextCap = MailText.BodyCap;
 
     /// <summary>The most files read out of one .zip.</summary>
     public const int ZipEntryCap = 20;

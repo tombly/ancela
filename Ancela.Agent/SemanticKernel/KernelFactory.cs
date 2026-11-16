@@ -1,5 +1,5 @@
 using Ancela.Agent.SemanticKernel.Plugins.DiagnosticsPlugin;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.InstructionsPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.IpLookupPlugin;
 using Ancela.Agent.SemanticKernel.Plugins.MemoryPlugin;
@@ -33,7 +33,7 @@ public interface IKernelFactory
 
 public sealed class KernelFactory(
     IServiceProvider _sp,
-    GraphPlugin _graphPlugin,
+    ICloudPlugin _icloudPlugin,
     MemoryPlugin _memoryPlugin,
     ProjectsPlugin _projectsPlugin,
     YnabPlugin _ynabPlugin,
@@ -65,7 +65,7 @@ public sealed class KernelFactory(
                 // Chat, StandingRule, ScheduledTask — all plugins are loaded.
                 // Per-profile function-set restrictions are applied in Agent when
                 // building OpenAIPromptExecutionSettings (A3).
-                plugins.AddFromObject(_graphPlugin);
+                plugins.AddFromObject(_icloudPlugin);
                 plugins.AddFromObject(_memoryPlugin);
                 plugins.AddFromObject(_projectsPlugin);
                 plugins.AddFromObject(_ynabPlugin);

@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 using MailKit;
 using MailKit.Search;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
 /// iCloud email ids, and get_recent_emails' search text as IMAP SEARCH. An id is the folder and the

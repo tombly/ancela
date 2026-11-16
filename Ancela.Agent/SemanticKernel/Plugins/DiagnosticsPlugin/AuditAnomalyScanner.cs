@@ -129,21 +129,34 @@ public class AuditAnomalyScanner(CosmosClient _cosmosClient) : IAuditAnomalyScan
     }
 
     private static async Task<int> QueryGuardDenialsAsync(
-        Container container, PartitionKey partitionKey, string agentPhoneNumber, string cutoff)
+        Container container, PartitionKey partitionKey, string agentPhoneNumber, string cutoff) =>
+        (await ReadAllAsync<int>(container, GuardDenialsQuery(agentPhoneNumber, cutoff), partitionKey)).FirstOrDefault();
+
+    /// <summary>Every guard denial's marker, the text the guard puts in the error it records.</summary>
+    public static readonly string[] DenialMarkers =
+        [ProfileDenialMarker, OwnerOnlyDenialMarker, NotGrantedDenialMarker, UntrustedContentDenialMarker, UnreadEmailDenialMarker];
+
+    /// <summary>
+    /// Counts the denials since <paramref name="cutoff"/>. The markers are parameters, not text in the
+    /// query: "isn't available to this user: the owner hasn't granted it" (grants, 2026-11-04) ended
+    /// its quoted string at the apostrophe, and every check_anomalies failed with a syntax error until
+    /// 2026-11-15.
+    /// </summary>
+    public static QueryDefinition GuardDenialsQuery(string agentPhoneNumber, string cutoff)
     {
+        var contains = string.Join(" OR ", DenialMarkers.Select((_, i) => $"CONTAINS(c.error, @marker{i})"));
         var query = new QueryDefinition(
             $"""
             SELECT VALUE COUNT(1) FROM c
             WHERE c.agentPhoneNumber = @agent AND c.timestamp >= @cutoff
               AND c.success = false
-              AND (CONTAINS(c.error, '{ProfileDenialMarker}') OR CONTAINS(c.error, '{OwnerOnlyDenialMarker}')
-                   OR CONTAINS(c.error, '{NotGrantedDenialMarker}')
-                   OR CONTAINS(c.error, '{UntrustedContentDenialMarker}') OR CONTAINS(c.error, '{UnreadEmailDenialMarker}'))
+              AND ({contains})
             """)
             .WithParameter("@agent", agentPhoneNumber)
             .WithParameter("@cutoff", cutoff);
-
-        return (await ReadAllAsync<int>(container, query, partitionKey)).FirstOrDefault();
+        for (var i = 0; i < DenialMarkers.Length; i++)
+            query = query.WithParameter($"@marker{i}", DenialMarkers[i]);
+        return query;
     }
 
     private static async Task<Dictionary<string, int>> QuerySessionOpsAsync(

@@ -1,4 +1,4 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>A whole email as an EPUB for the reMarkable (<see cref="EmailEpub"/>), before it is sent.</summary>
 public class EmailEpubModel

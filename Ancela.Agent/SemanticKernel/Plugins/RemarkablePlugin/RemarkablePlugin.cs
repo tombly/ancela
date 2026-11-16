@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
-using Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+using Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 using Microsoft.SemanticKernel;
 
 namespace Ancela.Agent.SemanticKernel.Plugins.RemarkablePlugin;
@@ -35,10 +35,10 @@ public class RemarkablePlugin(IRemarkableService _remarkableService, IMailClient
     public async Task<SentEmailModel> SendEmailToRemarkableAsync(
         Kernel kernel,
         [Description("The email's id, exactly as returned by get_recent_emails.")] string emailId,
-        [Description(EmailPdf.IncludeLinkedImagesDescription)] bool? includeLinkedImages = null)
+        [Description(EmailImages.IncludeLinkedImagesDescription)] bool? includeLinkedImages = null)
     {
         if (includeLinkedImages is null && await _mailClient.GetLinkedImageCountAsync(emailId) is > 0 and var linked)
-            return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailPdf.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
+            return new SentEmailModel { Sent = false, LinkedImages = linked, Note = EmailImages.LinkedImagesQuestion(linked, "Nothing was sent yet.") };
 
         var email = await _mailClient.RenderEmailAsEpubAsync(emailId, KernelData.UserTimeZone(kernel), includeLinkedImages == true);
         var title = string.IsNullOrWhiteSpace(email.Subject) ? "(no subject)" : Whitespace.Replace(email.Subject, " ").Trim();

@@ -1,8 +1,8 @@
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 public class EmailModel
 {
-    /// <summary>Graph message id; how <c>read_email</c> and the other one-email tools refer back to this email.</summary>
+    /// <summary>The email's id, its folder and IMAP UID (<see cref="ImapSearch.EmailId"/>); how <c>read_email</c> and the other one-email tools refer back to this email.</summary>
     public required string Id { get; init; }
     public required string Subject { get; init; }
     public required string From { get; init; }

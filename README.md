@@ -13,7 +13,7 @@ across the real-world services it's connected to.
 
 You interact entirely over SMS. Under the hood the assistant has a set of capabilities:
 
-- **Calendar & email** — read your calendar, create events, read your inbox (text attachments too, such as a CSV export or a DMARC report), mark emails read and move them to the trash, and send mail (via Microsoft Graph).
+- **Calendar & email** — read your calendar, create events, read your inbox (text attachments too, such as a CSV export or a DMARC report), mark emails read and move them to the trash, and send mail (all iCloud's, over IMAP, SMTP and CalDAV).
 - **Contacts** — look up people's details from your address book.
 - **Money** — check account balances and recent transactions (via YNAB).
 - **Memory** — remember facts about you and keep a shared list of to-dos. It also keeps instructions for how to behave with you from now on (a persona, what to call you, a preference).
@@ -53,7 +53,7 @@ The message flow:
 2. Twilio posts the message to an **Azure Functions** HTTP trigger, which enqueues it to **Azure Service Bus** and returns immediately.
 3. A queue processor picks up the message — one at a time, so a text sent right after another sees it in history. A lightweight interceptor handles session and access commands (`hello ancela`, `invite`, `revoke`); everything else is handed to the agent.
 4. The **agent** builds a [Semantic Kernel](https://learn.microsoft.com/semantic-kernel/) instance per request, exposes its capabilities as kernel functions, and lets **OpenAI (`gpt-6-luna` on the Responses API, with nothing stored at OpenAI)** decide which to call via automatic function calling.
-5. Those functions read and write **Azure Cosmos DB** and reach out to Microsoft Graph, YNAB, the web (Tavily), the internet registries, Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
+5. Those functions read and write **Azure Cosmos DB** and reach out to iCloud (mail, calendar, contacts), YNAB, the web (Tavily), the internet registries, Twilio, and reMarkable as needed. The reply goes back to the user as an SMS.
 
 **Tools.** Each capability is a small, general tool (search email, read one, read an attachment, look up an IP address, mark an email read, move one to the trash), and the model combines them to carry out a request. A new kind of request should rarely need a new tool: the DMARC summary above is a scheduled task over those six, with no DMARC code anywhere. A tool is built for one purpose only when the model has been shown to fail at the combination, when a general tool would be too powerful for the trust model below, or when content should move without passing through the model. [AGENTS.md](AGENTS.md#tool-design-small-tools-the-model-combines) has the reasoning and examples.
 
@@ -63,25 +63,21 @@ The message flow:
 
 *The diagram shows the core chat path. Autonomous work (reminders, standing rules, scheduled tasks) runs the same agent off its own Service Bus queues and is described above.*
 
-**Tech stack:** .NET 10 / C# 13 · Aspire (orchestration + Bicep infrastructure-as-code) · Azure Functions (isolated worker) · Azure Cosmos DB · Azure Service Bus · Semantic Kernel + OpenAI · Twilio · Microsoft Graph · YNAB · reMarkable.
+**Tech stack:** .NET 10 / C# 13 · Aspire (orchestration + Bicep infrastructure-as-code) · Azure Functions (isolated worker) · Azure Cosmos DB · Azure Service Bus · Semantic Kernel + OpenAI · Twilio · iCloud (IMAP, SMTP, CalDAV, CardDAV) · YNAB · reMarkable.
 
 A companion CLI (`Ancela.Cli`) browses the Cosmos containers for auditing, runs owner TOTP enrollment, and lets the owner chat with Ancela from the terminal when SMS can't reach them (`ancela chat`, below).
 
 ## Security & trust model
 
 Ancela is a **single-owner** assistant. Each deployed instance is wired to exactly
-one owner's accounts — one Microsoft Graph identity (`GRAPH_USER_ID`: mail, calendar,
-contacts) and one YNAB token — using app-only credentials held by the instance. Those
-credentials reach only the owner's mailbox and one OneDrive folder, not the whole tenant
-(see [step 1](#1-configure-microsoft-graph-access) of the setup). Mail comes from iCloud
-(`MAIL_PROVIDER` in `AppHost.cs`; Graph's until 2026-11-11), over IMAP and SMTP with an
-app-specific password. That password is not scoped: it reaches all of the owner's iCloud mail,
-calendar and contacts, which the owner chose (2026-10-30); the tools still read only Inbox, Sent
-and Deleted, and the guards are the same. Ancela sends only from the owner's own domain address,
-never from the iCloud address it signs in with. The calendar and contacts can come from iCloud
-too, over CalDAV and CardDAV with the same password (`CALENDAR_PROVIDER`, `CONTACTS_PROVIDER`). A
-new event goes on the calendar shared with the owner, the one they use, which everyone it is
-shared with sees.
+one owner's accounts — one iCloud account (mail, calendar, contacts) and one YNAB token —
+using credentials held by the instance. Mail, calendar and contacts were Microsoft 365's,
+through Microsoft Graph, until 2026-11-11. iCloud is reached over IMAP and SMTP, CalDAV and
+CardDAV with one app-specific password. That password is not scoped: it reaches all of the
+owner's iCloud mail, calendar and contacts, which the owner chose (2026-10-30); the tools still
+read only Inbox, Sent and Deleted, and the guards are the same. Ancela sends only from the
+owner's own domain address, never from the iCloud address it signs in with. A new event goes on
+the calendar shared with the owner, the one they use, which everyone it is shared with sees.
 
 The owner authorizes a **small, trusted set of people** (by phone number) to talk to
 the agent over SMS. They start with nothing but their own saved instructions, and the
@@ -234,81 +230,9 @@ projects listed in every Chat prompt leave out projects another user created, wh
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Aspire tooling](https://learn.microsoft.com/dotnet/aspire/fundamentals/setup-tooling) and the Azure CLI for deployment
-- Accounts/keys: OpenAI, Twilio (with a phone number), a Microsoft Entra app registration, and (optionally) YNAB
+- Accounts/keys: OpenAI, Twilio (with a phone number), iCloud (with an app-specific password and a custom email domain), and (optionally) YNAB
 
-### 1. Configure Microsoft Graph access
-
-In your organization's [Entra admin center](https://aad.portal.azure.com/), create an
-**App registration** (single-tenant, no redirect URI) and note its **Application
-(client) ID** and **Directory (tenant) ID**. Then create a **client secret** under
-**Certificates & secrets** and copy its value.
-
-The app reaches only the owner's mailbox and one OneDrive folder. An *Application*
-permission granted the usual way, under the registration's **API permissions**, covers the
-whole tenant: `Mail.Send` there would let the app send as anyone in it. So mail, calendar and
-contacts are granted in Exchange Online instead, limited to the owner's mailbox
-([RBAC for Applications](https://learn.microsoft.com/exchange/permissions-exo/application-rbac)).
-In Exchange Online PowerShell (`Connect-ExchangeOnline`, as an Exchange administrator):
-
-```powershell
-New-ServicePrincipal -AppId <client ID> -ObjectId <enterprise application object ID> -DisplayName Ancela
-$owner = (Get-Mailbox <owner's email address>).ExternalDirectoryObjectId   # the owner's Entra object ID
-New-ManagementScope -Name "Ancela owner" -RecipientRestrictionFilter "ExternalDirectoryObjectId -eq '$owner'"
-"Mail.ReadWrite", "Mail.Send", "Calendars.ReadWrite", "Contacts.Read" | ForEach-Object {
-    New-ManagementRoleAssignment -App <client ID> -Role "Application $_" -CustomResourceScope "Ancela owner"
-}
-Test-ServicePrincipalAuthorization -Identity <client ID> -Resource <owner's email address>
-```
-
-The test should list all four roles with `InScope` `True`; `False` means the scope's filter
-matches no mailbox (`(Get-ManagementScope "Ancela owner").RecipientFilter` shows it, and
-`Set-ManagementScope` fixes it without redoing the assignments). `$owner` is a GUID, the same
-value as the `graph-user-id` secret below; the filter matches nothing if given an email address.
-The enterprise application's object ID is on its own Overview page: open it from the app
-registration's **Managed application in local directory** link, since the Enterprise
-applications list hides some apps unless filtered to **All applications**. App registrations
-shows a different object ID.
-A change takes 30 minutes to 2 hours to reach Graph. `Mail.ReadWrite` covers reading email,
-marking it read (`mark_email_read`) and moving it to Deleted Items (`trash_email`). The app needs no directory permission such as
-`User.Read.All`: it only ever addresses the owner's mailbox by that ID.
-
-**Moving an existing setup over.** Earlier versions of this guide granted `User.Read.All`,
-`Mail.Read`, `Mail.Send`, `Calendars.ReadWrite` and `Contacts.Read` under **API
-permissions**. The two kinds of grant add up, so those keep their reach to every mailbox until
-they're removed. Make the Exchange assignments above first, and once the test lists them, give
-them two hours. Then remove the five from **API permissions** and revoke their admin consent.
-Removed any sooner, Ancela loses email, calendar and contacts until the Exchange grants take
-effect. Afterwards, `check_services` and the live mailbox tests (`MailSearchLiveTests`) show
-that everything still works; `TrashEmail_MovesAnEmailToDeletedItems` passes only through
-Exchange, since Entra never granted `Mail.ReadWrite`.
-
-Emails now go to the reMarkable as EPUBs that Ancela makes itself (2026-11), so nothing uses this
-folder any more; it goes with the rest of Microsoft 365. Until then: to send emails to the
-reMarkable as PDFs (`send_email_to_remarkable`), which Graph converts in
-one OneDrive folder, add the *Application* permission
-`Files.SelectedOperations.Selected` under **API permissions** and grant admin consent: the only
-permission granted in Entra. On its own it grants nothing;
-you then give the app write access to **one folder**. Don't use `Files.ReadWrite.All`
-instead: it would let the app write to every OneDrive in the tenant.
-
-1. Create the folder in the owner's OneDrive for work or school. App-only credentials can't
-   reach a personal Microsoft account's OneDrive.
-2. In [Graph Explorer](https://aka.ms/ge), signed in as the owner (check with `GET /me`; a
-   different account gets `itemNotFound`), run `GET /me/drive/root:/<folder>` and note `id`
-   and `parentReference.driveId`.
-3. Grant the app that folder:
-   ```http
-   POST https://graph.microsoft.com/v1.0/drives/{driveId}/items/{folderId}/permissions
-
-   { "grantedToV2": { "application": { "id": "<client ID>" } }, "roles": ["write"] }
-   ```
-   Expect `201`. If Graph Explorer gets `403`, consent `Sites.FullControl.All` for your own
-   Graph Explorer session (not the app) and retry.
-
-To revoke, delete that permission from the folder. The self-check (`check_services`) reports
-the grant as `onedrive-folder`.
-
-### 2. Set user secrets
+### 1. Set user secrets
 
 From the AppHost project:
 
@@ -318,12 +242,6 @@ dotnet user-secrets set Parameters:openai-api-key      "..."
 dotnet user-secrets set Parameters:twilio-account-sid  "..."
 dotnet user-secrets set Parameters:twilio-auth-token   "..."
 dotnet user-secrets set Parameters:twilio-phone-number "..."
-dotnet user-secrets set Parameters:graph-user-id       "..."   # the owner's Entra user ID
-dotnet user-secrets set Parameters:graph-tenant-id     "..."
-dotnet user-secrets set Parameters:graph-client-id     "..."
-dotnet user-secrets set Parameters:graph-client-secret "..."
-dotnet user-secrets set Parameters:graph-onedrive-drive-id  "..."   # the granted folder's driveId
-dotnet user-secrets set Parameters:graph-onedrive-folder-id "..."   # the granted folder's id
 dotnet user-secrets set Parameters:ynab-access-token   "..."   # optional
 dotnet user-secrets set Parameters:icloud-username     "..."   # the iCloud Mail address (…@icloud.com)
 dotnet user-secrets set Parameters:icloud-app-password "..."   # an app-specific password
@@ -336,16 +254,13 @@ account.apple.com (Sign-In and Security → App-Specific Passwords). Changing th
 password revokes it, and `check_services` then reports `icloud-mail` failing. The from address
 is your own domain's address on iCloud (Custom Email Domain): Ancela never sends from an iCloud
 address (icloud.com, me.com, mac.com), so with none set, or an iCloud one, sending is off and
-`check_services` reports `icloud-mail` degraded. Set `MAIL_PROVIDER` in `AppHost.cs` to `"graph"`
-to read Microsoft 365 mail instead. `CALENDAR_PROVIDER` and `CONTACTS_PROVIDER` there do the same
-for the calendar and contacts (`"icloud"` reads them with the same two values, and `check_services`
-then probes `icloud-calendar` and `icloud-contacts`); with all three on `"graph"`, the iCloud values
-are only carried along.
+`check_services` reports `icloud-mail` degraded. The calendar and contacts use the same two
+values; `check_services` probes them as `icloud-calendar` and `icloud-contacts`.
 
 To use owner step-up (`invite`, `revoke`, `grant`, `ungrant`), also set `OWNER_TOTP_SECRET` to the value
 produced by `ancela enroll` (see [Security & trust model](#security--trust-model)).
 
-### 3. Set resource-naming environment variables
+### 2. Set resource-naming environment variables
 
 Two variables control Azure resource naming. Put them in your shell profile (e.g.
 `~/.zshrc`) so they're never committed:
@@ -355,7 +270,7 @@ export ANCELA_RESOURCE_PREFIX=your-unique-prefix   # prefixed onto all Azure res
 export ANCELA_RESOURCE_GROUP=your-resource-group   # used by configure_cosmos.sh
 ```
 
-### 4. Run locally
+### 3. Run locally
 
 ```bash
 dotnet run --project Ancela.AppHost
@@ -366,7 +281,7 @@ The Aspire dashboard launches and shows every service and its endpoints.
 ### Deploy to Azure
 
 The container image is built on your machine, so Docker must be running. Resource names
-come from `ANCELA_RESOURCE_PREFIX` (step 3) at deploy time; if it isn't set, the deploy
+come from `ANCELA_RESOURCE_PREFIX` (step 2) at deploy time; if it isn't set, the deploy
 stops with an error.
 
 **The first deploy** asks for the Azure subscription, resource group and location, and

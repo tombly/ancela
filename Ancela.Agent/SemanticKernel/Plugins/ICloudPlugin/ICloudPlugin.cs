@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using Microsoft.SemanticKernel;
 
-namespace Ancela.Agent.SemanticKernel.Plugins.GraphPlugin;
+namespace Ancela.Agent.SemanticKernel.Plugins.ICloudPlugin;
 
 /// <summary>
-/// Calendar, contacts and email, each Microsoft 365's or iCloud's as CALENDAR_PROVIDER, MAIL_PROVIDER
-/// and CONTACTS_PROVIDER say (DependencyModule).
+/// Calendar, contacts and email, all the owner's iCloud account (<see cref="CalDavCalendarClient"/>,
+/// <see cref="CardDavContactsClient"/>, <see cref="ImapMailClient"/>). It was GraphPlugin while they
+/// were Microsoft 365's, through Graph, until 2026-11; the audit log has that name before then.
 /// </summary>
-public class GraphPlugin(ICalendarClient calendarClient, IMailClient mailClient, IContactsClient contactsClient)
+public class ICloudPlugin(ICalendarClient calendarClient, IMailClient mailClient, IContactsClient contactsClient)
 {
     #region Calendar
 
